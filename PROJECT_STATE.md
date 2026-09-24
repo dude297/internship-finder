@@ -5,7 +5,7 @@
 Last Updated: 2026-09-24
 Current Milestone: Phase 0 — Engineering documentation and governance setup
 Current Production Version: None (not deployed)
-Active Development Branch: None (repository is not yet under git version control)
+Active Development Branch: main (remote: https://github.com/dude297/internship-finder)
 
 ## Current Objective
 
@@ -26,7 +26,6 @@ None. No application code exists.
 
 ## Known Technical Debt
 
-- Repository is not initialized as a git repository.
 - No application stack chosen; no package manifest, lint, typecheck, test, or build tooling exists.
 
 ## Architecture Constraints
@@ -63,7 +62,7 @@ None. Planned sources listed in [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Review of Phase 0 documentation, then initialize git and choose/scaffold the application stack (TBD during Phase 1).
+Review of Phase 0 documentation, then choose/scaffold the application stack and record it as ADR-004 (TBD during Phase 1).
 
 ## Recent Important Decisions
 

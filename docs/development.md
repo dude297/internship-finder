@@ -20,7 +20,7 @@ Only document commands that exist in the repo.
 
 ## Version Control
 
-The repository is not yet initialized as a git repository. Once it is, follow the rules below.
+Git repository: https://github.com/dude297/internship-finder (default branch `main`).
 
 ## Branch Workflow
 
