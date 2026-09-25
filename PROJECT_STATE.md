@@ -5,7 +5,7 @@
 Last Updated: 2026-09-25
 Current Milestone: Milestone 0: Development Foundation (implemented on `feature/application-scaffold`, awaiting review)
 Current Production Version: None (not deployed)
-Active Development Branch: `feature/application-scaffold`, stacked on `docs/stack-and-ingestion-adrs` ([PR #1](https://github.com/dude297/internship-finder/pull/1), not yet merged). Remote: https://github.com/dude297/internship-finder
+Active Development Branch: `feature/application-scaffold`, rebased on `main` after the ADR-004/ADR-005 docs ([PR #1](https://github.com/dude297/internship-finder/pull/1)) merged. Remote: https://github.com/dude297/internship-finder
 
 ## Current Objective
 
@@ -13,7 +13,7 @@ Review and merge the Milestone 0 scaffold, then start Milestone 1 (core domain/d
 
 ## Status Summary
 
-Terms: **Selected** = decided in an ADR. **Provisioned** = account/project/resource actually created. **Implemented** = code exists and is tested.
+Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exists in the repository and is tested. **Provisioned** = account/project/resource actually created. **Deployed** = running in a hosted environment.
 
 | Area | Status |
 |---|---|
@@ -114,7 +114,7 @@ None. Planned sources and research references are listed in [docs/sources.md](do
 
 ## Recent Important Decisions
 
-- 2026-09-25: Milestone 0 scaffold. The frontend uses ESLint (the Vite template's oxlint default was replaced to match ADR-004). The backend test client uses `httpx2`, which Starlette now expects. The backend floor is Python 3.12.
+- 2026-09-25: Milestone 0 scaffold. The frontend uses ESLint (the Vite template's oxlint default was replaced to match ADR-004). The backend test client uses `httpx2`, which Starlette now expects. The backend floor is Python 3.12. Backend tests ignore `backend/.env` and inherited config variables (`tests/conftest.py`), so they are deterministic.
 - 2026-09-24: ADR-004 accepted (React/Vite frontend, Python/FastAPI backend, Neon Postgres, Vercel Hobby, Render Free, GitHub Actions; $0/no-payment constraint).
 - 2026-09-24: ADR-005 accepted (time-aware eligibility, provenance-aware profile ingestion, layered sources, open-source reuse policy).
 - 2026-09-24: ADR-001, ADR-002, ADR-003 accepted.

@@ -67,6 +67,8 @@ CORS allows only `FRONTEND_ORIGIN` (default `http://localhost:5173`). If you run
 
 Examples are in `frontend/.env.example` and `backend/.env.example`. Never commit `.env` files.
 
+Backend tests ignore `backend/.env` and any of these variables set in your shell (`backend/tests/conftest.py`), so they run against defaults. Tests that need a value set it explicitly.
+
 ## Version Control
 
 Git repository: https://github.com/dude297/internship-finder (default branch `main`).
