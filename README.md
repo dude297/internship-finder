@@ -4,7 +4,7 @@ A personal, single-user tool for finding internship and research opportunities, 
 
 **Intended user:** a single user (the repository owner). It's still being built to production standards.
 
-> ⚠️ **Status: development foundation only (Milestone 0).** A frontend and backend scaffold exists and shows backend health. No product features are implemented. The capabilities described in `docs/` are **planned**. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
+> ⚠️ **Status: backend domain foundation (Milestone 1, in review).** The database schema, temporal education resolver, and deterministic eligibility rules v1 exist and are tested. There is no product API or UI yet; the frontend only shows backend health. Other capabilities in `docs/` are **planned**. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
 
 ## Stack
 

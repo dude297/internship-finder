@@ -1,6 +1,6 @@
 # Operations
 
-**Nothing here is implemented.** There are no running services, jobs, or monitoring. Each section describes intended behavior and is labeled accordingly.
+There are no running services, jobs, or monitoring. Each section is labeled planned or implemented.
 
 ## Source Job Monitoring (planned)
 
@@ -33,6 +33,14 @@ Not configured yet. The selected provider is Neon Free ([ADR-004](decisions/ADR-
 ## Logs (planned)
 
 Structured logs as described in [ENGINEERING_GUIDELINES.md §11](../ENGINEERING_GUIDELINES.md#11-logging-and-observability). No secrets, and no unnecessary sensitive profile data. The log destination is TBD.
+
+## Evaluation History and Re-evaluation (implemented as a library call; not scheduled)
+
+`app.repositories.evaluate_and_save` appends a new `opportunity_evaluations` row with its rule results. Earlier rows are kept as history, and the latest `evaluated_at` is current. Nothing triggers re-evaluation automatically yet. Re-evaluation is needed when the eligibility rules version changes, when the canonical profile changes, and when the reference date moves past an expected graduation or enrollment date (see Future Scheduled Jobs). History pruning is TBD.
+
+## Migrations
+
+Schema changes are Alembic migrations (`backend/alembic/versions/`), validated in CI against a disposable PostgreSQL. No hosted database exists yet, so no migration has been applied anywhere persistent.
 
 ## Environment Configuration
 

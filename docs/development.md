@@ -43,11 +43,29 @@ These commands have all been run successfully in this repository.
 | Format check | `ruff format --check .` | `npm run format:check` (Prettier) |
 | Format (write) | `ruff format .` | `npm run format` |
 | Typecheck | `pyright` (strict) | `npm run typecheck` (`tsc -b`, strict) |
-| Unit tests | `pytest` | `npm test` (Vitest + React Testing Library) |
+| Unit tests | `pytest -m "not postgres"` | `npm test` (Vitest + React Testing Library) |
+| PostgreSQL tests | `pytest -m postgres` (needs `TEST_DATABASE_URL`, see below) | — |
 | Build | — | `npm run build` (output in `frontend/dist/`) |
 | Migrations | see [Migrations Workflow](#migrations-workflow) | — |
 
-Not set up yet: integration tests against a real database, and Playwright end-to-end tests. They'll be added with the first features that need them.
+Not set up yet: Playwright end-to-end tests.
+
+### Test boundary: unit vs PostgreSQL
+
+- **Unit tests** (education resolver, eligibility rules, config, health) are pure and need no database.
+- **PostgreSQL tests** (`@pytest.mark.postgres`: models, constraints, repositories, migrations) run against a real, disposable PostgreSQL database named by `TEST_DATABASE_URL`. The session fixture migrates it to head, each test runs in a rolled-back transaction, and `tests/test_migrations.py` downgrades to base and upgrades again. Never point `TEST_DATABASE_URL` at a database whose data you want to keep.
+- SQLite is **not** used. Constraint, timezone, and foreign-key behavior differ enough that SQLite tests would be misleading.
+- Without `TEST_DATABASE_URL`, PostgreSQL tests are skipped locally. In CI (`CI=true`) they fail instead of skipping.
+
+Local PostgreSQL with Docker (optional, disposable, test-only credentials):
+
+```bash
+docker run -d --rm --name if-test-pg -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test \
+  -e POSTGRES_DB=internship_finder_test -p 127.0.0.1:5433:5432 postgres:18
+export TEST_DATABASE_URL=postgresql+psycopg://test:test@127.0.0.1:5433/internship_finder_test
+pytest                      # unit + PostgreSQL tests
+docker stop if-test-pg      # the container and its data are removed
+```
 
 ### Local frontend ↔ backend integration
 
@@ -88,9 +106,9 @@ GitHub Actions, within included free usage only. No paid runners, scheduled jobs
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and on every pull request:
 
 - Frontend (Node 24): `npm ci`, lint, format check, typecheck, tests, build
-- Backend (Python 3.12): install, `ruff check`, `ruff format --check`, `pyright`, `pytest`
+- Backend (Python 3.12): install, `ruff check`, `ruff format --check`, `pyright`, unit tests, then against an ephemeral PostgreSQL 18 service container (test-only credentials in the workflow, not secrets): `alembic upgrade head`, `alembic check` (models match migrations), `alembic downgrade base`, `alembic upgrade head`, and the PostgreSQL tests
 
-Planned later: migration validation against a real Postgres, and docs checks where practical.
+Planned later: docs checks where practical.
 
 ## Test Workflow
 
@@ -103,7 +121,7 @@ See [ENGINEERING_GUIDELINES.md §12](../ENGINEERING_GUIDELINES.md#12-testing-sta
 
 ## Migrations Workflow
 
-Alembic is set up in `backend/` with no migrations yet. `alembic/env.py` reads `DATABASE_URL` from app settings and uses `app.db.base.Base.metadata` as the autogenerate target. Import new model modules in `env.py` so autogenerate can see them.
+Alembic is set up in `backend/`. The first migration is `3b9c6b57bb60` (initial core domain schema). `alembic/env.py` uses `sqlalchemy.url` if it's set programmatically (the tests do this), otherwise `DATABASE_URL` from app settings. The autogenerate target is `app.models.Base.metadata`. Add new model modules to `app/models/__init__.py` so autogenerate sees them. Enum columns autogenerate duplicate CHECK constraints: keep one named `ck_…` constraint per enum and set `create_constraint=False` on the `sa.Enum` (see the initial migration).
 
 From `backend/` with the venv active and `DATABASE_URL` set:
 
@@ -113,9 +131,10 @@ alembic upgrade head                                  # apply migrations
 alembic downgrade -1                                  # roll back one migration
 alembic upgrade head --sql                            # print SQL without connecting (offline mode)
 alembic current                                       # show the applied revision
+alembic check                                         # fail if models and migrations differ
 ```
 
-Verified so far: `alembic upgrade head --sql` (with a placeholder URL) and `alembic history`. The commands that connect to a database haven't been run yet because there's no database. Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. No database is provisioned yet. Once Neon Postgres is provisioned:
+Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade base`, `upgrade head`. Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. No hosted database is provisioned yet. Rules:
 
 - every schema change is an Alembic migration, committed with the code that needs it
 - update [data-model.md](data-model.md) in the same change
