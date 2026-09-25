@@ -5,7 +5,7 @@
 Last Updated: 2026-09-25
 Current Milestone: Milestone 0: Development Foundation (complete; merged to `main` via [PR #2](https://github.com/dude297/internship-finder/pull/2))
 Current Production Version: None (not deployed)
-Active Development Branch: `docs/public-repository-safety` (public-repository safety docs, rebased on `main`). Remote: https://github.com/dude297/internship-finder
+Active Development Branch: None. Milestone 1 has not started. Remote: https://github.com/dude297/internship-finder
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Review and merge the public-repository safety docs, then start Milestone 1 (core domain/data model design).
+Begin Milestone 1: core domain/data model design and initial migrations.
 
 ## Status Summary
 
@@ -70,7 +70,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 
 ## In Progress
 
-Public-repository safety docs (`docs/public-repository-safety`) awaiting review and merge.
+Nothing. Milestone 1 has not started.
 
 ## Known Bugs
 
