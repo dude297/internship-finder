@@ -27,8 +27,8 @@ The user's status changes over time. The current user is a **high-school senior*
 Example:
 
 ```text
-Today:        high-school senior, expected graduation 2027-06-10,
-              expected enrollment 2027-08-25 (undergraduate)
+Today:        high-school senior, expected graduation 2027-06,
+              expected enrollment 2027-08 (undergraduate)
 Opportunity:  summer research program, starts 2027-06-20
 Requirement:  open to incoming undergraduates / admitted college students
 Reference:    2027-06-20 → projected status: graduated HS, incoming undergraduate
@@ -69,7 +69,7 @@ Inputs: profile date of birth, opportunity minimum age, reference date
 Reference date: date specified by posting; otherwise opportunity start date
 Output: ineligible (needs_verification if date of birth or reference date is unknown)
 Reason: "Minimum age {min} exceeds user age {age} on {date}."
-Example: Minimum age 18 at program start 2027-06-20; user turns 18 on 2027-09-01 → ineligible.
+Example: Minimum age 18 at program start 2027-06-20; user is 17 on that date → ineligible.
 Status: Planned
 ```
 
