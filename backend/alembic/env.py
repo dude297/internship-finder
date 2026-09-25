@@ -4,18 +4,18 @@ from alembic import context
 from sqlalchemy import create_engine
 
 from app.core.config import get_settings
-from app.db.base import Base
+from app.models import Base  # importing app.models registers every table on Base.metadata
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import ORM model modules above this line as they are added, so autogenerate sees them.
 target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    url = get_settings().database_url
+    # An explicit sqlalchemy.url (set programmatically, e.g. by the migration tests) wins.
+    url = config.get_main_option("sqlalchemy.url") or get_settings().database_url
     if not url:
         raise RuntimeError("DATABASE_URL must be set to run Alembic migrations")
     return url
