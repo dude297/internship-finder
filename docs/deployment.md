@@ -31,7 +31,7 @@ GitHub Actions scheduled workflows (selected, not configured). Workflows call Py
 
 ## Environment Variables
 
-None required yet. When added:
+None are provisioned anywhere yet. Local variables are listed in [development.md](development.md#environment-variables). For production, `VITE_API_BASE_URL` must be set at frontend build time (it's public), and `FRONTEND_ORIGIN` must be set to the deployed frontend origin (never `*`). When adding more:
 
 - list every variable in [`.env.example`](../.env.example) with placeholder values
 - note here which are server-only (e.g. database URL: backend and GitHub Actions secrets only) and which may be exposed to the frontend (e.g. the public API base URL)

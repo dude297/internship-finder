@@ -6,6 +6,7 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Milestone 0 development foundation: a React/TypeScript/Vite/Tailwind frontend (`frontend/`) that shows backend health, validated with Zod, and a FastAPI backend (`backend/`) with `GET /api/health`, a SQLAlchemy base, and an empty Alembic environment. Includes ESLint/Prettier/Vitest and Ruff/Pyright/Pytest tooling, plus a GitHub Actions CI workflow.
 - Initial engineering documentation framework.
 - Repository operating rules (`CLAUDE.md`, `ENGINEERING_GUIDELINES.md`).
 - Project-state handoff document (`PROJECT_STATE.md`).
