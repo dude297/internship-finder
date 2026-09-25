@@ -2,7 +2,7 @@
 
 This is the authoritative engineering standards document for the Personal Internship Finder. Where another document conflicts with this one, this one wins unless an accepted ADR in [`docs/decisions/`](docs/decisions/) says otherwise.
 
-> **Stack note:** No application stack has been chosen or committed yet (see [`PROJECT_STATE.md`](PROJECT_STATE.md)). Language-specific guidance below (TypeScript, Zod, Supabase/RLS) applies **if and when** that stack is adopted. Update this file when the stack is decided.
+> **Stack note:** The stack is selected in [ADR-004](docs/decisions/ADR-004-technology-stack.md): a React/TypeScript/Vite/Tailwind frontend, a Python/FastAPI/Pydantic backend, and Neon PostgreSQL via SQLAlchemy/Alembic. Operating cost is **$0/month with no payment method required**. It's selected but not yet provisioned or implemented (see [`PROJECT_STATE.md`](PROJECT_STATE.md)).
 
 ---
 
@@ -49,6 +49,12 @@ Avoid:
 - speculative architecture
 - unnecessary dependencies
 
+### Zero Cost
+
+- Required services must work at **$0/month without a payment method**: no credit card, paid plan, usage-based billing, or paid overages.
+- When a free-tier limit is hit, pause, throttle, fail visibly, or defer. Never escalate to paid usage.
+- Any required dependency that needs payment information, can generate charges, or requires a paid plan needs a **new ADR before adoption** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)).
+
 ### Separation of Concerns
 
 Keep these areas logically separated:
@@ -66,6 +72,7 @@ Keep these areas logically separated:
 | AI enrichment | Optional interpretation layered on source data |
 | Application tracking | User's application state |
 | Notifications | Alerts and digests |
+| Profile ingestion | Raw profile sources → facts with provenance → user review |
 | UI | Presentation only; no business rules |
 | Observability | Logs, run summaries, metrics |
 
@@ -170,7 +177,7 @@ integration tests
 build
 ```
 
-Also validate migrations and RLS policies where applicable. The concrete commands are listed in [`docs/development.md`](docs/development.md) once they exist.
+Also validate migrations where applicable. The concrete commands are listed in [`docs/development.md`](docs/development.md) once they exist.
 
 ### Step 5 — Report
 
@@ -190,32 +197,40 @@ Every implementation task reports:
 
 ## 5. Code Standards
 
-### TypeScript (if adopted)
+### Python (backend)
 
-- Use strong typing. Avoid `any` unless justified in a comment.
-- Prefer domain-specific types:
+- Modern type hints everywhere. Checked with Pyright (or equivalent) and linted/formatted with Ruff.
+- Avoid `Any` unless justified in a comment.
+- Prefer explicit domain types: Pydantic models, enums, dataclasses, `TypedDict`.
 
-```ts
-type EligibilityStatus =
-  | "eligible"
-  | "ineligible"
-  | "needs_verification";
+```python
+class EligibilityStatus(StrEnum):
+    ELIGIBLE = "eligible"
+    INELIGIBLE = "ineligible"
+    NEEDS_VERIFICATION = "needs_verification"
 ```
 
-- Use schema validation (e.g. Zod, if the stack includes it) at external boundaries: forms, API routes, source responses, imported JSON, AI output.
+- Validate with Pydantic at every external boundary: API requests/responses, source adapter output, normalized opportunities, imported profile data, configuration, and AI output.
+- SQLAlchemy 2.x for DB access. Avoid unnecessary ORM abstractions, and use raw SQL where it's clearer or more efficient. Schema changes go through Alembic.
+
+### TypeScript (frontend)
+
+- `strict` mode, ESLint, Prettier. Avoid `any` unless justified in a comment.
+- Use Zod where runtime validation is useful (e.g. API responses, forms). Backend validation is authoritative. Don't duplicate complicated business rules in the frontend.
+- Core business logic (eligibility, scoring, ranking, normalization, dedupe) lives in the backend, not in components.
 
 ### Functions
 
 Prefer clear, single-purpose functions:
 
-```ts
-evaluateEligibility(profile, opportunity)
+```python
+evaluate_eligibility(profile, opportunity, reference_date)
 ```
 
 Avoid catch-all functions:
 
-```ts
-processEverything(data)
+```python
+process_everything(data)
 ```
 
 ### File Size
@@ -233,15 +248,16 @@ Comments explain **why**, assumptions, or non-obvious constraints. Do not commen
 
 ## 6. Database Standards
 
-- Use migrations for all schema changes.
+- Use migrations (Alembic) for all schema changes.
 - No undocumented manual production schema changes.
 - Prefer UUIDs for application entities.
 - Keep external source IDs in separate columns from internal IDs.
 - Store timestamps consistently, preferably in UTC.
 - Use database constraints for real invariants.
 - Do not rely only on frontend validation.
-- Use Row Level Security (RLS) if Supabase Auth / user-owned data is used.
-- Never expose service-role credentials to the browser.
+- Enforce authorization in the FastAPI backend. Postgres Row Level Security may be added if it's ever needed.
+- Never expose database credentials or other secret keys to the browser. Anything in the Vite client bundle is public.
+- Keep original source data (raw opportunity payloads, raw profile sources) alongside derived data. Never overwrite it.
 - Do not trust client-provided ownership IDs; derive ownership server-side from the authenticated session.
 
 Keep [`docs/data-model.md`](docs/data-model.md) in sync with migrations.
@@ -280,6 +296,10 @@ Additional rules:
 
 AI is an **enrichment layer, not the source of truth**. See [ADR-003](docs/decisions/ADR-003-ai-as-enrichment.md).
 
+AI is **optional**. The core application must work without any paid AI API, paid embedding API, or paid vector database ([ADR-004](docs/decisions/ADR-004-technology-stack.md)). Future AI may use local models (e.g. Ollama), manually triggered inference, free allocations, or pluggable provider adapters.
+
+AI-inferred **profile facts** are stored with provenance (source, model/version, confidence) and are unverified until the user confirms them. Hard eligibility never uses unverified inferred facts ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
+
 AI may assist with:
 
 - requirement extraction
@@ -316,13 +336,15 @@ Structured AI output must:
 
 All collectors share a common concept (illustrative; the final shape is decided at implementation):
 
-```ts
-interface OpportunitySource {
-  sourceName: string;
-  fetch(): Promise<RawOpportunity[]>;
-  normalize(raw: RawOpportunity): NormalizedOpportunity;
-}
+```python
+class OpportunitySource:
+    async def fetch(self) -> list[RawOpportunity]: ...
+    def normalize(self, raw: RawOpportunity) -> NormalizedOpportunity: ...
 ```
+
+Transport may differ per source. The common boundary starts after fetch. Prefer structured sources (public feeds, ATS APIs) over HTML parsing, and HTML parsing over browser automation ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
+
+External open-source projects are references or optional sources, never foundations, unless explicitly approved. Before copying any code, check the license, compatibility, attribution, and copyleft obligations, and document the reuse. Don't copy AGPL code (e.g. Kestrel) without separate licensing review and approval.
 
 Source connectors should support:
 
@@ -391,6 +413,8 @@ For:
 - ranking
 - parsing
 
+Backend tests use Pytest. Frontend tests use Vitest (plus React Testing Library where useful). Time-aware eligibility rules are tested on both sides of graduation and enrollment dates.
+
 ### Integration Tests
 
 For:
@@ -398,8 +422,12 @@ For:
 - database behavior
 - ingestion
 - API routes
-- auth/RLS
+- authorization
 - source adapters, where practical
+
+### End-to-End Tests
+
+Playwright, for critical user flows once they exist.
 
 ### Regression Tests
 

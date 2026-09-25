@@ -8,6 +8,8 @@ Scoring is **versioned behavior**. Status: **Planned v1, not implemented.**
 - Ineligible opportunities must never outrank eligible ones because of fit score. Rank by eligibility status first, then by fit.
 - Weights should eventually live in **one** configurable location, not scattered through code.
 - Every evaluation record stores the `scoring_version` that produced it.
+- v1 scoring is deterministic and works without AI or any paid API: rules, structured profile data, and keyword/semantic logic that needs no paid service ([ADR-003](decisions/ADR-003-ai-as-enrichment.md), [ADR-004](decisions/ADR-004-technology-stack.md)). AI or local-model signals may be added later as optional inputs.
+- Profile facts carry provenance ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Scoring should distinguish user-stated or user-verified facts from unverified AI-inferred ones, for example by weighting unverified facts lower. The exact treatment is decided when components are defined.
 
 ## Planned v1 Weights
 

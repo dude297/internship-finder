@@ -28,7 +28,7 @@ Opportunities not seen for a period (TBD) should be marked stale/closed using `l
 
 ## Database Backup Considerations (planned)
 
-Not configured yet. It depends on the database provider (TBD). It must cover backup frequency, retention, and a tested restore procedure.
+Not configured yet. The selected provider is Neon Free ([ADR-004](decisions/ADR-004-technology-stack.md)); its free-tier history/restore window is limited, so the plan must include a free, self-run backup (e.g. a scheduled `pg_dump`). It must cover backup frequency, retention, and a tested restore procedure.
 
 ## Logs (planned)
 
@@ -44,12 +44,13 @@ For a single-user tool, the minimum is to detect the failure (run summary or err
 
 ## Future Scheduled Jobs (planned)
 
-- Recurring source discovery/refresh
+- Recurring source discovery/refresh (ATS refreshes, deadline refreshes)
 - Stale opportunity cleanup
-- Re-evaluation when eligibility rules or scoring version change
-- Alerts/digests
+- Source health checks
+- Re-evaluation when eligibility rules or scoring version change, or when the user's projected education status crosses a date (graduation, enrollment)
+- In-app alerts/digests (no email/SMS services initially)
 
-The scheduler technology is TBD.
+Scheduler: GitHub Actions scheduled workflows (selected, not configured), or later a self-hosted runner. No paid scheduler. Workflows only orchestrate Python commands. If free-tier limits (Actions minutes, Neon compute, Render hours) are reached, jobs defer or fail visibly rather than incur charges ([ADR-004](decisions/ADR-004-technology-stack.md)).
 
 ## Maintenance
 
