@@ -2,7 +2,7 @@
 
 This is the authoritative engineering standards document for the Personal Internship Finder. Where another document conflicts with this one, this one wins unless an accepted ADR in [`docs/decisions/`](docs/decisions/) says otherwise.
 
-> **Stack note:** The stack is selected in [ADR-004](docs/decisions/ADR-004-technology-stack.md): a React/TypeScript/Vite/Tailwind frontend, a Python/FastAPI/Pydantic backend, and Neon PostgreSQL via SQLAlchemy/Alembic. Operating cost is **$0/month with no payment method required**. It's selected but not yet provisioned or implemented (see [`PROJECT_STATE.md`](PROJECT_STATE.md)).
+> **Stack note:** The stack is selected in [ADR-004](docs/decisions/ADR-004-technology-stack.md): a React/TypeScript/Vite/Tailwind frontend, a Python/FastAPI/Pydantic backend, and Neon PostgreSQL via SQLAlchemy/Alembic. Operating cost is **$0/month with no payment method required**. The frontend, backend, and database foundation are scaffolded locally (Milestone 0). No hosting or database is provisioned or deployed (see [`PROJECT_STATE.md`](PROJECT_STATE.md)).
 
 ---
 
