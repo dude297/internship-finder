@@ -2,7 +2,7 @@
 
 ## Current
 
-Milestone 0 (development foundation) is implemented locally. No product features exist. Nothing is **provisioned** (no accounts, databases, or deployments).
+Milestone 0 (development foundation) and Milestone 1 (core domain, persistence, eligibility v1) are implemented. There is no product UI or API beyond health yet. Nothing is **provisioned** (no accounts, hosted databases, or deployments).
 
 ```text
 Browser → React/Vite (frontend/, localhost:5173)
@@ -12,8 +12,23 @@ Browser → React/Vite (frontend/, localhost:5173)
 
 - `frontend/src/api/client.ts` is the only place that calls the API. It validates responses with Zod.
 - `backend/app/main.py` creates the FastAPI app, with CORS limited to the single `FRONTEND_ORIGIN` and routers mounted under `/api`.
-- `backend/app/db/` has the SQLAlchemy declarative `Base` and a lazily created engine/session. No models or tables exist, and the app never connects to a database.
-- `backend/alembic/` is an Alembic environment with no migrations yet.
+- `backend/app/db/` has the SQLAlchemy declarative `Base` (naming convention, UUID/timestamp mixins, portable enum helper) and a lazily created engine/session. The running app still never connects to a database: no endpoint uses it yet.
+- `backend/app/models/` holds the ORM models (profiles, profile sources/facts, opportunities, source records, requirements, evaluations, rule results). `backend/alembic/versions/` holds the initial migration. See [data-model.md](data-model.md) and [ADR-006](decisions/ADR-006-core-domain-persistence-model.md).
+- `backend/app/profile/education.py` is the pure temporal education resolver.
+- `backend/app/opportunities/eligibility/` is the deterministic eligibility engine v1 (`evaluate_eligibility`). It takes Pydantic domain inputs, not ORM objects or API schemas.
+- `backend/app/repositories.py` has the few persistence helpers that add value (load an opportunity with its requirements/sources, evaluate and save, latest evaluation).
+
+```text
+profiles ──(canonical fields only)──┐
+                                    ▼
+opportunities + requirements ──► evaluate_eligibility ──► opportunity_evaluations
+                                    │                      └─ eligibility_rule_results
+profile_sources ─► profile_facts    │ (facts are not read by eligibility)
+opportunity_source_records          ▼
+                           resolve_education_status
+```
+
+No sensitive profile API exists, deliberately: there's no authentication yet.
 
 ## Planned
 
