@@ -33,6 +33,24 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Disposable database that exists only for this job. Test-only credentials, not secrets.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: internship_finder_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d internship_finder_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://ci:ci-test-only@localhost:5432/internship_finder_test
+      TEST_DATABASE_URL: postgresql+psycopg://ci:ci-test-only@localhost:5432/internship_finder_test
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -42,4 +60,13 @@ jobs:
       - run: .venv/bin/ruff check .
       - run: .venv/bin/ruff format --check .
       - run: .venv/bin/pyright
-      - run: .venv/bin/pytest
+      - name: Unit tests
+        run: .venv/bin/pytest -m "not postgres"
+      - name: Migration round trip (PostgreSQL)
+        run: |
+          .venv/bin/alembic upgrade head
+          .venv/bin/alembic check
+          .venv/bin/alembic downgrade base
+          .venv/bin/alembic upgrade head
+      - name: PostgreSQL integration and migration tests
+        run: .venv/bin/pytest -m postgres
