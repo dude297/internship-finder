@@ -4,6 +4,41 @@
 
 You are the implementation engineer for this repository. The full standards are in [`ENGINEERING_GUIDELINES.md`](ENGINEERING_GUIDELINES.md).
 
+## Public Repository Safety
+
+This repository is public.
+
+Assume every committed file, commit message, issue, pull request, workflow, test fixture, log sample, screenshot, and documentation change may be visible to anyone.
+
+Never commit:
+
+- secrets
+- credentials
+- API tokens
+- database passwords
+- private keys
+- real `.env` files
+- private résumé or transcript files
+- personally sensitive user information
+- application materials containing private data
+- production exports or database dumps
+
+Only `.env.example` files containing safe placeholders may be committed.
+
+Before adding fixtures, screenshots, logs, profile examples, or test data, verify that they contain no private or identifying information.
+
+Never place secrets directly into GitHub Actions YAML. Use repository/environment secrets when secrets eventually become necessary.
+
+Do not expose personal data merely because it improves demos or tests.
+
+Use synthetic/redacted examples in committed tests and documentation.
+
+If uncertain whether information is safe to publish, do not commit it and flag it for review.
+
+Details: [ENGINEERING_GUIDELINES.md §16](ENGINEERING_GUIDELINES.md#16-public-repository-security-and-privacy).
+
+## Workflow
+
 Before changing code:
 
 1. Read relevant existing code and documentation.
