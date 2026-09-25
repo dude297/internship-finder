@@ -25,6 +25,8 @@ For every task:
 - do not silently ignore failures
 - clearly state assumptions and unresolved issues
 - do not claim checks passed unless actually run
+- keep required services at $0/month with no payment method; any required paid or billing-capable dependency needs a new ADR first ([ADR-004](docs/decisions/ADR-004-technology-stack.md))
+- do not copy code from external repositories without the license review in [ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)
 
 Before declaring completion, run all applicable:
 

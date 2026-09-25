@@ -1,6 +1,6 @@
 # Personal Internship Finder
 
-A private tool for finding internship and research opportunities, checking eligibility against a personal profile, and ranking them by fit.
+A private tool for finding internship and research opportunities, checking eligibility against a personal profile, and ranking them by fit. Eligibility is time-aware: the current user is a high-school senior, and opportunities are evaluated against their expected status when each one begins (for example, as an incoming undergraduate).
 
 **Intended user:** a single user (the repository owner). It's still being built to production standards.
 
@@ -8,11 +8,21 @@ A private tool for finding internship and research opportunities, checking eligi
 
 ## Stack
 
-Not chosen yet. It will be decided and documented during Phase 1.
+**Selected, not yet provisioned or implemented** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)):
+
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS, built as a static client-side app and hosted on Vercel Hobby
+- **Backend:** Python, FastAPI, Pydantic, hosted on a Render Free Web Service
+- **Database:** Neon PostgreSQL Free, accessed with SQLAlchemy 2.x, Alembic, and psycopg
+- **CI / scheduling:** GitHub Actions (included free usage)
+- **Testing:** Pytest, Vitest, Playwright
+
+**Hard constraint:** $0/month, and no payment method required for any required service.
+
+Opportunity sourcing and profile ingestion strategy: [ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md).
 
 ## Local Development
 
-No application code, package manifest, or scripts exist yet, so there is nothing to install, run, or test. See [docs/development.md](docs/development.md). It will list real commands once they exist.
+No application code, package manifest, or scripts exist yet, so there is nothing to install, run, or test. The next milestone is the application scaffold. See [docs/development.md](docs/development.md). It will list real commands once they exist.
 
 ## Environment
 
