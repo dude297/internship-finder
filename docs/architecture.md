@@ -2,7 +2,18 @@
 
 ## Current
 
-Nothing is implemented. The repository contains documentation only. The stack is **selected** ([ADR-004](decisions/ADR-004-technology-stack.md)) but not **provisioned** (no accounts, databases, or deployments) and not **implemented** (no code).
+Milestone 0 (development foundation) is implemented locally. No product features exist. Nothing is **provisioned** (no accounts, databases, or deployments).
+
+```text
+Browser → React/Vite (frontend/, localhost:5173)
+            ↓ HTTP GET /api/health (VITE_API_BASE_URL)
+          FastAPI (backend/, localhost:8000) → {"status": "ok"}
+```
+
+- `frontend/src/api/client.ts` is the only place that calls the API. It validates responses with Zod.
+- `backend/app/main.py` creates the FastAPI app, with CORS limited to the single `FRONTEND_ORIGIN` and routers mounted under `/api`.
+- `backend/app/db/` has the SQLAlchemy declarative `Base` and a lazily created engine/session. No models or tables exist, and the app never connects to a database.
+- `backend/alembic/` is an Alembic environment with no migrations yet.
 
 ## Planned
 

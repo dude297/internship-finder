@@ -2,14 +2,14 @@
 
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
-Last Updated: 2026-09-24
-Current Milestone: Phase 0: Engineering documentation, governance, and architecture decisions
+Last Updated: 2026-09-25
+Current Milestone: Milestone 0: Development Foundation (implemented on `feature/application-scaffold`, awaiting review)
 Current Production Version: None (not deployed)
-Active Development Branch: main (remote: https://github.com/dude297/internship-finder)
+Active Development Branch: `feature/application-scaffold`, stacked on `docs/stack-and-ingestion-adrs` ([PR #1](https://github.com/dude297/internship-finder/pull/1), not yet merged). Remote: https://github.com/dude297/internship-finder
 
 ## Current Objective
 
-Finish Phase 0 architecture decisions (stack, source strategy, profile strategy) before any product implementation begins.
+Review and merge the Milestone 0 scaffold, then start Milestone 1 (core domain/data model design).
 
 ## Status Summary
 
@@ -17,45 +17,60 @@ Terms: **Selected** = decided in an ADR. **Provisioned** = account/project/resou
 
 | Area | Status |
 |---|---|
-| Technology stack | **Selected**, accepted via [ADR-004](docs/decisions/ADR-004-technology-stack.md). Not provisioned, not implemented. |
-| Source/profile strategy | **Selected**, accepted via [ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md). Not implemented. |
+| Technology stack | **Selected** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)). Scaffolded locally. Not provisioned. |
+| Source/profile strategy | **Selected** ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Not implemented. |
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
-| Eligibility architecture | Temporal: status evaluated at the opportunity/requirement date (planned) |
-| Profile ingestion | Planned |
-| Résumé parsing | Planned |
-| AI profile inference | Planned, optional, provenance-aware |
+| Development foundation | **Implemented** (Milestone 0) |
 | Product implementation | Not started |
-| Next milestone | Application scaffold |
+| Next milestone | Milestone 1: core domain/data model design and initial migrations |
 
-### Selected stack (not provisioned)
+### Selected stack
 
-| Layer | Selection | Provisioned? |
-|---|---|---|
-| Frontend | React, TypeScript, Vite, Tailwind CSS | No |
-| Frontend hosting | Vercel Hobby | No |
-| Backend | Python, FastAPI, Pydantic | No |
-| Backend hosting | Render Free Web Service | No |
-| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | No |
-| CI / scheduling | GitHub Actions (included free usage) | No |
+| Layer | Selection | Scaffolded locally? | Provisioned? |
+|---|---|---|---|
+| Frontend | React, TypeScript, Vite, Tailwind CSS, Zod | Yes (`frontend/`) | — |
+| Frontend hosting | Vercel Hobby | — | No |
+| Backend | Python 3.12+, FastAPI, Pydantic | Yes (`backend/`) | — |
+| Backend hosting | Render Free Web Service | — | No |
+| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (base, session, empty Alembic env) | No |
+| CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`, PR/push only) | Not yet run on GitHub |
 
 ## Completed Capabilities
 
-- Engineering documentation framework (guidelines, operating contract, ADRs, topic docs).
-- Architecture decisions ADR-001 through ADR-005.
-- No product functionality has been implemented.
+- Engineering documentation framework and ADR-001 through ADR-005.
+- Milestone 0: Development Foundation:
+  - React/Vite/TypeScript (strict)/Tailwind frontend scaffold
+  - FastAPI backend scaffold with `GET /api/health` → `{"status": "ok"}`
+  - Local frontend → backend health integration (loading, healthy, and error states), with the API client validated by Zod
+  - Frontend unit tests (Vitest + React Testing Library)
+  - Backend unit tests (Pytest)
+  - Lint, format, typecheck, test, and build commands ([docs/development.md](docs/development.md))
+  - SQLAlchemy declarative base and Alembic baseline (no migrations, no tables)
+  - GitHub Actions CI workflow (lint, typecheck, test, build)
+
+## Not Implemented
+
+- Production infrastructure. No Neon provisioning, Vercel deployment, or Render deployment.
+- Authentication
+- Profile ingestion and résumé parsing
+- Opportunity ingestion and source adapters
+- Eligibility, scoring, ranking
+- AI
 
 ## In Progress
 
-Nothing. ADR-004/ADR-005 documentation is awaiting review.
+Nothing. Milestone 0 is awaiting review. PR #1 (ADR-004/ADR-005) is awaiting review and merge.
 
 ## Known Bugs
 
-None. No application code exists.
+None known.
 
 ## Known Technical Debt
 
-- No application code, package manifests, or lint/typecheck/test/build tooling exist yet. The tools are selected (ADR-004) but not installed.
+- Backend dependencies are range-pinned in `pyproject.toml` without a lock file, so backend installs aren't fully reproducible. The frontend has `package-lock.json`.
+- No integration tests against a real Postgres, and no Playwright end-to-end tests yet.
+- CI has never run on GitHub yet. The first push/PR will be its first run.
 
 ## Architecture Constraints
 
@@ -67,7 +82,7 @@ None. No application code exists.
 
 ## Database State
 
-Selected: Neon PostgreSQL. Not provisioned. No schema or migrations exist.
+Selected: Neon PostgreSQL. Not provisioned. The Alembic environment exists with **no migrations** and **no tables**.
 
 ## Current Scoring Version
 
@@ -83,23 +98,23 @@ None. Planned sources and research references are listed in [docs/sources.md](do
 
 ## Environment / Deployment Notes
 
-- No environment variables are required yet.
+- Local variables: `VITE_API_BASE_URL` (frontend, public), `FRONTEND_ORIGIN` and `DATABASE_URL` (backend, server-only). None are required for local dev. See [docs/development.md](docs/development.md#environment-variables).
 - Hosting is selected (Vercel Hobby, Render Free, Neon Free) but not provisioned. See [docs/deployment.md](docs/deployment.md).
 - Each provisioning step must confirm that no payment method is required before creating the account or project.
 
 ## Deferred Work
 
-- Provisioning Vercel, Render, and Neon: deferred until there is code to deploy.
-- CI workflows: deferred until the scaffold has lint/test/build commands.
-- Profile schema, résumé parsing, AI inference, source adapters, eligibility, scoring: planned, not started.
+- Provisioning Vercel, Render, and Neon: deferred until there is a feature to deploy.
+- Scheduled workflows and deployment workflows: not added.
 - License verification for the `zshah101` and `SuryaHarikrishnan` reference repositories: needed before any use beyond reading.
 
 ## Next Planned Task
 
-Review ADR-004/ADR-005. Then **application scaffold**: minimal `frontend/` (Vite + React + TS + Tailwind) and `backend/` (FastAPI) with lint, typecheck, test, and build commands, recorded in [docs/development.md](docs/development.md). No product features.
+**Milestone 1: core domain/data model design and initial migrations.** Not started.
 
 ## Recent Important Decisions
 
+- 2026-09-25: Milestone 0 scaffold. The frontend uses ESLint (the Vite template's oxlint default was replaced to match ADR-004). The backend test client uses `httpx2`, which Starlette now expects. The backend floor is Python 3.12.
 - 2026-09-24: ADR-004 accepted (React/Vite frontend, Python/FastAPI backend, Neon Postgres, Vercel Hobby, Render Free, GitHub Actions; $0/no-payment constraint).
 - 2026-09-24: ADR-005 accepted (time-aware eligibility, provenance-aware profile ingestion, layered sources, open-source reuse policy).
 - 2026-09-24: ADR-001, ADR-002, ADR-003 accepted.

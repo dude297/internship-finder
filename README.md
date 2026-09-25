@@ -4,11 +4,11 @@ A private tool for finding internship and research opportunities, checking eligi
 
 **Intended user:** a single user (the repository owner). It's still being built to production standards.
 
-> ⚠️ **Status: pre-implementation.** Only engineering documentation exists. The capabilities described in `docs/` are **planned**, not implemented. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
+> ⚠️ **Status: development foundation only (Milestone 0).** A frontend and backend scaffold exists and shows backend health. No product features are implemented. The capabilities described in `docs/` are **planned**. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
 
 ## Stack
 
-**Selected, not yet provisioned or implemented** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)):
+**Scaffolded locally, not provisioned or deployed** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)):
 
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, built as a static client-side app and hosted on Vercel Hobby
 - **Backend:** Python, FastAPI, Pydantic, hosted on a Render Free Web Service
@@ -22,11 +22,27 @@ Opportunity sourcing and profile ingestion strategy: [ADR-005](docs/decisions/AD
 
 ## Local Development
 
-No application code, package manifest, or scripts exist yet, so there is nothing to install, run, or test. The next milestone is the application scaffold. See [docs/development.md](docs/development.md). It will list real commands once they exist.
+Requires Node.js 24 and Python 3.12+. The frontend and backend run independently.
+
+```bash
+# Backend: http://localhost:8000/api/health
+cd backend
+python -m venv .venv
+source .venv/bin/activate          # Windows (PowerShell): .venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+uvicorn app.main:app --reload
+
+# Frontend: http://localhost:5173 (in a second terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+The page should show "Backend status: Healthy". Lint, typecheck, test, and build commands are in [docs/development.md](docs/development.md).
 
 ## Environment
 
-No environment variables are required yet. [`.env.example`](.env.example) will list placeholders as features add them. Never commit real values.
+Each app has its own example file: [`frontend/.env.example`](frontend/.env.example) and [`backend/.env.example`](backend/.env.example). None of the variables are required for local development. `DATABASE_URL` isn't used by the health-only scaffold. Never commit real values.
 
 ## Documentation
 
