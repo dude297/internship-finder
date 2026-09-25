@@ -290,6 +290,8 @@ Additional rules:
 - Do not render raw HTML unless it has been safely sanitized.
 - Authorization checks happen server-side.
 
+The repository is public. Privacy, secrets, CI, and dependency rules for public code are in [§16](#16-public-repository-security-and-privacy).
+
 ---
 
 ## 8. AI Usage Rules
@@ -506,3 +508,119 @@ Keep topic docs in sync:
 | Runtime / monitoring | [`docs/operations.md`](docs/operations.md) |
 | Setup / scripts | [`docs/development.md`](docs/development.md), [`README.md`](README.md) |
 | Notable changes | [`CHANGELOG.md`](CHANGELOG.md) |
+
+---
+
+## 16. Public Repository Security and Privacy
+
+The repository (`dude297/internship-finder`) is public. This is a permanent constraint unless a future governance decision changes it. The short rules are in [`CLAUDE.md`](CLAUDE.md#public-repository-safety).
+
+### Public by Default
+
+Anything committed to Git should be assumed permanently public. That includes commit messages and author metadata.
+
+Deleting a file in a later commit does not remove it from Git history. A committed secret must be rotated, and the history must be rewritten. Forks, clones, and GitHub pull request refs may keep copies anyway.
+
+### No Personal Source Documents
+
+User-owned private source documents must not be committed. Examples:
+
+- résumé
+- transcript
+- application essays
+- recommendation letters
+- school records
+- personal profile exports
+
+These belong in local ignored storage, protected application storage, or the database where appropriate. They never belong in Git.
+
+### Public Code / Private Data Boundary
+
+The repository holds code and generic material only. Personal data exists only at runtime, outside Git:
+
+```text
+PUBLIC REPOSITORY
+
+application code
+schemas
+migrations
+synthetic fixtures
+documentation
+generic examples
+
+            │
+            │ runtime boundary
+            ▼
+
+PRIVATE USER DATA
+
+résumé
+profile sources
+transcripts
+application history
+personal facts
+credentials
+private files
+```
+
+This boundary is mandatory. Future personal data includes the résumé, coursework, projects, awards, application history, preferences, and personal profile facts. None of it is stored in the repository ([ADR-005 clarification](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md#clarification-2026-09-25-public-repository-boundary)).
+
+### Synthetic Test Data
+
+Tests use synthetic or deliberately anonymized fixtures.
+
+Do not copy real résumé text, school records, application responses, addresses, phone numbers, or other private material into test fixtures or documentation examples.
+
+### Logs
+
+Do not commit runtime logs containing:
+
+- credentials
+- authorization headers
+- personal profile data
+- résumé contents
+- database URLs
+- tokens
+
+### Screenshots
+
+Before committing screenshots, inspect them for:
+
+- account names
+- email addresses
+- browser tabs
+- URLs with tokens
+- local filesystem paths
+- personal profile information
+
+### GitHub Issues and Pull Requests
+
+Do not paste secrets or private profile content into issues, PR descriptions, review comments, or Actions logs.
+
+GitHub discussions around this repository should also be treated as public.
+
+### Environment Files
+
+- Only `.env.example` files with placeholders are tracked. `.gitignore` ignores `.env` and `.env.*` in every directory, except `.env.example`.
+- Local storage for private user files (uploads, exports, dumps) must be gitignored before any code writes to it.
+
+### GitHub Actions
+
+Forks and external pull requests may exist. Treat contributions as untrusted input.
+
+- Workflows use minimum permissions. Prefer a top-level `permissions: contents: read`, and grant more only per job, with a documented reason.
+- Do not expose secrets to forked PRs. Do not run untrusted PR code with privileged secrets.
+- Avoid `pull_request_target` unless the workflow is specifically security-reviewed.
+- Pin or deliberately review third-party actions before use.
+- Never put secrets in workflow YAML. Use repository or environment secrets when they eventually become necessary.
+- No production secrets are currently required.
+
+### Dependency Security
+
+Supply-chain configuration is also public.
+
+- Avoid unnecessary dependencies.
+- Review third-party packages and actions before adoption.
+- Keep lockfiles where appropriate (`frontend/package-lock.json`).
+- Use Dependabot or an equivalent only if explicitly approved later.
+- Don't copy arbitrary code from GitHub. The license-review rules in [ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md) remain in force.

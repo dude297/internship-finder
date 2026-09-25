@@ -3,13 +3,23 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-09-25
-Current Milestone: Milestone 0: Development Foundation (implemented on `feature/application-scaffold`, awaiting review)
+Current Milestone: Milestone 0: Development Foundation (complete; merged to `main` via [PR #2](https://github.com/dude297/internship-finder/pull/2))
 Current Production Version: None (not deployed)
-Active Development Branch: `feature/application-scaffold`, rebased on `main` after the ADR-004/ADR-005 docs ([PR #1](https://github.com/dude297/internship-finder/pull/1)) merged. Remote: https://github.com/dude297/internship-finder
+Active Development Branch: `docs/public-repository-safety` (public-repository safety docs, rebased on `main`). Remote: https://github.com/dude297/internship-finder
+
+## Repository Visibility
+
+| | |
+|---|---|
+| Repository visibility | **Public** (set on GitHub 2026-09-25) |
+| Public repository safety | **Active** ([CLAUDE.md](CLAUDE.md#public-repository-safety), [ENGINEERING_GUIDELINES.md §16](ENGINEERING_GUIDELINES.md#16-public-repository-security-and-privacy)) |
+| Private user data in Git | **Prohibited** |
+
+Real résumé, transcript, profile, and application documents stay outside the repository, in the database or gitignored local storage.
 
 ## Current Objective
 
-Review and merge the Milestone 0 scaffold, then start Milestone 1 (core domain/data model design).
+Review and merge the public-repository safety docs, then start Milestone 1 (core domain/data model design).
 
 ## Status Summary
 
@@ -34,7 +44,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Backend | Python 3.12+, FastAPI, Pydantic | Yes (`backend/`) | — |
 | Backend hosting | Render Free Web Service | — | No |
 | Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (base, session, empty Alembic env) | No |
-| CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`, PR/push only) | Not yet run on GitHub |
+| CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`, PR/push only) | Running on GitHub (passed on PR #2) |
 
 ## Completed Capabilities
 
@@ -60,7 +70,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 
 ## In Progress
 
-Nothing. Milestone 0 is awaiting review. PR #1 (ADR-004/ADR-005) is awaiting review and merge.
+Public-repository safety docs (`docs/public-repository-safety`) awaiting review and merge.
 
 ## Known Bugs
 
@@ -70,7 +80,6 @@ None known.
 
 - Backend dependencies are range-pinned in `pyproject.toml` without a lock file, so backend installs aren't fully reproducible. The frontend has `package-lock.json`.
 - No integration tests against a real Postgres, and no Playwright end-to-end tests yet.
-- CI has never run on GitHub yet. The first push/PR will be its first run.
 
 ## Architecture Constraints
 
@@ -114,6 +123,7 @@ None. Planned sources and research references are listed in [docs/sources.md](do
 
 ## Recent Important Decisions
 
+- 2026-09-25: Repository made public. Public-repository privacy and secret-handling rules added (CLAUDE.md, ENGINEERING_GUIDELINES.md §16, ADR-005 clarification). The pre-public audit found no secrets or personal documents in the files or history. Commit author metadata includes a personal email address, which the owner accepted as public. New commits use the GitHub noreply address.
 - 2026-09-25: Milestone 0 scaffold. The frontend uses ESLint (the Vite template's oxlint default was replaced to match ADR-004). The backend test client uses `httpx2`, which Starlette now expects. The backend floor is Python 3.12. Backend tests ignore `backend/.env` and inherited config variables (`tests/conftest.py`), so they are deterministic.
 - 2026-09-24: ADR-004 accepted (React/Vite frontend, Python/FastAPI backend, Neon Postgres, Vercel Hobby, Render Free, GitHub Actions; $0/no-payment constraint).
 - 2026-09-24: ADR-005 accepted (time-aware eligibility, provenance-aware profile ingestion, layered sources, open-source reuse policy).

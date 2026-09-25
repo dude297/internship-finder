@@ -1,6 +1,6 @@
 # Personal Internship Finder
 
-A private tool for finding internship and research opportunities, checking eligibility against a personal profile, and ranking them by fit. Eligibility is time-aware: the current user is a high-school senior, and opportunities are evaluated against their expected status when each one begins (for example, as an incoming undergraduate).
+A personal, single-user tool for finding internship and research opportunities, checking eligibility against a personal profile, and ranking them by fit. Eligibility is time-aware: the current user is a high-school senior, and opportunities are evaluated against their expected status when each one begins (for example, as an incoming undergraduate).
 
 **Intended user:** a single user (the repository owner). It's still being built to production standards.
 
@@ -39,6 +39,10 @@ npm run dev
 ```
 
 The page should show "Backend status: Healthy". Lint, typecheck, test, and build commands are in [docs/development.md](docs/development.md).
+
+## Public Repository
+
+This repository contains application source code only. Personal résumé, profile, application, and credential data must never be committed. See [CLAUDE.md](CLAUDE.md#public-repository-safety).
 
 ## Environment
 

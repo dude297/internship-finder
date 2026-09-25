@@ -103,6 +103,8 @@ Resume / Coursework / Projects / Preferences
 
 Original source documents are kept unchanged, and extracted facts are stored separately with provenance ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
 
+Everything in this flow is private runtime data (database or gitignored local storage), never repository content. The public repository holds only code, schemas, migrations, synthetic fixtures, and generic docs ([ENGINEERING_GUIDELINES.md §16](../ENGINEERING_GUIDELINES.md#public-code--private-data-boundary)).
+
 ### Components (planned)
 
 | Component | Responsibility | Reference |

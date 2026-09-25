@@ -236,3 +236,18 @@ Licenses other than Kestrel's haven't been verified yet. Verify each before any 
 - **AI-first profile extraction with automatic acceptance.** Convenient, but violates [ADR-003](ADR-003-ai-as-enrichment.md): errors would flow silently into eligibility. Rejected.
 - **Custom crawlers for every source.** Maximum control, but high build and maintenance cost. Rejected as the default. Scraping and browser automation are the last layers, not the first.
 - **Build on an existing open-source internship project (fork Kestrel or a listing repo).** Faster start, but it imports licensing obligations (AGPL for Kestrel), couples the architecture to someone else's design, and those projects target standard tech internships more than this user's early-college needs. Rejected as a foundation. They remain references.
+
+## Clarification (2026-09-25): Public repository boundary
+
+This clarification extends the decision above. It doesn't change it. The repository is public ([ENGINEERING_GUIDELINES.md §16](../../ENGINEERING_GUIDELINES.md#16-public-repository-security-and-privacy)), so raw profile sources, profile facts, and the canonical profile are **runtime data only**. They are never repository content.
+
+When résumé ingestion is implemented:
+
+- Uploaded résumé files are never committed.
+- Default local upload and storage directories are gitignored before any code writes to them.
+- Tests use synthetic résumés.
+- Documentation examples are fabricated or redacted.
+- Parsed profile facts containing real personal data are never committed.
+- Database dumps containing profile facts are never committed.
+
+"Where the original file is stored" (§3) is still an implementation decision, but the answer can't be Git.
