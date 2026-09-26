@@ -2,10 +2,10 @@
 
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
-Last Updated: 2026-09-25
-Current Milestone: Milestone 1 — Core Domain, Persistence, and Eligibility v1 (implemented on `feature/core-domain-eligibility`; awaiting review). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Last Updated: 2026-09-26
+Current Milestone: None active. Milestone 1 — Core Domain, Persistence, and Eligibility v1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4), rebase-merged into `main`). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)). Milestone 2 not started.
 Current Production Version: None (not deployed)
-Active Development Branch: `feature/core-domain-eligibility` (Milestone 1, PR open for review). Remote: https://github.com/dude297/internship-finder
+Active Development Branch: `main` (no feature branch in progress). Remote: https://github.com/dude297/internship-finder
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Review and merge Milestone 1. Milestone 2 is not started.
+Milestone 1 is merged. Milestone 2 is not started.
 
 ## Status Summary
 
@@ -60,7 +60,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
   - Lint, format, typecheck, test, and build commands ([docs/development.md](docs/development.md))
   - SQLAlchemy declarative base and Alembic baseline (no migrations, no tables)
   - GitHub Actions CI workflow (lint, typecheck, test, build)
-- Milestone 1: Core Domain, Persistence, and Eligibility v1 (awaiting review):
+- Milestone 1: Core Domain, Persistence, and Eligibility v1 ([PR #4](https://github.com/dude297/internship-finder/pull/4)):
   - initial domain schema ([data-model.md](docs/data-model.md), [ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md))
   - initial Alembic migration `3b9c6b57bb60` (upgrade and downgrade verified on PostgreSQL)
   - profile provenance (`profile_sources`, `profile_facts`)
@@ -85,7 +85,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 
 ## In Progress
 
-Milestone 1 PR open for review. Not merged.
+Nothing in progress.
 
 ## Known Bugs
 
@@ -137,10 +137,11 @@ None. Planned sources and research references are listed in [docs/sources.md](do
 
 ## Next Planned Task
 
-Review and merge Milestone 1. Then, proposed: **Milestone 2 — private profile/manual opportunity API + local application workflow** (requires an authentication/API-exposure design first). Not started.
+Proposed: **Milestone 2 — private profile/manual opportunity API + local application workflow** (requires an authentication/API-exposure design first). Not started.
 
 ## Recent Important Decisions
 
+- 2026-09-26: PR #4 review fix: the evaluation-level `depends_on_projected_status` is true only when the overall outcome depends on projected results (`eligible`: any projected pass; otherwise every result with the final status is projected). Milestone 1 merged; ADR-006 accepted.
 - 2026-09-26: PR #4 review fix: `opportunities.requirements_assessment_status` (default `unassessed`) and rule ELIG-REQ-000. Zero requirements is `eligible` only when the assessment is `complete`; `partial` is at least `needs_verification`; a known `ineligible` result still wins. Added to the initial migration `3b9c6b57bb60` (not merged). Rules version stays `v1`. `latest_evaluation` breaks `evaluated_at` ties by `id`.
 - 2026-09-25: ADR-006 core domain persistence model (canonical profile vs facts, structured requirements, separate source records, evaluation history, portable VARCHAR enums and JSON). Eligibility v1 clarifications: explicit citizenship mismatch is `ineligible`; unevaluable requirements are `needs_verification` (ELIG-REQ-001). PostgreSQL tests use a disposable database; SQLite is not used.
 - 2026-09-25: Repository made public. Public-repository privacy and secret-handling rules added (CLAUDE.md, ENGINEERING_GUIDELINES.md §16, ADR-005 clarification). The pre-public audit found no secrets or personal documents in the files or history. Commit author metadata includes a personal email address, which the owner accepted as public. New commits use the GitHub noreply address.

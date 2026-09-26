@@ -98,7 +98,8 @@ class EligibilityEvaluation(BaseModel):
 
     status: EligibilityStatus
     rules_version: str
-    # True when the final status relies on an expected (not yet actual) education transition.
+    # True only when the overall status depends on projected-status results — not merely when a
+    # projected rule was evaluated. See `depends_on_projection`.
     depends_on_projected_status: bool
     rule_results: tuple[RuleResult, ...]
 

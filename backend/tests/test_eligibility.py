@@ -13,7 +13,11 @@ from app.enums import (
     RequirementsAssessmentStatus,
     RequirementType,
 )
-from app.opportunities.eligibility import RULES_VERSION, evaluate_eligibility
+from app.opportunities.eligibility import (
+    RULES_VERSION,
+    depends_on_projection,
+    evaluate_eligibility,
+)
 from app.opportunities.eligibility.rules import age_on, evaluate_requirement
 from app.opportunities.eligibility.schemas import (
     OpportunityInput,
@@ -418,6 +422,67 @@ def test_projection_flag_ignores_results_that_did_not_decide_the_status() -> Non
 
     assert evaluation.status is INELIGIBLE
     assert not evaluation.depends_on_projected_status
+
+
+# Graduated 2041-06-10 but not enrolled until 2041-08-25: a projected education mismatch.
+ENROLLED_EDU = requirement(RequirementType.EDUCATION, ENROLLED_UNDERGRAD)
+
+
+def test_ineligible_only_from_projected_mismatch_is_flagged() -> None:
+    evaluation = evaluate_eligibility(
+        US_CITIZEN, opportunity(date(2041, 8, 24)), [MIN_18, ENROLLED_EDU, US_ONLY]
+    )
+
+    assert evaluation.status is INELIGIBLE
+    assert [r.status for r in evaluation.rule_results] == [ELIGIBLE, ELIGIBLE, INELIGIBLE, ELIGIBLE]
+    assert evaluation.depends_on_projected_status
+
+
+def test_ineligible_with_independent_non_projected_failure_is_not_flagged() -> None:
+    profile = PROFILE.model_copy(update={"citizenships": ["CA"]})
+
+    evaluation = evaluate_eligibility(
+        profile, opportunity(date(2041, 8, 24)), [MIN_18, ENROLLED_EDU, US_ONLY]
+    )
+
+    assert evaluation.status is INELIGIBLE
+    edu, cit = evaluation.rule_results[2], evaluation.rule_results[3]
+    assert edu.status is INELIGIBLE and edu.depends_on_projected_status
+    assert cit.status is INELIGIBLE and not cit.depends_on_projected_status
+    assert not evaluation.depends_on_projected_status
+
+
+def _result(status: EligibilityStatus, projected: bool) -> RuleResult:
+    return RuleResult(
+        rule_id="ELIG-TEST",
+        status=status,
+        reason="synthetic",
+        depends_on_projected_status=projected,
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "results", "expected"),
+    [
+        # A non-projected needs_verification (e.g. partial assessment) stands on its own.
+        (
+            NEEDS_VERIFICATION,
+            [(NEEDS_VERIFICATION, False), (NEEDS_VERIFICATION, True), (ELIGIBLE, True)],
+            False,
+        ),
+        # Every needs_verification result relies on projection.
+        (NEEDS_VERIFICATION, [(ELIGIBLE, False), (NEEDS_VERIFICATION, True)], True),
+        # Eligible: any projected pass is load-bearing.
+        (ELIGIBLE, [(ELIGIBLE, False), (ELIGIBLE, True)], True),
+        (ELIGIBLE, [(ELIGIBLE, False)], False),
+    ],
+)
+def test_projection_dependency_aggregation(
+    status: EligibilityStatus, results: list[tuple[EligibilityStatus, bool]], expected: bool
+) -> None:
+    rule_results = [_result(s, p) for s, p in results]
+
+    assert depends_on_projection(status, rule_results) is expected
 
 
 def test_evaluation_is_deterministic() -> None:
