@@ -1,6 +1,6 @@
 # ADR-006: Core Domain Persistence Model
 
-Status: Accepted (pending review of the Milestone 1 PR)
+Status: Accepted
 
 Date: 2026-09-25
 

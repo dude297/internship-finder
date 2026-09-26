@@ -45,6 +45,7 @@ The user's status changes over time. For example, a high-school senior is expect
 - **Projection.** From the profile's expected graduation date, expected enrollment date, and expected future education level, derive the user's education status on the reference date.
 - **Unknown dates.** If the reference date or the needed profile dates are missing or ambiguous, return `needs_verification`. Don't guess.
 - **Transparency.** If a result depends on a projected (expected, not yet actual) status, the reason says so.
+- **Evaluation-level flag.** `depends_on_projected_status` on the evaluation is true only when the overall eligibility outcome depends on one or more projected-status rule results. It is not merely an indication that a projected rule was evaluated. `eligible` requires every result to pass, so any projected pass makes it true. For `ineligible` or `needs_verification`, it's true only when **every** result with the final status is projected; a non-projected result with that status (e.g. an explicit citizenship mismatch, or a partial ELIG-REQ-000) decides the outcome on its own, so the flag is false.
 - **Inputs.** Hard eligibility reads only the canonical `profiles` columns (user-entered or user-confirmed). It never reads `profile_facts`, so an unverified AI inference can't affect it ([ADR-006](decisions/ADR-006-core-domain-persistence-model.md)).
 
 Example:

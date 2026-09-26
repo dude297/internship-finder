@@ -13,6 +13,7 @@ from app.opportunities.eligibility.schemas import (
     OpportunityInput,
     ProfileInput,
     RequirementInput,
+    RuleResult,
 )
 
 # ineligible > needs_verification > eligible
@@ -38,12 +39,26 @@ def evaluate_eligibility(
     return EligibilityEvaluation(
         status=status,
         rules_version=RULES_VERSION,
-        # Only results that produced the final status can make it depend on a projection.
-        depends_on_projected_status=any(
-            r.depends_on_projected_status and r.status is status for r in results
-        ),
+        depends_on_projected_status=depends_on_projection(status, results),
         rule_results=results,
     )
 
 
-__all__ = ["RULES_VERSION", "EligibilityEvaluation", "evaluate_eligibility"]
+def depends_on_projection(status: EligibilityStatus, results: Sequence[RuleResult]) -> bool:
+    """Whether the final status actually depends on a projected education status.
+
+    Eligible needs every result to pass, so any projected pass is load-bearing. Otherwise the
+    status is decided by the results that produced it: if any of those is non-projected, it
+    stands on its own and the outcome doesn't depend on projection."""
+    if status is EligibilityStatus.ELIGIBLE:
+        return any(r.depends_on_projected_status for r in results)
+    decisive = [r for r in results if r.status is status]
+    return bool(decisive) and all(r.depends_on_projected_status for r in decisive)
+
+
+__all__ = [
+    "RULES_VERSION",
+    "EligibilityEvaluation",
+    "depends_on_projection",
+    "evaluate_eligibility",
+]

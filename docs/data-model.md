@@ -136,7 +136,7 @@ One eligibility evaluation of an opportunity for a profile. Rows are **history**
 | `opportunity_id` | FK → `opportunities`, cascade | |
 | `eligibility_status` | enum `eligible` / `needs_verification` / `ineligible` | |
 | `eligibility_rules_version` | varchar(20) | e.g. `v1` |
-| `depends_on_projected_status` | boolean | The final status relies on an expected (not actual) education transition |
+| `depends_on_projected_status` | boolean | True only when the final status depends on projected-status rule results (not merely that one was evaluated); see [eligibility.md](eligibility.md#time-aware-evaluation) |
 | `evaluated_at` | timestamptz | |
 
 Index: `ix_opportunity_evaluations_pair_evaluated_at` (`profile_id`, `opportunity_id`, `evaluated_at`). Fit columns (`fit_score`, `score_breakdown`, `scoring_version`) will be added by the scoring v1 migration.
