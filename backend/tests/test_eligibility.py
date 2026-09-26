@@ -10,6 +10,7 @@ from app.enums import (
     EducationLevel,
     EligibilityStatus,
     RequirementAppliesAt,
+    RequirementsAssessmentStatus,
     RequirementType,
 )
 from app.opportunities.eligibility import RULES_VERSION, evaluate_eligibility
@@ -25,6 +26,10 @@ ELIGIBLE = EligibilityStatus.ELIGIBLE
 INELIGIBLE = EligibilityStatus.INELIGIBLE
 NEEDS_VERIFICATION = EligibilityStatus.NEEDS_VERIFICATION
 
+UNASSESSED = RequirementsAssessmentStatus.UNASSESSED
+PARTIAL = RequirementsAssessmentStatus.PARTIAL
+COMPLETE = RequirementsAssessmentStatus.COMPLETE
+
 # A fictional high-school student: graduates 2041-06-10, starts college 2041-08-25.
 PROFILE = ProfileInput(
     current_education_level=EducationLevel.HIGH_SCHOOL,
@@ -36,8 +41,15 @@ PROFILE = ProfileInput(
 )
 
 
-def opportunity(start: date | None = None, deadline: date | None = None) -> OpportunityInput:
-    return OpportunityInput(start_date=start, application_deadline=deadline)
+def opportunity(
+    start: date | None = None,
+    deadline: date | None = None,
+    assessment: RequirementsAssessmentStatus = COMPLETE,
+) -> OpportunityInput:
+    # Complete by default so composite tests exercise the requirement rules themselves.
+    return OpportunityInput(
+        start_date=start, application_deadline=deadline, requirements_assessment_status=assessment
+    )
 
 
 def requirement(
@@ -287,12 +299,84 @@ def test_malformed_requirement_value_needs_verification(
 EDU = requirement(RequirementType.EDUCATION, UNDERGRAD_OR_INCOMING)
 
 
-def test_no_requirements_is_eligible() -> None:
-    evaluation = evaluate_eligibility(PROFILE, opportunity(), [])
+def test_requirements_are_unassessed_by_default() -> None:
+    assert OpportunityInput().requirements_assessment_status is UNASSESSED
 
-    assert evaluation.status is ELIGIBLE
+
+@pytest.mark.parametrize(
+    ("assessment", "status"),
+    [(UNASSESSED, NEEDS_VERIFICATION), (PARTIAL, NEEDS_VERIFICATION), (COMPLETE, ELIGIBLE)],
+)
+def test_no_requirements_depends_on_assessment(
+    assessment: RequirementsAssessmentStatus, status: EligibilityStatus
+) -> None:
+    evaluation = evaluate_eligibility(PROFILE, opportunity(assessment=assessment), [])
+
+    assert evaluation.status is status
     assert evaluation.rules_version == RULES_VERSION == "v1"
-    assert evaluation.rule_results == ()
+    [result] = evaluation.rule_results
+    assert result.rule_id == "ELIG-REQ-000"
+    assert result.status is status
+    assert result.requirement_id is None
+    assert result.details == {"requirements_assessment_status": assessment.value}
+
+
+def test_unassessed_reason_explains_the_missing_assessment() -> None:
+    evaluation = evaluate_eligibility(PROFILE, opportunity(assessment=UNASSESSED), [])
+
+    assert evaluation.reasons == [
+        "ELIG-REQ-000: The opportunity's hard eligibility requirements haven't been assessed"
+        " yet, so eligibility can't be confirmed."
+    ]
+
+
+US_CITIZEN = PROFILE.model_copy(update={"citizenships": ["US"]})
+
+
+@pytest.mark.parametrize(
+    ("requirements", "start", "profile", "status"),
+    [
+        ([MIN_18], date(2041, 6, 20), PROFILE, NEEDS_VERIFICATION),  # known age passes
+        ([MIN_18, EDU], date(2041, 6, 20), PROFILE, NEEDS_VERIFICATION),  # age + education pass
+        ([MIN_18], date(2041, 6, 19), PROFILE, INELIGIBLE),  # explicit failure is definitive
+        (
+            [MIN_18, US_ONLY],
+            date(2041, 6, 20),
+            PROFILE.model_copy(update={"citizenships": ["CA"]}),
+            INELIGIBLE,
+        ),  # known citizenship mismatch
+    ],
+)
+def test_partial_assessment(
+    requirements: list[RequirementInput],
+    start: date,
+    profile: ProfileInput,
+    status: EligibilityStatus,
+) -> None:
+    evaluation = evaluate_eligibility(profile, opportunity(start, assessment=PARTIAL), requirements)
+
+    assert evaluation.status is status
+    assert evaluation.rule_results[0].rule_id == "ELIG-REQ-000"
+    assert evaluation.rule_results[0].status is NEEDS_VERIFICATION
+    assert len(evaluation.rule_results) == 1 + len(requirements)
+
+
+def test_partial_assessment_is_not_flagged_as_projected() -> None:
+    # Education passes on a projection, but the final needs_verification comes from ELIG-REQ-000.
+    evaluation = evaluate_eligibility(
+        US_CITIZEN, opportunity(date(2041, 6, 20), assessment=PARTIAL), [EDU]
+    )
+
+    assert evaluation.status is NEEDS_VERIFICATION
+    assert not evaluation.depends_on_projected_status
+
+
+def test_unassessed_still_reports_an_explicit_failure() -> None:
+    evaluation = evaluate_eligibility(
+        PROFILE, opportunity(date(2041, 6, 19), assessment=UNASSESSED), [MIN_18]
+    )
+
+    assert evaluation.status is INELIGIBLE
 
 
 @pytest.mark.parametrize(
@@ -310,11 +394,12 @@ def test_precedence(start: date, citizenships: list[str] | None, status: Eligibi
 
     assert evaluation.status is status
     assert [r.rule_id for r in evaluation.rule_results] == [
+        "ELIG-REQ-000",
         "ELIG-AGE-001",
         "ELIG-EDU-001",
         "ELIG-CIT-001",
     ]
-    assert len(evaluation.reasons) == 3
+    assert len(evaluation.reasons) == 4
 
 
 def test_eligible_result_that_relies_on_projection_is_flagged() -> None:

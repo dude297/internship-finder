@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from app.enums import (
     OpportunityType,
     ProfileSourceKind,
     RequirementAppliesAt,
+    RequirementsAssessmentStatus,
     RequirementType,
 )
 from app.models import (
@@ -289,6 +290,54 @@ def test_requirement_check_constraints(db: Session, changes: dict[str, Any]) -> 
     assert_rejected(db, req)
 
 
+def test_requirements_assessment_defaults_to_unassessed(db: Session) -> None:
+    orm_default = make_opportunity()
+    db.add(orm_default)
+    # Server default: a row inserted without the column, as a raw-SQL importer would.
+    server_default_id = uuid.uuid4()
+    db.execute(
+        text(
+            "INSERT INTO opportunities (id, title, organization, opportunity_type)"
+            " VALUES (:id, 'Example', 'Example Org', 'internship')"
+        ),
+        {"id": server_default_id},
+    )
+    db.flush()
+    db.expire_all()
+
+    for opportunity_id in (orm_default.id, server_default_id):
+        loaded = db.get(Opportunity, opportunity_id)
+        assert loaded is not None
+        assert loaded.requirements_assessment_status is RequirementsAssessmentStatus.UNASSESSED
+
+
+@pytest.mark.parametrize("assessment", list(RequirementsAssessmentStatus))
+def test_requirements_assessment_round_trip(
+    db: Session, assessment: RequirementsAssessmentStatus
+) -> None:
+    opp = make_opportunity(requirements_assessment_status=assessment)
+    db.add(opp)
+    db.flush()
+    db.expire_all()
+
+    loaded = db.get(Opportunity, opp.id)
+
+    assert loaded is not None and loaded.requirements_assessment_status is assessment
+
+
+def test_requirements_assessment_is_checked_by_the_database(db: Session) -> None:
+    opp = make_opportunity()
+    db.add(opp)
+    db.flush()
+
+    with pytest.raises(IntegrityError):
+        db.connection().exec_driver_sql(
+            "UPDATE opportunities SET requirements_assessment_status = 'done' WHERE id = %s",
+            (opp.id,),
+        )
+    db.rollback()
+
+
 def test_opportunity_date_order_constraint(db: Session) -> None:
     assert_rejected(db, make_opportunity(end_date=date(2041, 6, 1)))
 
@@ -308,7 +357,7 @@ def test_enum_values_are_checked_by_the_database(db: Session) -> None:
 
 def test_evaluation_is_persisted_with_rule_results(db: Session) -> None:
     profile = make_profile()
-    opp = make_opportunity()
+    opp = make_opportunity(requirements_assessment_status=RequirementsAssessmentStatus.COMPLETE)
     opp.requirements += [
         requirement(RequirementType.MINIMUM_AGE, {"years": 16}),
         requirement(
@@ -328,11 +377,14 @@ def test_evaluation_is_persisted_with_rule_results(db: Session) -> None:
     assert loaded.eligibility_rules_version == "v1"
     assert loaded.depends_on_projected_status is False
     assert [r.rule_id for r in loaded.rule_results] == [
+        "ELIG-REQ-000",
         "ELIG-AGE-001",
         "ELIG-EDU-001",
         "ELIG-CIT-001",
     ]
-    edu = loaded.rule_results[1]
+    assert loaded.rule_results[0].requirement_id is None
+    assert loaded.rule_results[0].status is EligibilityStatus.ELIGIBLE
+    edu = loaded.rule_results[2]
     assert edu.status is EligibilityStatus.ELIGIBLE
     assert edu.depends_on_projected_status
     assert edu.reference_date == date(2041, 6, 20)
@@ -340,9 +392,29 @@ def test_evaluation_is_persisted_with_rule_results(db: Session) -> None:
     assert edu.details is not None and edu.details["phase"] == "incoming"
 
 
+def test_unassessed_opportunity_without_requirements_is_saved_as_needs_verification(
+    db: Session,
+) -> None:
+    profile = make_profile(citizenships=["US"])
+    opp = make_opportunity()
+    db.add_all([profile, opp])
+    db.flush()
+
+    evaluate_and_save(db, profile, opp)
+    db.expire_all()
+    loaded = latest_evaluation(db, profile.id, opp.id)
+
+    assert loaded is not None
+    assert loaded.eligibility_status is EligibilityStatus.NEEDS_VERIFICATION
+    [result] = loaded.rule_results
+    assert result.rule_id == "ELIG-REQ-000"
+    assert result.requirement_id is None
+    assert result.details == {"requirements_assessment_status": "unassessed"}
+
+
 def test_reevaluation_keeps_history_and_latest_wins(db: Session) -> None:
     profile = make_profile()
-    opp = make_opportunity()
+    opp = make_opportunity(requirements_assessment_status=RequirementsAssessmentStatus.COMPLETE)
     opp.requirements.append(requirement(RequirementType.CITIZENSHIP, {"countries": ["US"]}))
     db.add_all([profile, opp])
     db.flush()
@@ -358,6 +430,21 @@ def test_reevaluation_keeps_history_and_latest_wins(db: Session) -> None:
     assert latest.eligibility_status is EligibilityStatus.ELIGIBLE
 
 
+def test_latest_evaluation_breaks_timestamp_ties_deterministically(db: Session) -> None:
+    profile = make_profile()
+    opp = make_opportunity()
+    db.add_all([profile, opp])
+    db.flush()
+    evaluations = [evaluate_and_save(db, profile, opp) for _ in range(3)]
+    for evaluation in evaluations:
+        evaluation.evaluated_at = FETCHED
+    db.flush()
+
+    latest = latest_evaluation(db, profile.id, opp.id)
+
+    assert latest is not None and latest.id == max(e.id for e in evaluations)
+
+
 def test_deleting_a_requirement_keeps_rule_results(db: Session) -> None:
     profile = make_profile()
     opp = make_opportunity()
@@ -371,7 +458,10 @@ def test_deleting_a_requirement_keeps_rule_results(db: Session) -> None:
     db.expire_all()
 
     result = db.scalars(
-        select(EligibilityRuleResult).where(EligibilityRuleResult.evaluation_id == evaluation.id)
+        select(EligibilityRuleResult).where(
+            EligibilityRuleResult.evaluation_id == evaluation.id,
+            EligibilityRuleResult.rule_id == "ELIG-AGE-001",
+        )
     ).one()
     assert result.requirement_id is None
     assert result.rule_id == "ELIG-AGE-001"

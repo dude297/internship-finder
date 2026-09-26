@@ -93,6 +93,17 @@ class RequirementAppliesAt(StrEnum):
     EXPLICIT_DATE = "explicit_date"  # a date stated by the posting (requirement.reference_date)
 
 
+class RequirementsAssessmentStatus(StrEnum):
+    """How completely an opportunity's hard requirements are represented as requirement rows.
+
+    Never inferred from the number of rows: zero rows is legitimate only when `complete`.
+    """
+
+    UNASSESSED = "unassessed"  # not (sufficiently) assessed yet; rows, if any, are incidental
+    PARTIAL = "partial"  # some requirements represented; others may exist
+    COMPLETE = "complete"  # every hard requirement is represented
+
+
 class EligibilityStatus(StrEnum):
     ELIGIBLE = "eligible"
     NEEDS_VERIFICATION = "needs_verification"

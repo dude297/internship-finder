@@ -85,6 +85,7 @@ def latest_evaluation(
             OpportunityEvaluation.profile_id == profile_id,
             OpportunityEvaluation.opportunity_id == opportunity_id,
         )
-        .order_by(OpportunityEvaluation.evaluated_at.desc())
+        # id breaks evaluated_at ties: arbitrary among equal timestamps, but stable.
+        .order_by(OpportunityEvaluation.evaluated_at.desc(), OpportunityEvaluation.id.desc())
         .limit(1)
     ).first()

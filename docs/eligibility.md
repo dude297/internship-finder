@@ -10,9 +10,30 @@ Eligibility is **separate from fit** ([ADR-001](decisions/ADR-001-separate-eligi
 | `ineligible` | At least one rule explicitly excludes the user |
 | `needs_verification` | A requirement exists that the profile or posting can't settle |
 
-Precedence when combining rule results: `ineligible` > `needs_verification` > `eligible`. An opportunity with no structured requirements is `eligible`.
+Precedence when combining rule results: `ineligible` > `needs_verification` > `eligible`.
 
-Rules should be deterministic. AI may help **extract** requirements from postings, but it doesn't decide eligibility ([ADR-003](decisions/ADR-003-ai-as-enrichment.md)). Each evaluation records the rules version and one result per requirement (rule ID, status, reason, reference date, projected-status flag, structured details). See [data-model.md](data-model.md#opportunity_evaluations).
+## Requirement Assessment
+
+An empty requirement list is ambiguous: the opportunity may truly have no hard requirements, or nobody has extracted them yet. So each opportunity stores `requirements_assessment_status` ([data-model.md](data-model.md#opportunities)). It's never inferred from the number of requirement rows.
+
+| Assessment | Meaning | Effect on the final status |
+|---|---|---|
+| `unassessed` (default) | Hard requirements haven't been (sufficiently) assessed | At least `needs_verification` |
+| `partial` | Some requirements are represented; others may exist | At least `needs_verification`, even if every known rule passes |
+| `complete` | Every hard requirement is represented | None: normal precedence over the requirement rules |
+
+This is applied as a rule result (ELIG-REQ-000), so the reason is stored with the evaluation and normal precedence does the combining. Known requirements are always evaluated, whatever the assessment: an explicit `ineligible` stays `ineligible`, because a known failure is definitive. Only `complete` with zero requirements, or `complete` with all requirements passing, gives `eligible`.
+
+| Assessment | Requirement results | Final |
+|---|---|---|
+| `unassessed` | none | `needs_verification` |
+| `partial` | all known requirements pass | `needs_verification` |
+| `partial` | a known citizenship mismatch (`ineligible`) | `ineligible` |
+| `complete` | none | `eligible` |
+| `complete` | all pass | `eligible` |
+| `complete` | one `needs_verification` | `needs_verification` |
+
+Rules should be deterministic. AI may help **extract** requirements from postings, but it doesn't decide eligibility ([ADR-003](decisions/ADR-003-ai-as-enrichment.md)). Each evaluation records the rules version, the ELIG-REQ-000 assessment result, and one result per requirement (rule ID, status, reason, reference date, projected-status flag, structured details). See [data-model.md](data-model.md#opportunity_evaluations).
 
 Implementation: `backend/app/opportunities/eligibility/`. The single entry point is `evaluate_eligibility(profile, opportunity, requirements)`. Persisting is `app.repositories.evaluate_and_save`.
 
@@ -56,7 +77,7 @@ Transitions take effect **on** their date. `unknown` (insufficient information) 
 
 | Version | Status | Date | Notes |
 |---|---|---|---|
-| v1 | Implemented | 2026-09-25 | ELIG-AGE-001, ELIG-EDU-001, ELIG-CIT-001, ELIG-REQ-001. Time-aware per ADR-005. Rules version string: `v1`. |
+| v1 | Implemented | 2026-09-25 | ELIG-REQ-000, ELIG-AGE-001, ELIG-EDU-001, ELIG-CIT-001, ELIG-REQ-001. Time-aware per ADR-005. Rules version string: `v1`. Requirement-assessment semantics (ELIG-REQ-000) added 2026-09-26 in PR review, before v1 was merged or released. |
 
 ## Rule Format
 
@@ -73,7 +94,28 @@ Status: Planned / Implemented
 
 ## Rules
 
-All rules below are implemented in `backend/app/opportunities/eligibility/rules.py` and tested in `backend/tests/test_eligibility.py`. Each rule evaluates one structured requirement ([data-model.md](data-model.md#opportunity_requirements) lists the `value` shapes).
+All rules below are implemented in `backend/app/opportunities/eligibility/rules.py` and tested in `backend/tests/test_eligibility.py`. ELIG-REQ-000 runs once per evaluation. Every other rule evaluates one structured requirement ([data-model.md](data-model.md#opportunity_requirements) lists the `value` shapes).
+
+### ELIG-REQ-000
+
+```text
+Rule ID: ELIG-REQ-000
+Description: Requirement assessment completeness. Is the opportunity's requirement set complete?
+Inputs: opportunity requirements_assessment_status
+Reference date: not applicable
+Output: needs_verification if unassessed or partial; eligible (never blocking) if complete.
+        Always recorded, first in the evaluation, with requirement_id = null and
+        details {"requirements_assessment_status": ...}.
+Reason: unassessed: "The opportunity's hard eligibility requirements haven't been assessed yet,
+          so eligibility can't be confirmed."
+        partial: "The opportunity's hard eligibility requirements are only partially assessed;
+          requirements that aren't represented yet may apply."
+        complete: "All of the opportunity's hard eligibility requirements are assessed and represented."
+Example: Opportunity with an age requirement the user meets, assessment partial → needs_verification.
+Notes: ELIG-REQ-000 is about the completeness of the requirement set. ELIG-REQ-001 is about one
+       requirement that v1 can't evaluate. They solve different problems.
+Status: Implemented (2026-09-26)
+```
 
 ### ELIG-AGE-001
 
@@ -154,6 +196,7 @@ Status: Implemented (2026-09-25)
 - ELIG-CIT-001 also decides the explicit cases: a stated citizenship that matches is `eligible`, and one that doesn't is `ineligible`. The planned text covered only the unknown case.
 - ELIG-EDU-001 is generalized from "undergraduate" to any listed levels, with `accepts_incoming`.
 - ELIG-REQ-001 was added so requirements without a v1 rule, or with malformed values, surface as `needs_verification` instead of being ignored.
+- ELIG-REQ-000 and `requirements_assessment_status` were added in PR review (2026-09-26) so an empty or partial requirement list can't produce `eligible`. Before that, zero requirements meant `eligible`. v1 wasn't bumped because it hadn't been merged or released.
 
 ## Maintenance
 

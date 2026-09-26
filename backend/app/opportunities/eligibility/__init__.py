@@ -3,7 +3,11 @@
 from collections.abc import Sequence
 
 from app.enums import EligibilityStatus
-from app.opportunities.eligibility.rules import RULES_VERSION, evaluate_requirement
+from app.opportunities.eligibility.rules import (
+    RULES_VERSION,
+    check_requirements_assessment,
+    evaluate_requirement,
+)
 from app.opportunities.eligibility.schemas import (
     EligibilityEvaluation,
     OpportunityInput,
@@ -24,12 +28,13 @@ def evaluate_eligibility(
     opportunity: OpportunityInput,
     requirements: Sequence[RequirementInput],
 ) -> EligibilityEvaluation:
-    """Run one rule per requirement and combine by precedence. No requirements → eligible.
+    """Check the requirement set's completeness (ELIG-REQ-000), run one rule per requirement, and
+    combine by precedence. No requirements → eligible only when the assessment is complete.
     Fit scoring is separate (ADR-001) and never happens here."""
-    results = tuple(evaluate_requirement(profile, opportunity, r) for r in requirements)
-    status = max(
-        (r.status for r in results), key=_PRECEDENCE.__getitem__, default=EligibilityStatus.ELIGIBLE
+    results = (check_requirements_assessment(opportunity),) + tuple(
+        evaluate_requirement(profile, opportunity, r) for r in requirements
     )
+    status = max((r.status for r in results), key=_PRECEDENCE.__getitem__)
     return EligibilityEvaluation(
         status=status,
         rules_version=RULES_VERSION,

@@ -6,7 +6,13 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.enums import EducationPhase, EligibilityStatus, RequirementAppliesAt, RequirementType
+from app.enums import (
+    EducationPhase,
+    EligibilityStatus,
+    RequirementAppliesAt,
+    RequirementsAssessmentStatus,
+    RequirementType,
+)
 from app.opportunities.eligibility.schemas import (
     REQUIREMENT_VALUE_SCHEMAS,
     CitizenshipValue,
@@ -166,6 +172,29 @@ def check_unsupported(
         reason=f"Requirement type {requirement.requirement_type.value} isn't evaluated by"
         f" eligibility rules {RULES_VERSION}; verify it manually.",
         requirement_id=requirement.id,
+    )
+
+
+_ASSESSMENT_REASONS = {
+    RequirementsAssessmentStatus.UNASSESSED: "The opportunity's hard eligibility requirements"
+    " haven't been assessed yet, so eligibility can't be confirmed.",
+    RequirementsAssessmentStatus.PARTIAL: "The opportunity's hard eligibility requirements are"
+    " only partially assessed; requirements that aren't represented yet may apply.",
+    RequirementsAssessmentStatus.COMPLETE: "All of the opportunity's hard eligibility requirements"
+    " are assessed and represented.",
+}
+
+
+def check_requirements_assessment(opportunity: OpportunityInput) -> RuleResult:
+    """System-level rule about the requirement set as a whole, not one requirement row."""
+    assessment = opportunity.requirements_assessment_status
+    return RuleResult(
+        rule_id="ELIG-REQ-000",
+        status=ELIGIBLE
+        if assessment is RequirementsAssessmentStatus.COMPLETE
+        else NEEDS_VERIFICATION,
+        reason=_ASSESSMENT_REASONS[assessment],
+        details={"requirements_assessment_status": assessment.value},
     )
 
 

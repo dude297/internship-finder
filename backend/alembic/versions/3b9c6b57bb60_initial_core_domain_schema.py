@@ -67,6 +67,20 @@ def upgrade() -> None:
         sa.Column("start_date", sa.Date(), nullable=True),
         sa.Column("end_date", sa.Date(), nullable=True),
         sa.Column(
+            "requirements_assessment_status",
+            sa.Enum(
+                "unassessed",
+                "partial",
+                "complete",
+                name="requirements_assessment_status",
+                native_enum=False,
+                create_constraint=False,
+                length=32,
+            ),
+            server_default="unassessed",
+            nullable=False,
+        ),
+        sa.Column(
             "first_seen_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
@@ -98,6 +112,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "remote_mode IN ('onsite', 'remote', 'hybrid')",
             name=op.f("ck_opportunities_remote_mode"),
+        ),
+        sa.CheckConstraint(
+            "requirements_assessment_status IN ('unassessed', 'partial', 'complete')",
+            name=op.f("ck_opportunities_requirements_assessment_status"),
         ),
         sa.CheckConstraint(
             "end_date IS NULL OR start_date IS NULL OR end_date >= start_date",

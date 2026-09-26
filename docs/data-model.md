@@ -84,6 +84,7 @@ Canonical, source-independent opportunity.
 | `location` | varchar(200), null | |
 | `remote_mode` | enum `onsite` / `remote` / `hybrid`, null | |
 | `application_deadline`, `start_date`, `end_date` | date, null | CHECK: end ≥ start |
+| `requirements_assessment_status` | enum `unassessed` / `partial` / `complete`, default `unassessed` | Whether `opportunity_requirements` holds every hard requirement. Set explicitly, never inferred from the row count. Only `complete` lets zero requirements mean `eligible` ([ELIG-REQ-000](eligibility.md#elig-req-000)) |
 | `first_seen_at`, `last_seen_at` | timestamptz | CHECK: last ≥ first |
 | `created_at`, `updated_at` | timestamptz | |
 
@@ -127,7 +128,7 @@ Structured hard requirements.
 
 ### `opportunity_evaluations`
 
-One eligibility evaluation of an opportunity for a profile. Rows are **history**: re-evaluating adds a row. The latest `evaluated_at` is current.
+One eligibility evaluation of an opportunity for a profile. Rows are **history**: re-evaluating adds a row. The latest `evaluated_at` is current (`app.repositories.latest_evaluation`; equal timestamps are broken by `id`, which is stable but not chronological).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -142,7 +143,7 @@ Index: `ix_opportunity_evaluations_pair_evaluated_at` (`profile_id`, `opportunit
 
 ### `eligibility_rule_results`
 
-The explanation of an evaluation: one row per evaluated requirement.
+The explanation of an evaluation: one ELIG-REQ-000 row for the requirement assessment (`requirement_id` null), then one row per evaluated requirement.
 
 | Column | Type | Notes |
 |---|---|---|
