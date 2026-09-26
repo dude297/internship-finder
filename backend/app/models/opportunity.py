@@ -22,6 +22,7 @@ from app.enums import (
     OpportunityType,
     RemoteMode,
     RequirementAppliesAt,
+    RequirementsAssessmentStatus,
     RequirementType,
 )
 
@@ -54,6 +55,12 @@ class Opportunity(IdMixin, TimestampMixin, Base):
     application_deadline: Mapped[date | None]
     start_date: Mapped[date | None]
     end_date: Mapped[date | None]
+    # Whether `requirements` is the full set of hard requirements (see ELIG-REQ-000).
+    requirements_assessment_status: Mapped[RequirementsAssessmentStatus] = mapped_column(
+        str_enum(RequirementsAssessmentStatus, "requirements_assessment_status"),
+        default=RequirementsAssessmentStatus.UNASSESSED,
+        server_default=RequirementsAssessmentStatus.UNASSESSED.value,
+    )
     first_seen_at: Mapped[datetime] = _seen_at()
     last_seen_at: Mapped[datetime] = _seen_at()
 

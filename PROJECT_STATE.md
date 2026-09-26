@@ -67,7 +67,8 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
   - opportunity provenance (`opportunity_source_records`)
   - structured requirements (`opportunity_requirements`)
   - temporal education resolver
-  - eligibility v1 (ELIG-AGE-001, ELIG-EDU-001, ELIG-CIT-001, ELIG-REQ-001)
+  - eligibility v1 (ELIG-REQ-000, ELIG-AGE-001, ELIG-EDU-001, ELIG-CIT-001, ELIG-REQ-001)
+  - requirement assessment state on opportunities (`unassessed` / `partial` / `complete`; ELIG-REQ-000)
   - persistent evaluations with per-rule results (history kept)
   - PostgreSQL CI integration (migration round trip, drift check, integration tests)
 
@@ -140,6 +141,7 @@ Review and merge Milestone 1. Then, proposed: **Milestone 2 — private profile/
 
 ## Recent Important Decisions
 
+- 2026-09-26: PR #4 review fix: `opportunities.requirements_assessment_status` (default `unassessed`) and rule ELIG-REQ-000. Zero requirements is `eligible` only when the assessment is `complete`; `partial` is at least `needs_verification`; a known `ineligible` result still wins. Added to the initial migration `3b9c6b57bb60` (not merged). Rules version stays `v1`. `latest_evaluation` breaks `evaluated_at` ties by `id`.
 - 2026-09-25: ADR-006 core domain persistence model (canonical profile vs facts, structured requirements, separate source records, evaluation history, portable VARCHAR enums and JSON). Eligibility v1 clarifications: explicit citizenship mismatch is `ineligible`; unevaluable requirements are `needs_verification` (ELIG-REQ-001). PostgreSQL tests use a disposable database; SQLite is not used.
 - 2026-09-25: Repository made public. Public-repository privacy and secret-handling rules added (CLAUDE.md, ENGINEERING_GUIDELINES.md §16, ADR-005 clarification). The pre-public audit found no secrets or personal documents in the files or history. Commit author metadata includes a personal email address, which the owner accepted as public. New commits use the GitHub noreply address.
 - 2026-09-25: Milestone 0 scaffold. The frontend uses ESLint (the Vite template's oxlint default was replaced to match ADR-004). The backend test client uses `httpx2`, which Starlette now expects. The backend floor is Python 3.12. Backend tests ignore `backend/.env` and inherited config variables (`tests/conftest.py`), so they are deterministic.

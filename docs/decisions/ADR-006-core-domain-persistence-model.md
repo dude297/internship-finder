@@ -24,6 +24,8 @@ The profile stores `current_education_level` plus the date it was true (`educati
 
 `opportunity_requirements` holds one row per hard requirement: `requirement_type`, a JSON `value` validated by a per-type Pydantic schema, `applies_at` (`application` / `program_start` / `explicit_date`), an optional explicit `reference_date`, the evidence text, and extraction provenance. Manual entry, future deterministic parsers, and future AI extraction all produce this same shape. Requirement types without a v1 rule (`work_authorization`, `other`) produce `needs_verification`. They are never silently ignored.
 
+Whether the requirement rows are the **full** set is stored separately on the opportunity as `requirements_assessment_status` (`unassessed` default / `partial` / `complete`). It's an enum rather than a boolean because never-assessed and partly-assessed need to stay distinct. It's never inferred from the row count, because zero requirements can be legitimate. Eligibility records it as rule ELIG-REQ-000: anything short of `complete` is at least `needs_verification` ([eligibility.md](../eligibility.md#requirement-assessment)). Added in PR review, before Milestone 1 was merged, by editing the initial migration.
+
 ### 4. Opportunity source provenance is separate from the canonical record
 
 `opportunities` is the source-independent record. `opportunity_source_records` stores each sighting (source name/type, external ID, URL, raw payload, fetched/first/last seen). `(source_name, external_id)` is unique; rows without an external ID don't collide. A future deduplicator can attach several source records to one opportunity without schema changes.

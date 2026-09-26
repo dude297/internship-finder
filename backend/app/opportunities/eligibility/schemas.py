@@ -9,7 +9,13 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from app.enums import EducationLevel, EligibilityStatus, RequirementAppliesAt, RequirementType
+from app.enums import (
+    EducationLevel,
+    EligibilityStatus,
+    RequirementAppliesAt,
+    RequirementsAssessmentStatus,
+    RequirementType,
+)
 from app.profile.education import EducationTimeline
 
 # ISO 3166-1 alpha-2, uppercase.
@@ -28,6 +34,9 @@ class OpportunityInput(BaseModel):
 
     application_deadline: date | None = None
     start_date: date | None = None
+    requirements_assessment_status: RequirementsAssessmentStatus = (
+        RequirementsAssessmentStatus.UNASSESSED
+    )
 
 
 class RequirementInput(BaseModel):
