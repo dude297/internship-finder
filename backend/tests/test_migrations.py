@@ -29,12 +29,18 @@ def tables(engine: Engine) -> set[str]:
     return set(inspect(engine).get_table_names()) - {"alembic_version"}
 
 
+def profile_checks(engine: Engine) -> set[str]:
+    return {str(c["name"]) for c in inspect(engine).get_check_constraints("profiles")}
+
+
 def test_upgrade_downgrade_upgrade(pg_engine: Engine, pg_url: str) -> None:
     config = alembic_config(pg_url)
     assert tables(pg_engine) == TABLES  # pg_engine migrated to head
+    assert "ck_profiles_graduation_after_status_as_of" in profile_checks(pg_engine)
 
     command.downgrade(config, MILESTONE_1_REVISION)
     assert tables(pg_engine) == MILESTONE_1_TABLES
+    assert "ck_profiles_graduation_after_status_as_of" not in profile_checks(pg_engine)
 
     command.downgrade(config, "base")
     assert tables(pg_engine) == set()

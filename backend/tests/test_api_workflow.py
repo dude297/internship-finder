@@ -118,6 +118,35 @@ def test_profile_validation(client: TestClient, changes: dict[str, Any]) -> None
     assert isinstance(response.json()["detail"], list)
 
 
+@pytest.mark.parametrize(
+    "status_as_of",
+    ["2041-09-01", "2041-06-10"],  # after, and on, the expected graduation
+)
+def test_profile_rejects_status_recorded_after_graduation(
+    client: TestClient, status_as_of: str
+) -> None:
+    body = PROFILE | {
+        "education_status_as_of": status_as_of,
+        "expected_graduation_date": "2041-06-10",
+    }
+    response = client.put("/api/profile", json=body)
+
+    assert response.status_code == 422
+    [issue] = response.json()["detail"]
+    assert "expected_graduation_date must be after education_status_as_of" in issue["msg"]
+    assert client.get("/api/profile").status_code == 404  # nothing was saved
+
+
+def test_profile_accepts_status_the_day_before_graduation(client: TestClient) -> None:
+    body = PROFILE | {
+        "education_status_as_of": "2041-06-09",
+        "expected_graduation_date": "2041-06-10",
+    }
+    saved = put_profile(client, **body)["profile"]
+
+    assert saved["education_status_as_of"] == "2041-06-09"
+
+
 # --- Opportunities -----------------------------------------------------------------------------
 
 

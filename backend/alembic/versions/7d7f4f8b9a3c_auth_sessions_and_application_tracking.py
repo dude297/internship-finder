@@ -3,7 +3,11 @@
 Milestone 2 (ADR-007): the single owner account, opaque server-side sessions (only the
 SHA-256 of each token is stored), and application tracking (at most one row per opportunity).
 
-Additive only: the Milestone 1 tables are unchanged, so downgrade drops just these three.
+Also adds one CHECK constraint to the existing `profiles` table: when both are set,
+expected_graduation_date must be strictly after education_status_as_of (the education
+transition takes effect on the graduation date). An existing profile that violates it makes
+the upgrade fail; fix the dates, then upgrade. Downgrade drops the constraint and the three
+new tables, returning exactly to the Milestone 1 schema.
 
 Revision ID: 7d7f4f8b9a3c
 Revises: 3b9c6b57bb60
@@ -117,10 +121,17 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_applications")),
         sa.UniqueConstraint("opportunity_id", name=op.f("uq_applications_opportunity_id")),
     )
+    op.create_check_constraint(
+        op.f("ck_profiles_graduation_after_status_as_of"),
+        "profiles",
+        "expected_graduation_date IS NULL OR education_status_as_of IS NULL"
+        " OR expected_graduation_date > education_status_as_of",
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_constraint(op.f("ck_profiles_graduation_after_status_as_of"), "profiles", type_="check")
     op.drop_table("applications")
     op.drop_index(op.f("ix_auth_sessions_user_id"), table_name="auth_sessions")
     op.drop_table("auth_sessions")
