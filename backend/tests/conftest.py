@@ -5,10 +5,15 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.db.session import get_session
+from app.main import create_app
+from app.models import AuthUser
+from app.services.auth import create_owner
 
 # Tests control configuration explicitly. Done at import time, before test modules import
 # app.main (which builds the app from settings), so a developer's backend/.env or shell
@@ -64,3 +69,47 @@ def db(pg_engine: Engine) -> Iterator[Session]:
         yield session
         session.close()
         transaction.rollback()
+
+
+# --- API tests (PostgreSQL) --------------------------------------------------------------------
+# Synthetic, test-only credentials. Never real ones.
+OWNER_USERNAME = "synthetic-owner"
+OWNER_PASSWORD = "synthetic-test-password"
+
+
+@pytest.fixture
+def anon_client(db: Session) -> Iterator[TestClient]:
+    """The app with its database session replaced by the rolled-back test session.
+
+    Like the real dependency, uncommitted work is rolled back when the request ends (in the
+    test session that means back to the request's savepoint)."""
+
+    def test_session() -> Iterator[Session]:
+        try:
+            yield db
+        finally:
+            db.rollback()
+
+    app = create_app()
+    app.dependency_overrides[get_session] = test_session
+    # https so the Secure session cookie is sent back, as a browser would.
+    with TestClient(app, base_url="https://testserver") as client:
+        yield client
+
+
+@pytest.fixture
+def owner(db: Session) -> AuthUser:
+    user = create_owner(db, OWNER_USERNAME, OWNER_PASSWORD)
+    db.commit()
+    return user
+
+
+@pytest.fixture
+def client(anon_client: TestClient, owner: AuthUser) -> TestClient:
+    """Logged in as the synthetic owner, sending the CSRF header on every request."""
+    response = anon_client.post(
+        "/api/auth/login", json={"username": OWNER_USERNAME, "password": OWNER_PASSWORD}
+    )
+    assert response.status_code == 200, response.text
+    anon_client.headers["X-CSRF-Token"] = response.json()["csrf_token"]
+    return anon_client
