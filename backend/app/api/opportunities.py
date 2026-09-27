@@ -1,8 +1,10 @@
 import uuid
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import DbSession
+from app.enums import RemoteMode
 from app.models import Opportunity
 from app.repositories import get_profile
 from app.schemas.application import ApplicationBody, ApplicationResponse
@@ -10,8 +12,9 @@ from app.schemas.opportunity import (
     EvaluationResponse,
     OpportunityBody,
     OpportunityDetail,
-    OpportunitySummary,
+    OpportunityPage,
 )
+from app.services import discovery
 from app.services import opportunities as service
 
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
@@ -26,31 +29,40 @@ def _load(db: DbSession, opportunity_id: uuid.UUID) -> Opportunity:
 
 def _detail(db: DbSession, opportunity: Opportunity) -> OpportunityDetail:
     detail = OpportunityDetail.model_validate(opportunity)
+    detail.origin, detail.availability = discovery.provenance(opportunity.source_records)
+    detail.sources = discovery.records_response(opportunity.source_records)
     evaluation = service.current_evaluation(db, opportunity)
     detail.latest_evaluation = EvaluationResponse.model_validate(evaluation) if evaluation else None
     detail.profile_exists = get_profile(db) is not None
     return detail
 
 
+MAX_PAGE_SIZE = 100
+
+
 @router.get("")
-def list_opportunities(db: DbSession) -> list[OpportunitySummary]:
-    return [
-        OpportunitySummary(
-            id=o.id,
-            title=o.title,
-            organization=o.organization,
-            opportunity_type=o.opportunity_type,
-            location=o.location,
-            remote_mode=o.remote_mode,
-            application_deadline=o.application_deadline,
-            start_date=o.start_date,
-            requirements_assessment_status=o.requirements_assessment_status,
-            eligibility_status=e.eligibility_status if e else None,
-            evaluated_at=e.evaluated_at if e else None,
-            application_status=o.application.status if o.application else None,
-        )
-        for o, e in service.list_opportunities(db)
-    ]
+def list_opportunities(
+    db: DbSession,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    availability: discovery.AvailabilityFilter = "open",
+    source: Annotated[uuid.UUID | Literal["manual"] | None, Query()] = None,
+    eligibility: discovery.EligibilityFilter | None = None,
+    application_status: discovery.ApplicationFilter | None = None,
+    remote_mode: RemoteMode | None = None,
+) -> OpportunityPage:
+    """One page of opportunities (freshest first) with server-side search and filters."""
+    filters = discovery.Filters(
+        q=q or None,
+        availability=availability,
+        source=source,
+        eligibility=eligibility,
+        application_status=application_status,
+        remote_mode=remote_mode,
+    )
+    items, total = discovery.list_page(db, filters, limit, offset)
+    return OpportunityPage(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

@@ -11,8 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import distinct_on
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, defer, selectinload
 
 from app.enums import ExtractionMethod, OpportunitySourceType
 from app.models import (
@@ -42,7 +41,13 @@ def get_opportunity(db: Session, opportunity_id: uuid.UUID) -> Opportunity | Non
     return db.get(
         Opportunity,
         opportunity_id,
-        options=[selectinload(Opportunity.requirements), selectinload(Opportunity.application)],
+        options=[
+            selectinload(Opportunity.requirements),
+            selectinload(Opportunity.application),
+            selectinload(Opportunity.source_records)
+            .options(defer(OpportunitySourceRecord.raw_payload))
+            .selectinload(OpportunitySourceRecord.ingestion_source),
+        ],
     )
 
 
@@ -106,34 +111,6 @@ def update_opportunity(db: Session, opportunity: Opportunity, body: OpportunityB
     opportunity.manually_curated_at = datetime.now(UTC)
     db.flush()
     evaluate_automatically(db, opportunity)
-
-
-def list_opportunities(
-    db: Session,
-) -> list[tuple[Opportunity, OpportunityEvaluation | None]]:
-    """Opportunities (newest first) with the current profile's latest evaluation of each."""
-    opportunities = db.scalars(
-        select(Opportunity)
-        .options(selectinload(Opportunity.application))
-        .order_by(Opportunity.created_at.desc(), Opportunity.id)
-    ).all()
-    profile = get_profile(db)
-    latest: dict[uuid.UUID, OpportunityEvaluation] = {}
-    if profile is not None:
-        rows = db.scalars(
-            select(OpportunityEvaluation)
-            .where(OpportunityEvaluation.profile_id == profile.id)
-            # PostgreSQL DISTINCT ON: the first row per opportunity in this order is the latest
-            # (same ordering as app.repositories.latest_evaluation).
-            .ext(distinct_on(OpportunityEvaluation.opportunity_id))
-            .order_by(
-                OpportunityEvaluation.opportunity_id,
-                OpportunityEvaluation.evaluated_at.desc(),
-                OpportunityEvaluation.id.desc(),
-            )
-        ).all()
-        latest = {row.opportunity_id: row for row in rows}
-    return [(o, latest.get(o.id)) for o in opportunities]
 
 
 def current_evaluation(db: Session, opportunity: Opportunity) -> OpportunityEvaluation | None:
