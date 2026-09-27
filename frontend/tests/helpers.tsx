@@ -21,8 +21,9 @@ export const json = (body: unknown, status = 200) =>
   })
 
 /**
- * Stub fetch with handlers keyed by "METHOD /api/path". A handler returns a Response, a JSON
- * body, or a Promise (returned as is). Unhandled requests fail the test loudly. Returns the recorded calls.
+ * Stub fetch with handlers keyed by "METHOD /api/path" (an exact key with the query string wins;
+ * otherwise the path without it matches). A handler returns a Response, a JSON body, or a
+ * Promise (returned as is). Unhandled requests fail the test loudly. Returns the recorded calls.
  */
 export function mockApi(handlers: Record<string, Handler>): Call[] {
   const calls: Call[] = []
@@ -37,7 +38,8 @@ export function mockApi(handlers: Record<string, Handler>): Call[] {
         headers: (init.headers ?? {}) as Record<string, string>,
       }
       calls.push(call)
-      const handler = handlers[`${method} ${input}`]
+      const handler =
+        handlers[`${method} ${input}`] ?? handlers[`${method} ${input.split('?')[0]}`]
       if (!handler)
         return Promise.reject(new Error(`Unhandled request: ${method} ${input}`))
       const result = handler(call)
@@ -81,10 +83,82 @@ export const summary = (changes: Record<string, unknown> = {}) => ({
   remote_mode: 'onsite',
   application_deadline: '2041-02-01',
   start_date: '2041-06-20',
+  posted_at: null,
+  first_seen_at: '2040-10-01T12:00:00Z',
   requirements_assessment_status: 'complete',
   eligibility_status: 'eligible',
   evaluated_at: '2040-10-01T12:00:00Z',
   application_status: null,
+  origin: 'manual',
+  availability: 'manual',
+  source_names: ['Manual entry'],
+  ...changes,
+})
+
+export const listPage = (items: unknown[], changes: Record<string, unknown> = {}) => ({
+  items,
+  total: items.length,
+  limit: 50,
+  offset: 0,
+  ...changes,
+})
+
+export const manualRecord = {
+  source_name: 'Manual entry',
+  source_type: 'manual',
+  automated: false,
+  is_active: true,
+  closed_at: null,
+  first_seen_at: '2040-10-01T12:00:00Z',
+  last_seen_at: '2040-10-01T12:00:00Z',
+  source_url: null,
+  source_published_at: null,
+  source_updated_at: null,
+}
+
+export const feedRecord = (changes: Record<string, unknown> = {}) => ({
+  ...manualRecord,
+  source_name: 'Tech Internship Discovery Feed',
+  source_type: 'public_feed',
+  automated: true,
+  source_url: 'https://careers.example.com/jobs/synthetic-1',
+  ...changes,
+})
+
+export const run = (changes: Record<string, unknown> = {}) => ({
+  id: 'run-1',
+  source_id: 'src-feed',
+  status: 'success',
+  started_at: '2040-10-01T12:00:00Z',
+  finished_at: '2040-10-01T12:00:04Z',
+  source_generated_at: '2040-10-01T11:50:00Z',
+  fetched_count: 3,
+  normalized_count: 3,
+  created_count: 2,
+  updated_count: 0,
+  deduplicated_count: 1,
+  unchanged_count: 0,
+  closed_count: 0,
+  reactivated_count: 0,
+  invalid_count: 0,
+  error_count: 0,
+  error_summary: null,
+  errors: [],
+  ...changes,
+})
+
+export const source = (changes: Record<string, unknown> = {}) => ({
+  id: 'src-feed',
+  kind: 'community_feed',
+  key: 'community_feed:zshah-tech-internships',
+  identifier: 'zshah-tech-internships',
+  region: null,
+  display_name: 'Tech Internship Discovery Feed',
+  enabled: true,
+  builtin: true,
+  last_attempted_at: null,
+  last_success_at: null,
+  latest_run: null,
   ...changes,
 })
 
@@ -111,6 +185,9 @@ export const detail = (changes: Record<string, unknown> = {}) => ({
   end_date: '2041-08-01',
   created_at: '2040-10-01T12:00:00Z',
   updated_at: '2040-10-01T12:00:00Z',
+  last_seen_at: '2040-10-01T12:00:00Z',
+  manually_curated_at: '2040-10-01T12:00:00Z',
+  sources: [manualRecord],
   requirements: [
     {
       id: 'req-1',

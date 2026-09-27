@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { json, loggedIn, loggedOut, mockApi, renderAt } from './helpers'
+import { json, listPage, loggedIn, loggedOut, mockApi, renderAt } from './helpers'
 
 function fillLogin(username: string, password: string) {
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: username } })
@@ -34,7 +34,7 @@ describe('authentication', () => {
         username: 'synthetic-owner',
         csrf_token: 'synthetic-csrf',
       }),
-      'GET /api/opportunities': () => [],
+      'GET /api/opportunities': () => listPage([]),
     })
     renderAt('/opportunities')
     await screen.findByRole('form', { name: 'Log in' })
@@ -84,7 +84,7 @@ describe('authentication', () => {
   it('logs out with the CSRF token and returns to login', async () => {
     const calls = mockApi({
       ...loggedIn,
-      'GET /api/opportunities': () => [],
+      'GET /api/opportunities': () => listPage([]),
       'POST /api/auth/logout': () => new Response(null, { status: 204 }),
     })
     renderAt('/opportunities')
@@ -107,7 +107,7 @@ describe('authentication', () => {
         username: 'synthetic-owner',
         csrf_token: 'synthetic-csrf',
       }),
-      'GET /api/opportunities': () => [],
+      'GET /api/opportunities': () => listPage([]),
     })
     renderAt('/login')
 
@@ -131,7 +131,7 @@ describe('authentication', () => {
   ])('stays signed in when logout fails with %s', async (_label, failure) => {
     mockApi({
       ...loggedIn,
-      'GET /api/opportunities': () => [],
+      'GET /api/opportunities': () => listPage([]),
       'POST /api/auth/logout': failure,
     })
     renderAt('/opportunities')
@@ -149,7 +149,7 @@ describe('authentication', () => {
     let attempts = 0
     const calls = mockApi({
       ...loggedIn,
-      'GET /api/opportunities': () => [],
+      'GET /api/opportunities': () => listPage([]),
       'POST /api/auth/logout': () =>
         ++attempts === 1
           ? json({ detail: 'Internal Server Error' }, 500)
@@ -171,7 +171,7 @@ describe('authentication', () => {
   it('treats logout of an already-invalid session (401) as logged out', async () => {
     mockApi({
       ...loggedIn,
-      'GET /api/opportunities': () => [],
+      'GET /api/opportunities': () => listPage([]),
       'POST /api/auth/logout': () => json({ detail: 'Not authenticated.' }, 401),
     })
     renderAt('/opportunities')
@@ -192,7 +192,7 @@ describe('authentication', () => {
   })
 
   it('never stores auth state in browser storage', async () => {
-    mockApi({ ...loggedIn, 'GET /api/opportunities': () => [] })
+    mockApi({ ...loggedIn, 'GET /api/opportunities': () => listPage([]) })
     renderAt('/opportunities')
     await screen.findByRole('heading', { name: 'Opportunities' })
 

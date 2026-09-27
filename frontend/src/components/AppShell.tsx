@@ -34,6 +34,9 @@ export function AppShell() {
             <NavLink to="/opportunities" className={linkClass}>
               Opportunities
             </NavLink>
+            <NavLink to="/sources" className={linkClass}>
+              Sources
+            </NavLink>
           </nav>
           <button
             type="button"

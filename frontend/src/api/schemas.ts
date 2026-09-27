@@ -48,6 +48,23 @@ export type RequirementType = (typeof requirementTypes)[number]
 export type AppliesAt = (typeof appliesAtValues)[number]
 export type ApplicationStatus = (typeof applicationStatuses)[number]
 
+export const origins = ['imported', 'manual'] as const
+export const availabilities = ['open', 'closed', 'manual'] as const
+export const sourceKinds = ['community_feed', 'greenhouse', 'lever'] as const
+export const regions = ['global', 'eu'] as const
+export const runStatuses = [
+  'running',
+  'success',
+  'partial',
+  'failed',
+  'no_change',
+] as const
+export type Origin = (typeof origins)[number]
+export type Availability = (typeof availabilities)[number]
+export type SourceKind = (typeof sourceKinds)[number]
+export type Region = (typeof regions)[number]
+export type RunStatus = (typeof runStatuses)[number]
+
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const nullableDate = isoDate.nullable()
 
@@ -131,12 +148,39 @@ export const opportunitySummarySchema = z.object({
   remote_mode: z.enum(remoteModes).nullable(),
   application_deadline: nullableDate,
   start_date: nullableDate,
+  posted_at: z.string().nullable(),
+  first_seen_at: z.string(),
   requirements_assessment_status: z.enum(assessmentStatuses),
   eligibility_status: z.enum(eligibilityStatuses).nullable(),
   evaluated_at: z.string().nullable(),
   application_status: z.enum(applicationStatuses).nullable(),
+  origin: z.enum(origins),
+  availability: z.enum(availabilities),
+  source_names: z.array(z.string()),
 })
 export type OpportunitySummary = z.infer<typeof opportunitySummarySchema>
+
+export const opportunityPageSchema = z.object({
+  items: z.array(opportunitySummarySchema),
+  total: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+})
+export type OpportunityPage = z.infer<typeof opportunityPageSchema>
+
+export const sourceRecordSchema = z.object({
+  source_name: z.string(),
+  source_type: z.string(),
+  automated: z.boolean(),
+  is_active: z.boolean(),
+  closed_at: z.string().nullable(),
+  first_seen_at: z.string(),
+  last_seen_at: z.string(),
+  source_url: z.string().nullable(),
+  source_published_at: z.string().nullable(),
+  source_updated_at: z.string().nullable(),
+})
+export type SourceRecord = z.infer<typeof sourceRecordSchema>
 
 export const opportunityDetailSchema = z.object({
   id: z.string(),
@@ -153,8 +197,15 @@ export const opportunityDetailSchema = z.object({
   requirements_assessment_status: z.enum(assessmentStatuses),
   created_at: z.string(),
   updated_at: z.string(),
+  posted_at: z.string().nullable(),
+  first_seen_at: z.string(),
+  last_seen_at: z.string(),
+  manually_curated_at: z.string().nullable(),
   requirements: z.array(requirementSchema),
   application: applicationSchema.nullable(),
+  origin: z.enum(origins),
+  availability: z.enum(availabilities),
+  sources: z.array(sourceRecordSchema),
   latest_evaluation: evaluationSchema.nullable(),
   profile_exists: z.boolean(),
 })
@@ -181,4 +232,67 @@ export interface OpportunityInput {
   end_date: string | null
   requirements_assessment_status: AssessmentStatus
   requirements: RequirementInput[]
+}
+
+export const runErrorSchema = z.object({
+  external_id: z.string().nullable(),
+  stage: z.string(),
+  code: z.string(),
+  message: z.string(),
+})
+
+export const runSchema = z.object({
+  id: z.string(),
+  source_id: z.string(),
+  status: z.enum(runStatuses),
+  started_at: z.string(),
+  finished_at: z.string().nullable(),
+  source_generated_at: z.string().nullable(),
+  fetched_count: z.number().int(),
+  normalized_count: z.number().int(),
+  created_count: z.number().int(),
+  updated_count: z.number().int(),
+  deduplicated_count: z.number().int(),
+  unchanged_count: z.number().int(),
+  closed_count: z.number().int(),
+  reactivated_count: z.number().int(),
+  invalid_count: z.number().int(),
+  error_count: z.number().int(),
+  error_summary: z.string().nullable(),
+  errors: z.array(runErrorSchema),
+})
+export type Run = z.infer<typeof runSchema>
+
+export const sourceSchema = z.object({
+  id: z.string(),
+  kind: z.enum(sourceKinds),
+  key: z.string(),
+  identifier: z.string(),
+  region: z.enum(regions).nullable(),
+  display_name: z.string(),
+  enabled: z.boolean(),
+  builtin: z.boolean(),
+  last_attempted_at: z.string().nullable(),
+  last_success_at: z.string().nullable(),
+  latest_run: runSchema.nullable(),
+})
+export type Source = z.infer<typeof sourceSchema>
+
+export interface SourceInput {
+  kind: 'greenhouse' | 'lever'
+  display_name: string
+  board: string
+  region: Region | null
+}
+
+/** Server-side list query (GET /api/opportunities). Empty values are omitted. */
+export interface OpportunityQuery {
+  limit: number
+  offset: number
+  q?: string
+  availability?: 'open' | 'closed' | 'all'
+  source?: string
+  eligibility?: string
+  application_status?: string
+  remote_mode?: string
 }

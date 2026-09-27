@@ -93,7 +93,8 @@ function toInput(form: Form): OpportunityInput {
   }
 }
 
-/** Create (/opportunities/new) or edit (/opportunities/:id/edit) a manual opportunity. */
+/** Create (/opportunities/new) or edit (/opportunities/:id/edit) an opportunity. Editing an
+ * imported one is also how its requirements are reviewed. */
 export function OpportunityFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -102,6 +103,7 @@ export function OpportunityFormPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [issues, setIssues] = useState<FieldIssue[]>([])
+  const [imported, setImported] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -110,7 +112,11 @@ export function OpportunityFormPage() {
     let active = true
     api
       .getOpportunity(id)
-      .then((o) => active && setForm(toForm(o)))
+      .then((o) => {
+        if (!active) return
+        setForm(toForm(o))
+        setImported(o.origin === 'imported')
+      })
       .catch(
         (caught: unknown) =>
           active &&
@@ -171,6 +177,12 @@ export function OpportunityFormPage() {
       <h1 className="text-2xl font-semibold">
         {id ? 'Edit opportunity' : 'Add opportunity'}
       </h1>
+      {imported && (
+        <p className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
+          This opportunity was imported. Once you save, later syncs keep your edits and
+          requirement review; they only update the source details.
+        </p>
+      )}
 
       <fieldset className={fieldsetClass}>
         <legend className={legendClass}>Details</legend>

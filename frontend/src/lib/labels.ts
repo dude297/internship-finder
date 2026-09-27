@@ -2,11 +2,14 @@ import type {
   AppliesAt,
   ApplicationStatus,
   AssessmentStatus,
+  Availability,
   EducationLevel,
   EligibilityStatus,
   OpportunityType,
   RemoteMode,
   RequirementType,
+  RunStatus,
+  SourceKind,
 } from '../api/schemas'
 
 export const educationLevelLabels: Record<EducationLevel, string> = {
@@ -72,6 +75,31 @@ export const applicationStatusLabels: Record<ApplicationStatus, string> = {
   accepted: 'Accepted',
   rejected: 'Rejected',
   withdrawn: 'Withdrawn',
+}
+
+export const availabilityLabels: Record<Availability, string> = {
+  open: 'Open',
+  closed: 'Closed',
+  manual: 'Added by hand',
+}
+
+export const sourceKindLabels: Record<SourceKind, string> = {
+  community_feed: 'Discovery feed (built in)',
+  greenhouse: 'Greenhouse',
+  lever: 'Lever',
+}
+
+export const runStatusLabels: Record<RunStatus, string> = {
+  running: 'Running',
+  success: 'Succeeded',
+  partial: 'Partly succeeded',
+  failed: 'Failed',
+  no_change: 'No changes',
+}
+
+/** The calendar day of a timestamp, in UTC (source dates are usually date-only). */
+export function formatDay(iso: string | null): string {
+  return formatDate(iso ? iso.slice(0, 10) : null)
 }
 
 /** Calendar date (YYYY-MM-DD) for display, without timezone shifts. */
