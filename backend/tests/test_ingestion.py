@@ -640,3 +640,43 @@ def test_sync_enabled_sources_continues_past_a_failure(
         ("community_feed:zshah-tech-internships", IngestionRunStatus.FAILED),
         (f"greenhouse:{GREENHOUSE_BOARD}", IngestionRunStatus.SUCCESS),
     ]
+
+
+def test_an_unexpected_failure_never_leaves_a_run_running(
+    db: Session, feed_source: IngestionSource, web: FakeSource, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from app.ingestion import pipeline
+    from app.ingestion.adapters import community_feed
+
+    def explode(_payload: Any, _source: Any) -> Any:
+        raise RuntimeError("synthetic adapter bug")
+
+    broken = replace(community_feed.ADAPTER, parse=explode)
+
+    def adapter_for(_kind: IngestionSourceKind) -> Any:
+        return broken
+
+    monkeypatch.setattr(pipeline, "adapter_for", adapter_for)
+    web.json(FEED_URL, feed(JOB_A))
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.FAILED
+    assert run.errors[0].code == "internal_error"
+    assert "synthetic adapter bug" not in (run.error_summary or "")
+    assert count(db, Opportunity) == 0
+
+
+def test_an_invalid_url_is_dropped_not_fatal(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(feed_job("a", url="https://careers.example.com:99999/x")))
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.SUCCESS
+    rec = record(db, feed_source, "a")
+    assert rec.opportunity.application_url is None
+    assert {i.namespace for i in rec.opportunity.identifiers} == {"zshah"}
