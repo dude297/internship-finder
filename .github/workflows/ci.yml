@@ -70,3 +70,56 @@ jobs:
           .venv/bin/alembic upgrade head
       - name: PostgreSQL integration and migration tests
         run: .venv/bin/pytest -m postgres
+
+  e2e:
+    runs-on: ubuntu-latest
+    # Disposable database that exists only for this job. Test-only credentials, not secrets.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: internship_finder_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d internship_finder_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_DATABASE_URL: postgresql+psycopg://ci:ci-test-only@localhost:5432/internship_finder_e2e
+      # Synthetic, test-only owner for the disposable database above. Not a secret.
+      E2E_OWNER_USERNAME: e2e-synthetic-owner
+      E2E_OWNER_PASSWORD: e2e-synthetic-password-not-a-secret
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install backend
+        working-directory: backend
+        run: python -m venv .venv && .venv/bin/python -m pip install -e .
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend and Chromium
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Playwright (migrates the database and bootstraps the synthetic owner)
+        working-directory: frontend
+        run: npx playwright test
+      # Only synthetic test data can appear in these (the database and owner above are fake).
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7

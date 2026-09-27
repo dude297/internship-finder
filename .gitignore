@@ -21,3 +21,7 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Playwright output (synthetic test data only, but never needed in Git)
+frontend/test-results/
+frontend/playwright-report/
