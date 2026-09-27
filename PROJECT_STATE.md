@@ -60,7 +60,8 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
   - server-side sessions (only the SHA-256 of the token stored) in an HttpOnly, `SameSite=Lax`, `Secure`-by-default cookie
   - CSRF protection (HMAC-derived token, `X-CSRF-Token` on every unsafe private request)
   - one authorization dependency on every private endpoint; same-origin API (Vite proxy), CORS removed
-  - private profile API/UI with ISO 3166-1 validation
+  - private profile API/UI with ISO 3166-1 validation and the education timeline invariant (`expected_graduation_date > education_status_as_of`, API `422` + PostgreSQL CHECK)
+  - stale-response-safe auth state (auth generation guard) and confirmed-only logout (network/server failure keeps the user signed in with an error)
   - manual opportunity API/UI with `manual` source provenance
   - structured requirement editing (complete-set replacement) and explicit requirement-assessment state
   - automatic eligibility evaluation on opportunity changes and re-evaluation of every opportunity on eligibility-relevant profile changes (history appended, same transaction)
@@ -91,7 +92,7 @@ None known.
 - Profile re-evaluation is synchronous and re-evaluates every opportunity. Fine for a manual catalog; needs batching or background work at ingestion scale ([operations.md](docs/operations.md#evaluation-history-and-re-evaluation-implemented-not-scheduled)).
 - Opportunity updates always append an evaluation, even when only the title changed, and replace every requirement row (new IDs; old rule results keep their text with `requirement_id` NULL).
 - Expired sessions are deleted only when that user logs in again; there's no periodic cleanup.
-- Single profile is enforced by the service (it only ever creates one row), not by a database constraint.
+- `profiles` is logically a singleton, but only the service enforces that (it only ever creates one row); the database has no one-row maximum. Non-blocking for the local single-user MVP; review before hosted or concurrent use.
 - Backend dependencies are range-pinned in `pyproject.toml` without a lock file, so backend installs aren't fully reproducible. The frontend has `package-lock.json`.
 - Nothing re-evaluates when the eligibility rules version changes or when time passes an expected graduation/enrollment date.
 - `work_authorization` requirements are stored but not evaluated (always `needs_verification`, ELIG-REQ-001).
@@ -140,6 +141,7 @@ Review and merge Milestone 2. Proposed afterwards: **Milestone 3 — opportunity
 
 ## Recent Important Decisions
 
+- 2026-09-27: PR #5 review fixes: (1) `AuthProvider` ignores a session check that resolves after a newer auth transition; (2) logout clears local auth state only on `204`/`401`, otherwise shows "Couldn't log out. You're still signed in."; (3) new invariant `expected_graduation_date > education_status_as_of` (strict, because the transition takes effect on the graduation date), enforced by `ProfileBody` and `ck_profiles_graduation_after_status_as_of`, added to the unmerged Milestone 2 migration `7d7f4f8b9a3c` (Milestone 1 migration untouched). Eligibility rules stay `v1`.
 - 2026-09-27: ADR-007 accepted: single-user username/password auth (Argon2id via pwdlib), CLI-only owner bootstrap, opaque DB sessions (SHA-256 stored), HttpOnly `SameSite=Lax` cookie (`Secure` by default), HMAC-derived CSRF token, one `require_owner` boundary, same-origin `/api` (Vite proxy; CORS and `FRONTEND_ORIGIN`/`VITE_API_BASE_URL` removed), in-memory login throttle with production blocked pending review.
 - 2026-09-27: Milestone 2 re-evaluation: every opportunity mutation appends an evaluation when a profile exists; a profile change to an eligibility input (the `ProfileInput` fields) re-evaluates all opportunities synchronously in the same transaction. Resolves the Milestone 1 debt "nothing re-evaluates when the profile changes".
 - 2026-09-27: Application tracking is one `applications` row per opportunity (single-user) with statuses saved/applying/applied/interview/offer/accepted/rejected/withdrawn and no enforced transitions.

@@ -40,7 +40,7 @@ Browser ── same origin ──► Vite dev server (localhost:5173)
 | Area | Location |
 |---|---|
 | Routing | `App.tsx` (react-router): `/login`, `/profile`, `/opportunities`, `/opportunities/new`, `/opportunities/:id`, `/opportunities/:id/edit` |
-| Auth state | `auth/` context from `GET /api/auth/session`. `RequireAuth` redirects to `/login` (a UX convenience; the API enforces access) |
+| Auth state | `auth/` context from `GET /api/auth/session`. `RequireAuth` redirects to `/login` (a UX convenience; the API enforces access). An auth generation counter drops a session check that resolves after a newer login/logout/session loss. Logout clears local state only once the server confirms it (`204`, or `401` = already invalid); otherwise the user stays signed in and sees an error ([ADR-007 §3](decisions/ADR-007-single-user-auth-and-private-api.md#3-opaque-server-side-sessions)) |
 | API client | `api/client.ts` (the only `fetch` caller): relative `/api` URLs, same-origin credentials, Zod validation (`api/schemas.ts`), central `401` handling, `X-CSRF-Token` on mutations, CSRF token in memory only |
 | Pages / components | `pages/`, `components/` (presentation only) |
 | Wording | `lib/labels.ts`, `lib/eligibility.ts` rephrase stored rule results in plain language. They never re-evaluate |

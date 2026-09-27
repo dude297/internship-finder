@@ -56,6 +56,8 @@ python -m app.cli set-password --username <name>   # password rotation
 - The browser receives it only in a cookie. The database stores only `sha256(token)` in `auth_sessions.token_hash` (unique). A database leak doesn't yield usable cookies. SHA-256 (not a slow hash) is correct here because the token is high-entropy random data, not a human password.
 - `auth_sessions`: `id`, `user_id` (FK, cascade), `token_hash`, `created_at`, `expires_at`. Absolute expiry, `SESSION_TTL_HOURS` (default 24). No sliding renewal, so requests don't write to the database.
 - Logout **deletes** the row. Login deletes the user's expired sessions and any session presented by the same browser. `set-password` deletes all of them.
+- The frontend treats logout as done only when revocation is confirmed: `204` (row deleted, cookie cleared) or `401` (the session was already unusable). On a network failure or any other error (e.g. `500`) it keeps the auth state and the in-memory CSRF token, stays on the current page, and shows "Couldn't log out. You're still signed in.", because the session row and the HttpOnly cookie may still be valid. The UI never claims a logout the server didn't confirm.
+- The frontend's initial `GET /api/auth/session` check can't overwrite a newer auth transition: each completed login, logout, or `401` session loss advances an auth generation, and a session response is applied only if the generation hasn't changed since the request started.
 - Disabled users (`is_active = false`) can't log in, and their existing sessions stop working.
 
 ### 4. Cookie
