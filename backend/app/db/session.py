@@ -17,7 +17,8 @@ def get_engine() -> Engine:
 
 
 def get_session() -> Iterator[Session]:
-    """FastAPI dependency: one session per request. Callers own the transaction via
-    `with session.begin(): ...`; nothing is committed implicitly."""
-    with Session(get_engine()) as session:
+    """FastAPI dependency: one session per request. Nothing is committed implicitly: the route
+    handler commits once after its service call, and anything uncommitted is rolled back when
+    the session closes. Objects stay loaded after commit so responses can be built from them."""
+    with Session(get_engine(), expire_on_commit=False) as session:
         yield session

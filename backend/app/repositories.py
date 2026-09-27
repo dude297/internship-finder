@@ -19,6 +19,13 @@ from app.opportunities.eligibility import EligibilityEvaluation, evaluate_eligib
 from app.opportunities.eligibility.schemas import OpportunityInput, ProfileInput, RequirementInput
 
 
+def get_profile(session: Session) -> Profile | None:
+    """The owner's canonical profile. Single-user: the API only ever creates one row."""
+    return session.scalars(
+        select(Profile).order_by(Profile.created_at, Profile.id).limit(1)
+    ).first()
+
+
 def get_opportunity(session: Session, opportunity_id: uuid.UUID) -> Opportunity | None:
     """Opportunity with its requirements and source records loaded."""
     return session.get(

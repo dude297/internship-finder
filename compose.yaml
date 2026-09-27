@@ -1,0 +1,24 @@
+# Local development PostgreSQL only. Not used for deployment.
+# The credentials below are local, development-only placeholders (not secrets): the port is bound
+# to 127.0.0.1, so the database is reachable only from this machine.
+# Your private profile data lives in the `pgdata` volume, never in the repository.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: internship_finder
+      POSTGRES_PASSWORD: local-dev-only
+      POSTGRES_DB: internship_finder
+    ports:
+      - 127.0.0.1:5432:5432
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/<major>/docker.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U internship_finder -d internship_finder']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
