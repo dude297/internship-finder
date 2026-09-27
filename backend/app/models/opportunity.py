@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
@@ -25,6 +25,9 @@ from app.enums import (
     RequirementsAssessmentStatus,
     RequirementType,
 )
+
+if TYPE_CHECKING:
+    from app.models.application import Application
 
 
 def _seen_at() -> Mapped[datetime]:
@@ -68,6 +71,9 @@ class Opportunity(IdMixin, TimestampMixin, Base):
         back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
     )
     requirements: Mapped[list["OpportunityRequirement"]] = relationship(
+        back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
+    )
+    application: Mapped["Application | None"] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
     )
 
