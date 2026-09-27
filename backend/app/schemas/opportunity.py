@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
@@ -8,6 +8,7 @@ from app.enums import (
     ApplicationStatus,
     EligibilityStatus,
     ExtractionMethod,
+    OpportunitySourceType,
     OpportunityType,
     RemoteMode,
     RequirementAppliesAt,
@@ -125,6 +126,13 @@ class EvaluationResponse(BaseModel):
     rule_results: list[RuleResultResponse]
 
 
+# imported: at least one automated source record; manual: manual provenance only.
+Origin = Literal["imported", "manual"]
+# open: an automated record is active; closed: automated records exist, none active;
+# manual: managed by hand (no automated records).
+Availability = Literal["open", "closed", "manual"]
+
+
 class OpportunitySummary(BaseModel):
     id: uuid.UUID
     title: str
@@ -134,10 +142,37 @@ class OpportunitySummary(BaseModel):
     remote_mode: RemoteMode | None
     application_deadline: date | None
     start_date: date | None
+    posted_at: datetime | None
+    first_seen_at: datetime
     requirements_assessment_status: RequirementsAssessmentStatus
     eligibility_status: EligibilityStatus | None
     evaluated_at: datetime | None
     application_status: ApplicationStatus | None
+    origin: Origin
+    availability: Availability
+    source_names: list[str]
+
+
+class OpportunityPage(BaseModel):
+    items: list[OpportunitySummary]
+    total: int
+    limit: int
+    offset: int
+
+
+class SourceRecordResponse(BaseModel):
+    """Safe provenance for display. The raw payload is never sent to the browser."""
+
+    source_name: str
+    source_type: OpportunitySourceType
+    automated: bool
+    is_active: bool
+    closed_at: datetime | None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    source_url: str | None
+    source_published_at: datetime | None
+    source_updated_at: datetime | None
 
 
 class OpportunityDetail(BaseModel):
@@ -157,8 +192,15 @@ class OpportunityDetail(BaseModel):
     requirements_assessment_status: RequirementsAssessmentStatus
     created_at: datetime
     updated_at: datetime
+    posted_at: datetime | None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    manually_curated_at: datetime | None
     requirements: list[RequirementResponse]
     application: ApplicationResponse | None
+    origin: Origin = "manual"
+    availability: Availability = "manual"
+    sources: list[SourceRecordResponse] = Field(default_factory=list[SourceRecordResponse])
     # Null when there is no profile yet: eligibility is never faked.
     latest_evaluation: EvaluationResponse | None = None
     profile_exists: bool = False

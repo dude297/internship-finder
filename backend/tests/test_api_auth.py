@@ -164,10 +164,13 @@ def test_mutations_require_a_valid_csrf_token(client: TestClient, csrf: str | No
     for response in (
         client.put("/api/profile", json={}, headers=headers),
         client.post("/api/auth/logout", headers=headers),
+        client.post("/api/sources/sync", headers=headers),
+        client.post("/api/sources", json={}, headers=headers),
     ):
         assert response.status_code == 403
         assert response.json() == {"detail": "Missing or invalid CSRF token."}
     assert client.get("/api/opportunities").status_code == 200  # reads don't need it
+    assert client.get("/api/sources").status_code == 200
 
 
 def test_valid_csrf_token_allows_mutation(client: TestClient) -> None:
@@ -193,10 +196,11 @@ def test_every_non_public_route_requires_authentication(
     operations = [(m.upper(), p) for p, ops in paths.items() for m in ops]
     private = [(m, p) for m, p in operations if p not in PUBLIC_PATHS]
     assert {p for _, p in operations} >= PUBLIC_PATHS
-    assert len(private) >= 11
+    assert len(private) >= 17
 
     for method, template in private:
         path = template.replace("{opportunity_id}", "00000000-0000-0000-0000-000000000000")
+        path = path.replace("{source_id}", "00000000-0000-0000-0000-000000000000")
         response = anon_client.request(method, path, json={})
         assert response.status_code == 401, (method, template)
 

@@ -1,4 +1,4 @@
-"""Owner bootstrap CLI against PostgreSQL. Synthetic credentials only."""
+"""Owner bootstrap and source-sync CLI against PostgreSQL. Synthetic data only."""
 
 import io
 from datetime import timedelta
@@ -8,8 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import cli
-from app.models import AuthSession, AuthUser
+from app.models import AuthSession, AuthUser, IngestionSource, Opportunity
 from app.services import auth
+from tests.ingestion_fixtures import FEED_URL, FakeSource, feed, feed_job
 
 pytestmark = pytest.mark.postgres
 
@@ -130,3 +131,54 @@ def test_set_password_for_unknown_user_fails(monkeypatch: pytest.MonkeyPatch) ->
 def test_password_is_not_a_command_line_option() -> None:
     with pytest.raises(SystemExit):
         cli.main(["create-owner", "--username", "synthetic-owner", "--password", PASSWORD])
+
+
+# --- Source sync --------------------------------------------------------------------------------
+
+
+def use_fake_network(monkeypatch: pytest.MonkeyPatch, web: FakeSource) -> None:
+    monkeypatch.setattr(cli, "configured_transport", web.transport)
+
+
+def test_sync_source_by_key_prints_counts_only(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    web = FakeSource()
+    web.json(FEED_URL, feed(feed_job("a"), feed_job("b")))
+    use_fake_network(monkeypatch, web)
+
+    code = cli.main(["sync-source", "community_feed:zshah-tech-internships"])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert out.startswith("community_feed:zshah-tech-internships: success (fetched 2, created 2,")
+    assert "Synthetic Engineering Intern" not in out  # never payloads
+    assert len(db.scalars(select(Opportunity)).all()) == 2
+
+
+def test_sync_source_by_id_and_failure_exit_code(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    use_fake_network(monkeypatch, FakeSource())  # everything 404s
+    source = db.scalars(select(IngestionSource)).one()
+
+    code = cli.main(["sync-source", str(source.id)])
+
+    assert code == 1
+    assert "failed" in capsys.readouterr().out
+
+
+def test_sync_sources_runs_every_enabled_source(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    web = FakeSource()
+    web.json(FEED_URL, feed(feed_job("a")))
+    use_fake_network(monkeypatch, web)
+
+    assert cli.main(["sync-sources"]) == 0
+    assert "success" in capsys.readouterr().out
+
+
+def test_sync_unknown_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_fake_network(monkeypatch, FakeSource())
+    assert cli.main(["sync-source", "greenhouse:nothing"]) == 1

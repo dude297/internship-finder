@@ -42,6 +42,11 @@ class IngestionSource(IdMixin, TimestampMixin, Base):
     last_modified: Mapped[str | None] = mapped_column(String(100))
 
     @property
+    def builtin(self) -> bool:
+        """The application-owned discovery feed: it can be disabled but not re-pointed."""
+        return self.kind is IngestionSourceKind.COMMUNITY_FEED
+
+    @property
     def key(self) -> str:
         """Stable, human-readable key; also the `source_name` of its source records."""
         parts = [self.kind.value, *([self.region.value] if self.region else []), self.identifier]

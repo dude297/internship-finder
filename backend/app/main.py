@@ -6,7 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
-from app.api import auth, health, opportunities, profile
+from app.api import auth, health, opportunities, profile, sources
 from app.api.deps import require_owner
 from app.services.auth import FailedLoginLimiter
 
@@ -58,6 +58,7 @@ def create_app() -> FastAPI:
     private.include_router(auth.router)
     private.include_router(profile.router)
     private.include_router(opportunities.router)
+    private.include_router(sources.router)
     app.include_router(private)
     return app
 

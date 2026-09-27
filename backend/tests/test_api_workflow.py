@@ -176,7 +176,7 @@ def test_without_a_profile_nothing_is_evaluated(client: TestClient, db: Session)
     assert created["profile_exists"] is False
     assert created["latest_evaluation"] is None
     assert count(db, OpportunityEvaluation) == 0
-    [summary] = client.get("/api/opportunities").json()
+    [summary] = client.get("/api/opportunities").json()["items"]
     assert summary["eligibility_status"] is None
     assert client.post(f"/api/opportunities/{created['id']}/evaluate").status_code == 409
 
@@ -271,7 +271,7 @@ def test_list_shows_latest_status_and_tracking(client: TestClient) -> None:
     second = create(client, title="Second Synthetic", requirements_assessment_status="complete")
     client.put(f"/api/opportunities/{first['id']}/application", json={"status": "saved"})
 
-    listed = {o["title"]: o for o in client.get("/api/opportunities").json()}
+    listed = {o["title"]: o for o in client.get("/api/opportunities").json()["items"]}
 
     assert listed["First Synthetic"]["eligibility_status"] == "needs_verification"
     assert listed["First Synthetic"]["application_status"] == "saved"
@@ -288,11 +288,19 @@ def test_list_shows_latest_status_and_tracking(client: TestClient) -> None:
         "remote_mode",
         "application_deadline",
         "start_date",
+        "posted_at",
+        "first_seen_at",
         "requirements_assessment_status",
         "eligibility_status",
         "evaluated_at",
         "application_status",
+        "origin",
+        "availability",
+        "source_names",
     }
+    assert listed["First Synthetic"]["origin"] == "manual"
+    assert listed["First Synthetic"]["availability"] == "manual"
+    assert listed["First Synthetic"]["source_names"] == ["Manual entry"]
 
 
 def test_list_uses_the_latest_evaluation(client: TestClient) -> None:
@@ -302,7 +310,7 @@ def test_list_uses_the_latest_evaluation(client: TestClient) -> None:
 
     put_profile(client, citizenships=["US"])
 
-    [summary] = client.get("/api/opportunities").json()
+    [summary] = client.get("/api/opportunities").json()["items"]
     assert summary["eligibility_status"] == "eligible"
 
 
