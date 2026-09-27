@@ -3,9 +3,9 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-09-27
-Current Milestone: **Milestone 2 — Private Single-User Workflow MVP**, implemented on `feature/private-workflow-mvp`, **awaiting review** (not merged). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Milestone: **Milestone 2 — Private Single-User Workflow MVP**, complete; merged via [PR #5](https://github.com/dude297/internship-finder/pull/5). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
 Current Production Version: None (not deployed)
-Active Development Branch: `feature/private-workflow-mvp`. Remote: https://github.com/dude297/internship-finder
+Active Development Branch: None. Remote: https://github.com/dude297/internship-finder
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Review Milestone 2 (private single-user workflow MVP). Do not start Milestone 3 until it's reviewed and merged.
+Plan Milestone 3 — opportunity discovery and ingestion.
 
 ## Status Summary
 
@@ -55,7 +55,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 - Engineering documentation framework and ADR-001 through ADR-005.
 - Milestone 0: Development Foundation ([PR #2](https://github.com/dude297/internship-finder/pull/2)): React/Vite/TypeScript/Tailwind scaffold, FastAPI `GET /api/health`, lint/format/typecheck/test/build tooling, SQLAlchemy/Alembic baseline, CI.
 - Milestone 1: Core Domain, Persistence, and Eligibility v1 ([PR #4](https://github.com/dude297/internship-finder/pull/4)): schema `3b9c6b57bb60`, profile and opportunity provenance, structured requirements, temporal education resolver, eligibility v1 (ELIG-REQ-000, ELIG-AGE-001, ELIG-EDU-001, ELIG-CIT-001, ELIG-REQ-001), requirement assessment state, evaluation history, PostgreSQL CI.
-- Milestone 2: Private Single-User Workflow MVP (`feature/private-workflow-mvp`, awaiting review):
+- Milestone 2: Private Single-User Workflow MVP ([PR #5](https://github.com/dude297/internship-finder/pull/5)):
   - single-user authentication ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md)): Argon2id, CLI-only owner bootstrap and password rotation, no registration
   - server-side sessions (only the SHA-256 of the token stored) in an HttpOnly, `SameSite=Lax`, `Secure`-by-default cookie
   - CSRF protection (HMAC-derived token, `X-CSRF-Token` on every unsafe private request)
@@ -80,7 +80,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 
 ## In Progress
 
-Milestone 2 review.
+Nothing. Milestone 3 has not started.
 
 ## Known Bugs
 
@@ -137,7 +137,7 @@ None (manual entry only, recorded as `manual` source records). Planned sources a
 
 ## Next Planned Task
 
-Review and merge Milestone 2. Proposed afterwards: **Milestone 3 — opportunity discovery/ingestion** (first structured sources through the shared ingestion pipeline, feeding the private app). Not started.
+Plan **Milestone 3 — opportunity discovery/ingestion** (first structured sources through the shared ingestion pipeline, feeding the private app). Not started.
 
 ## Recent Important Decisions
 
