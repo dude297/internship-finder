@@ -2,34 +2,51 @@
 
 ## Local Setup
 
-The repository has two independently runnable apps: `frontend/` (Node) and `backend/` (Python). There's no monorepo tool. Run each app's commands from its own directory.
+The repository has two independently runnable apps, `frontend/` (Node) and `backend/` (Python), plus a local-only PostgreSQL in `compose.yaml`. There's no monorepo tool. Run each app's commands from its own directory.
 
 ### Prerequisites
 
 - Node.js 24 with npm (tested with Node 24.15, npm 11.16)
 - Python 3.12 or newer (`requires-python = ">=3.12"` in `backend/pyproject.toml`; tested with 3.12)
+- Docker with Compose (tested with Docker 29.7), for the local PostgreSQL 18. Any other PostgreSQL works too.
 
-### Frontend (`frontend/`)
+### Run the private app locally
 
-```bash
-cd frontend
-npm install
-cp .env.example .env.local   # optional: dev falls back to http://localhost:8000
-npm run dev                  # http://localhost:5173
-```
-
-### Backend (`backend/`)
+Verified on 2026-09-27 (Windows, Git Bash, existing venv and `node_modules`): `docker compose up -d`, `alembic upgrade head`, uvicorn, `npm run dev`, and requests through the Vite proxy. Owner creation was exercised through `--password-stdin` (E2E setup and CLI tests); the interactive `getpass` prompt is covered by a CLI test with `getpass` stubbed.
 
 ```bash
+# 1. Database: PostgreSQL 18 on 127.0.0.1:5432 with local-only placeholder credentials.
+#    Your data lives in the `pgdata` Docker volume, never in the repository.
+docker compose up -d
+
+# 2. Backend (first terminal)
 cd backend
 python -m venv .venv
-source .venv/bin/activate     # Windows (PowerShell): .venv\Scripts\Activate.ps1
+source .venv/bin/activate          # Windows (PowerShell): .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-cp .env.example .env          # optional: defaults work for local dev
-uvicorn app.main:app --reload # http://localhost:8000, health at /api/health
+cp .env.example .env               # DATABASE_URL points at the Compose database
+alembic upgrade head
+python -m app.cli create-owner --username <your-username>   # prompts for the password twice
+uvicorn app.main:app --reload      # http://localhost:8000
+
+# 3. Frontend (second terminal)
+cd frontend
+npm install
+npm run dev                        # http://localhost:5173 (proxies /api to :8000)
 ```
 
-`DATABASE_URL` is **not** needed to run the backend or its tests. Only Alembic and database code use it.
+Open http://localhost:5173, log in, and fill in your profile. Your real profile and applications are entered only through the app and stay in the local database.
+
+- The password is read with `getpass`: it isn't echoed, printed, or saved in shell history. Never pass it as a command-line argument. The minimum length is 12.
+- `create-owner` refuses if an owner already exists. To change the password: `python -m app.cli set-password --username <your-username>` (this also logs out every session).
+- There is no registration page and no password-reset email. Losing the password means running `set-password` on the machine with the database.
+- Stop the database with `docker compose stop`. `docker compose down -v` **deletes** the volume and all your data.
+
+### Same-origin development
+
+The browser only talks to the Vite dev server. Vite proxies `/api/*` to `http://localhost:8000` (`frontend/vite.config.ts`), so the session cookie is same-origin and the backend needs no CORS. The backend deliberately sends no CORS headers ([ADR-007 §6](decisions/ADR-007-single-user-auth-and-private-api.md#6-same-origin-api)). `vite preview` has the same proxy.
+
+The session cookie is `Secure` by default. Chrome and Firefox accept Secure cookies on `http://localhost`, so local development works without changes. Set `SESSION_COOKIE_SECURE=false` in `backend/.env` only if you use plain HTTP on a different host name.
 
 ### Commands
 
@@ -45,45 +62,66 @@ These commands have all been run successfully in this repository.
 | Typecheck | `pyright` (strict) | `npm run typecheck` (`tsc -b`, strict) |
 | Unit tests | `pytest -m "not postgres"` | `npm test` (Vitest + React Testing Library) |
 | PostgreSQL tests | `pytest -m postgres` (needs `TEST_DATABASE_URL`, see below) | — |
+| End-to-end | — | `npm run test:e2e` (Playwright, needs `E2E_DATABASE_URL`, see below) |
 | Build | — | `npm run build` (output in `frontend/dist/`) |
 | Migrations | see [Migrations Workflow](#migrations-workflow) | — |
+| Owner account | `python -m app.cli create-owner` / `set-password` | — |
 
-Not set up yet: Playwright end-to-end tests.
+### Test boundary: unit vs PostgreSQL vs end-to-end
 
-### Test boundary: unit vs PostgreSQL
-
-- **Unit tests** (education resolver, eligibility rules, config, health) are pure and need no database.
-- **PostgreSQL tests** (`@pytest.mark.postgres`: models, constraints, repositories, migrations) run against a real, disposable PostgreSQL database named by `TEST_DATABASE_URL`. The session fixture migrates it to head, each test runs in a rolled-back transaction, and `tests/test_migrations.py` downgrades to base and upgrades again. Never point `TEST_DATABASE_URL` at a database whose data you want to keep.
+- **Unit tests** (education resolver, eligibility rules, password hashing, CSRF, throttle, config, health) are pure and need no database.
+- **PostgreSQL tests** (`@pytest.mark.postgres`: models, constraints, repositories, migrations, the owner CLI, and the whole HTTP API through FastAPI's `TestClient`) run against a real, disposable PostgreSQL database named by `TEST_DATABASE_URL`. The session fixture migrates it to head, each test runs in a rolled-back transaction (the API's commits become savepoints), and `tests/test_migrations.py` steps down through the Milestone 1 revision to base and back up. Never point `TEST_DATABASE_URL` at a database whose data you want to keep.
+- **Frontend component tests** stub `fetch`, so they need no backend.
+- **End-to-end tests** (`frontend/e2e/`) run the real stack in Chromium against a disposable database named by `E2E_DATABASE_URL`.
 - SQLite is **not** used. Constraint, timezone, and foreign-key behavior differ enough that SQLite tests would be misleading.
 - Without `TEST_DATABASE_URL`, PostgreSQL tests are skipped locally. In CI (`CI=true`) they fail instead of skipping.
+- All test data and credentials are synthetic.
 
-Local PostgreSQL with Docker (optional, disposable, test-only credentials):
+Test databases on the Compose server (disposable, separate from your `internship_finder` database):
+
+```bash
+docker compose exec postgres psql -U internship_finder -c "CREATE DATABASE internship_finder_test"
+docker compose exec postgres psql -U internship_finder -c "CREATE DATABASE internship_finder_e2e"
+export TEST_DATABASE_URL=postgresql+psycopg://internship_finder:local-dev-only@127.0.0.1:5432/internship_finder_test
+pytest                      # unit + PostgreSQL tests (in backend/)
+```
+
+Or a throwaway container:
 
 ```bash
 docker run -d --rm --name if-test-pg -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test \
   -e POSTGRES_DB=internship_finder_test -p 127.0.0.1:5433:5432 postgres:18
 export TEST_DATABASE_URL=postgresql+psycopg://test:test@127.0.0.1:5433/internship_finder_test
-pytest                      # unit + PostgreSQL tests
-docker stop if-test-pg      # the container and its data are removed
 ```
 
-### Local frontend ↔ backend integration
+### End-to-end tests (Playwright)
 
-1. Start the backend: `uvicorn app.main:app --reload` (port 8000).
-2. Start the frontend: `npm run dev` (port 5173).
-3. Open http://localhost:5173. "Backend status" should read **Healthy**. If the backend is stopped, it reads **Unavailable** with the error instead.
+```bash
+cd frontend
+npx playwright install chromium    # once
+export E2E_DATABASE_URL=postgresql+psycopg://internship_finder:local-dev-only@127.0.0.1:5432/internship_finder_e2e
+npm run test:e2e
+```
 
-CORS allows only `FRONTEND_ORIGIN` (default `http://localhost:5173`). If you run the frontend on another port, set `FRONTEND_ORIGIN` in `backend/.env`.
+`playwright.config.ts` starts uvicorn on :8000 (with `DATABASE_URL=$E2E_DATABASE_URL`) and Vite on :5173, so stop your own dev servers first. The global setup runs `alembic upgrade head` and creates the synthetic owner (`e2e-synthetic-owner`) through the CLI with `--password-stdin`, or resets its password if an earlier run created it. `E2E_DATABASE_URL` has no default, so the tests can't touch your development database by accident. Set `E2E_PYTHON` if the backend virtualenv isn't `backend/.venv`.
+
+The scenario (`e2e/workflow.spec.ts`): a wrong password is rejected; log in; create the profile; add a manual opportunity with a minimum-age and an incoming-undergraduate requirement, marked complete; see **Eligible** with the projected-status notice; change the date of birth and see **Ineligible** after automatic re-evaluation; track the application as Applied with a date and notes; log out; confirm the UI redirects and the API returns `401`; log back in and confirm everything persisted. Failure traces and screenshots go to `frontend/test-results/` (gitignored).
 
 ### Environment variables
 
 | Variable | App | Exposure | Required | Purpose |
 |---|---|---|---|---|
-| `VITE_API_BASE_URL` | frontend | **Public** (compiled into the browser bundle) | Production builds only (dev falls back to `http://localhost:8000`) | Backend base URL |
-| `FRONTEND_ORIGIN` | backend | Server-only | No (default `http://localhost:5173`) | The single origin allowed by CORS. `*` is rejected. |
-| `DATABASE_URL` | backend | Server-only, secret | No, not for the health-only scaffold | SQLAlchemy URL (`postgresql+psycopg://…`) for Alembic/database code |
+| `DATABASE_URL` | backend | Server-only, secret in real deployments | For the private API, the owner CLI, and Alembic (not for `/api/health`) | SQLAlchemy URL (`postgresql+psycopg://…`). `backend/.env.example` points at the Compose database |
+| `SESSION_TTL_HOURS` | backend | Server-only | No (default `24`, 1–720) | Absolute session lifetime |
+| `SESSION_COOKIE_SECURE` | backend | Server-only | No (default `true`) | `Secure` cookie attribute. Only set `false` for plain-HTTP development on a non-localhost host |
+| `TEST_DATABASE_URL` | backend tests | Local/CI only | For PostgreSQL tests | Disposable test database |
+| `E2E_DATABASE_URL` | Playwright | Local/CI only | For `npm run test:e2e` | Disposable E2E database |
+| `E2E_OWNER_USERNAME`, `E2E_OWNER_PASSWORD` | Playwright | Local/CI only, synthetic | No (synthetic defaults) | The throwaway owner the E2E test logs in as |
+| `E2E_PYTHON` | Playwright | Local only | No | Backend Python executable |
 
-Examples are in `frontend/.env.example` and `backend/.env.example`. Never commit `.env` files.
+The frontend has **no** environment variables: it calls relative `/api` URLs. (`VITE_API_BASE_URL` and the backend's `FRONTEND_ORIGIN` were removed in Milestone 2.) There's no cookie-signing secret because sessions are opaque database rows.
+
+The example is `backend/.env.example`. Never commit `.env` files.
 
 Backend tests ignore `backend/.env` and any of these variables set in your shell (`backend/tests/conftest.py`), so they run against defaults. Tests that need a value set it explicitly.
 
@@ -106,7 +144,8 @@ GitHub Actions, within included free usage only. No paid runners, scheduled jobs
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and on every pull request:
 
 - Frontend (Node 24): `npm ci`, lint, format check, typecheck, tests, build
-- Backend (Python 3.12): install, `ruff check`, `ruff format --check`, `pyright`, unit tests, then against an ephemeral PostgreSQL 18 service container (test-only credentials in the workflow, not secrets): `alembic upgrade head`, `alembic check` (models match migrations), `alembic downgrade base`, `alembic upgrade head`, and the PostgreSQL tests
+- Backend (Python 3.12): install, `ruff check`, `ruff format --check`, `pyright`, unit tests, then against an ephemeral PostgreSQL 18 service container (test-only credentials in the workflow, not secrets): `alembic upgrade head`, `alembic check` (models match migrations), `alembic downgrade base`, `alembic upgrade head`, and the PostgreSQL tests (including the API and CLI)
+- E2E: its own ephemeral PostgreSQL 18, backend install, `npm ci`, Playwright Chromium, and `npx playwright test` with synthetic, clearly labeled test-only owner credentials in the workflow `env` (no repository secrets). On failure it uploads the Playwright report and traces (synthetic data only) for 7 days
 
 Planned later: docs checks where practical.
 
@@ -114,14 +153,15 @@ Planned later: docs checks where practical.
 
 - Unit tests for core logic (eligibility, scoring, normalization, dedupe, ranking, parsing), independent of the UI. These are Pytest tests in the backend.
 - Eligibility tests cover temporal boundaries (before/after expected graduation and enrollment dates).
-- Integration tests for DB, ingestion, API routes, and authorization.
+- Integration tests for DB, ingestion, API routes, and authorization (`tests/test_api_*.py`, `tests/test_cli.py`).
+- Playwright end-to-end tests for the critical private workflow (`frontend/e2e/`).
 - Bug fixes add regression tests where reasonable.
 
 See [ENGINEERING_GUIDELINES.md §12](../ENGINEERING_GUIDELINES.md#12-testing-standards).
 
 ## Migrations Workflow
 
-Alembic is set up in `backend/`. The first migration is `3b9c6b57bb60` (initial core domain schema). `alembic/env.py` uses `sqlalchemy.url` if it's set programmatically (the tests do this), otherwise `DATABASE_URL` from app settings. The autogenerate target is `app.models.Base.metadata`. Add new model modules to `app/models/__init__.py` so autogenerate sees them. Enum columns autogenerate duplicate CHECK constraints: keep one named `ck_…` constraint per enum and set `create_constraint=False` on the `sa.Enum` (see the initial migration).
+Alembic is set up in `backend/`. Migrations: `3b9c6b57bb60` (initial core domain schema, Milestone 1, merged and **immutable**: never edit it) and `7d7f4f8b9a3c` (auth sessions and application tracking, Milestone 2). Schema changes are new revisions. `alembic/env.py` uses `sqlalchemy.url` if it's set programmatically (the tests do this), otherwise `DATABASE_URL` from app settings. The autogenerate target is `app.models.Base.metadata`. Add new model modules to `app/models/__init__.py` so autogenerate sees them. Enum columns autogenerate duplicate CHECK constraints: keep one named `ck_…` constraint per enum and set `create_constraint=False` on the `sa.Enum` (see the initial migration).
 
 From `backend/` with the venv active and `DATABASE_URL` set:
 
@@ -134,7 +174,7 @@ alembic current                                       # show the applied revisio
 alembic check                                         # fail if models and migrations differ
 ```
 
-Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade base`, `upgrade head`. Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. No hosted database is provisioned yet. Rules:
+Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade 3b9c6b57bb60`, `downgrade base`, `upgrade head`, `check` (CI skips the intermediate downgrade; `tests/test_migrations.py` covers it). Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. No hosted database is provisioned yet. Rules:
 
 - every schema change is an Alembic migration, committed with the code that needs it
 - update [data-model.md](data-model.md) in the same change

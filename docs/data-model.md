@@ -2,7 +2,14 @@
 
 ## Current Database State
 
-The schema is created by one Alembic migration: **`3b9c6b57bb60` (initial core domain schema)**, in `backend/alembic/versions/`. The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md). The migration is verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests). No hosted database is provisioned (Neon is selected, [ADR-004](decisions/ADR-004-technology-stack.md)).
+The schema is created by two Alembic migrations in `backend/alembic/versions/`:
+
+| Revision | Milestone | Tables |
+|---|---|---|
+| `3b9c6b57bb60` (initial core domain schema) | 1 (merged, **immutable**) | `profiles`, `profile_sources`, `profile_facts`, `opportunities`, `opportunity_source_records`, `opportunity_requirements`, `opportunity_evaluations`, `eligibility_rule_results` |
+| `7d7f4f8b9a3c` (auth sessions and application tracking) | 2 | `auth_users`, `auth_sessions`, `applications` (additive only) |
+
+The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain) and [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication). Both migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that also step through `3b9c6b57bb60`). No hosted database is provisioned (Neon is selected, [ADR-004](decisions/ADR-004-technology-stack.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
 ORM models are in `backend/app/models/`. Shared enums are in `backend/app/enums.py`.
 
@@ -32,7 +39,7 @@ The canonical profile: user-entered or user-confirmed values. It's the only inpu
 | `expected_enrollment_date` | date, null | Enters the future level on this date |
 | `expected_future_education_level` | enum, null | |
 | `date_of_birth` | date, null | |
-| `citizenships` | json list of ISO 3166-1 alpha-2 codes, null | NULL = not provided |
+| `citizenships` | json list of ISO 3166-1 alpha-2 codes, null | NULL = not provided. The API accepts only the 249 officially assigned codes (e.g. `GB`, not `UK`) |
 | `work_authorizations` | json list of country codes, null | Stored; no v1 rule uses it |
 | `location` | varchar(200), null | |
 | `created_at`, `updated_at` | timestamptz | |
@@ -124,7 +131,7 @@ Structured hard requirements.
 | `minimum_age` | `{"years": int}` | `{"years": 16}` |
 | `education` | `{"levels": [level, …], "accepts_incoming": bool}` | `{"levels": ["undergraduate"], "accepts_incoming": true}` |
 | `citizenship` | `{"countries": [ISO alpha-2, …]}` | `{"countries": ["US"]}` |
-| `work_authorization`, `other` | free-form | not evaluated by v1 (`needs_verification`) |
+| `work_authorization`, `other` | free-form object; the UI writes `{"description": str}` | not evaluated by v1 (`needs_verification`) |
 
 ### `opportunity_evaluations`
 
@@ -157,10 +164,47 @@ The explanation of an evaluation: one ELIG-REQ-000 row for the requirement asses
 | `depends_on_projected_status` | boolean | |
 | `details` | json, null | Structured inputs/outputs (e.g. age, projected phase) |
 
+### `auth_users`
+
+The single owner account ([ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md)). Created only by `python -m app.cli create-owner`; there is no registration endpoint.
+
+| Column | Type | Notes |
+|---|---|---|
+| `username` | varchar(64), UNIQUE | 3–64 of letters, digits, `_`, `.`, `-` (CLI-validated) |
+| `password_hash` | varchar(255) | Argon2id PHC string (pwdlib). Never the password |
+| `is_active` | boolean, default true | Inactive users can't log in, and their sessions stop working |
+| `created_at`, `updated_at` | timestamptz | |
+
+No email, name, or phone.
+
+### `auth_sessions`
+
+Server-side login sessions. The browser holds the opaque random token (cookie `if_session`); the database stores only its SHA-256.
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | FK → `auth_users`, cascade | Indexed |
+| `token_hash` | varchar(64), UNIQUE | `sha256(token)` hex. The raw token is never stored |
+| `created_at` | timestamptz | |
+| `expires_at` | timestamptz | Absolute expiry (`SESSION_TTL_HOURS`) |
+
+Logout deletes the row. Login deletes the user's expired sessions and the browser's previous session. `set-password` deletes all of the user's sessions. The CSRF token is derived from the session token (HMAC), so it isn't stored.
+
+### `applications`
+
+The owner's application tracking. Private runtime data; never read by eligibility.
+
+| Column | Type | Notes |
+|---|---|---|
+| `opportunity_id` | FK → `opportunities`, cascade, UNIQUE | Single-user: at most one tracking row per opportunity (the "profile + opportunity" pair, since there is one profile) |
+| `status` | enum `saved` / `applying` / `applied` / `interview` / `offer` / `accepted` / `rejected` / `withdrawn` | Any status may follow any other (no transition rules) |
+| `submitted_on` | date, null | When the application was submitted |
+| `notes` | text, null | Private notes |
+| `created_at`, `updated_at` | timestamptz | |
+
 ## Not Yet Modeled
 
 - Source metadata / ingestion runs (with source collectors)
-- Application state (with the application workflow)
 - Fit-scoring columns (with scoring v1)
 - Profile preferences, remote preference, availability windows (fit inputs, with scoring)
 
@@ -170,7 +214,14 @@ The explanation of an evaluation: one ELIG-REQ-000 row for the requirement asses
 - Every `profile_facts` row records its source kind and extraction method. AI-inferred facts must name the extractor and default to unverified.
 - Hard eligibility reads only canonical `profiles` columns.
 
-Design rules from [ENGINEERING_GUIDELINES.md §6](../ENGINEERING_GUIDELINES.md#6-database-standards) apply. Authorization is enforced in the FastAPI backend (no profile API exists yet).
+Design rules from [ENGINEERING_GUIDELINES.md §6](../ENGINEERING_GUIDELINES.md#6-database-standards) apply. Authorization is enforced in the FastAPI backend by one dependency on every private route ([ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md)).
+
+## How the Private API Writes
+
+- The API keeps exactly one `profiles` row (created by the first `PUT /api/profile`).
+- A manually created opportunity always gets one `opportunity_source_records` row: `source_type = manual`, `source_name = manual`, no `external_id`, no raw payload.
+- Requirement rows written by the API have `extraction_method = manual`. An opportunity update replaces the complete requirement set: old rows are deleted, and past `eligibility_rule_results` keep their text with `requirement_id` set to NULL.
+- Every opportunity create/update, and every eligibility-relevant profile change, appends `opportunity_evaluations` rows (history) when a profile exists. Nothing is overwritten.
 
 ## Keeping This File in Sync
 
