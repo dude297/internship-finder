@@ -1,8 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { backendDir, e2eDatabaseUrl, owner, python } from './env.ts'
+import { writeFileSync } from 'node:fs'
+import { backendDir, e2eDatabaseUrl, ingestionFixtureFile, owner, python } from './env.ts'
 
-/** Migrate the disposable database and make sure the synthetic owner exists. */
+/** Migrate the disposable database, make sure the synthetic owner exists, and start with no
+ * synthetic source responses (every source URL answers 404 until a test writes one). */
 export default function globalSetup() {
+  writeFileSync(ingestionFixtureFile, '{}', 'utf-8')
   const options = {
     cwd: backendDir,
     env: { ...process.env, DATABASE_URL: e2eDatabaseUrl() },

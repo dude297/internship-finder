@@ -1,3 +1,4 @@
+import os from 'node:os'
 import path from 'node:path'
 
 // End-to-end settings. Everything here is synthetic and test-only: the database is disposable
@@ -28,3 +29,13 @@ export function e2eDatabaseUrl(): string {
   }
   return url
 }
+
+/**
+ * Synthetic source responses for the ingestion scenario ({url: body}). The backend reads it
+ * through the test-only INGESTION_FIXTURE_FILE setting instead of the network, so E2E never
+ * calls a real job board.
+ */
+export const ingestionFixtureFile = path.join(
+  os.tmpdir(),
+  'internship-finder-e2e-source-responses.json',
+)

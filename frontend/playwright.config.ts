@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
-import { backendDir, e2eDatabaseUrl, python } from './e2e/env.ts'
+import { backendDir, e2eDatabaseUrl, ingestionFixtureFile, python } from './e2e/env.ts'
 
 // Runs the real stack: FastAPI on :8000, Vite on :5173 proxying /api, and Chromium.
 // Needs E2E_DATABASE_URL (a disposable PostgreSQL database). All data is synthetic.
@@ -20,7 +20,12 @@ export default defineConfig({
       command: `"${python}" -m uvicorn app.main:app --port 8000`,
       cwd: backendDir,
       url: 'http://localhost:8000/api/health',
-      env: { ...process.env, DATABASE_URL: e2eDatabaseUrl() } as Record<string, string>,
+      env: {
+        ...process.env,
+        DATABASE_URL: e2eDatabaseUrl(),
+        // Ingestion reads synthetic responses from this file; it never touches the network.
+        INGESTION_FIXTURE_FILE: ingestionFixtureFile,
+      } as Record<string, string>,
       reuseExistingServer: false,
     },
     {
