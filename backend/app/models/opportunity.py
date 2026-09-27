@@ -8,10 +8,12 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
     func,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +30,7 @@ from app.enums import (
 
 if TYPE_CHECKING:
     from app.models.application import Application
+    from app.models.ingestion import IngestionSource
 
 
 def _seen_at() -> Mapped[datetime]:
@@ -66,8 +69,17 @@ class Opportunity(IdMixin, TimestampMixin, Base):
     )
     first_seen_at: Mapped[datetime] = _seen_at()
     last_seen_at: Mapped[datetime] = _seen_at()
+    # When the source says the posting was published (never an ATS "updated" time). Discovery
+    # sorting only; eligibility doesn't read it.
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    # Set when the owner creates or edits it through the API. Sync never overwrites the canonical
+    # fields or requirements of a curated opportunity (ADR-008 §8).
+    manually_curated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     source_records: Mapped[list["OpportunitySourceRecord"]] = relationship(
+        back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
+    )
+    identifiers: Mapped[list["OpportunityIdentifier"]] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
     )
     requirements: Mapped[list["OpportunityRequirement"]] = relationship(
@@ -86,6 +98,15 @@ class OpportunitySourceRecord(IdMixin, Base):
         # NULL external IDs don't collide (SQL NULLs are distinct), so ID-less sources still fit.
         UniqueConstraint("source_name", "external_id"),
         CheckConstraint("last_seen_at >= first_seen_at", name="last_seen_not_before_first"),
+        CheckConstraint("is_active = (closed_at IS NULL)", name="closed_iff_inactive"),
+        CheckConstraint(
+            "content_hash IS NULL OR length(content_hash) = 64", name="content_hash_length"
+        ),
+        Index(
+            "ix_opportunity_source_records_ingestion_source_id_is_active",
+            "ingestion_source_id",
+            "is_active",
+        ),
     )
 
     opportunity_id: Mapped[uuid.UUID] = mapped_column(
@@ -101,8 +122,39 @@ class OpportunitySourceRecord(IdMixin, Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     first_seen_at: Mapped[datetime] = _seen_at()
     last_seen_at: Mapped[datetime] = _seen_at()
+    # Automated records only (NULL for manual provenance). Sources are never deleted.
+    ingestion_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ingestion_sources.id")
+    )
+    # Present in the source's latest complete successful snapshot. Closed records are kept.
+    is_active: Mapped[bool] = mapped_column(default=True, server_default=true())
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SHA-256 of the normalized item (raw payload included): unchanged items skip all writes
+    # except last-seen.
+    content_hash: Mapped[str | None] = mapped_column(String(64))
 
     opportunity: Mapped[Opportunity] = relationship(back_populates="source_records")
+    ingestion_source: Mapped["IngestionSource | None"] = relationship()
+
+
+class OpportunityIdentifier(IdMixin, Base):
+    """A deterministic identity of a canonical opportunity, shared across sources (ADR-008 §6).
+    Unique per (namespace, value), so two opportunities can never claim the same identity."""
+
+    __tablename__ = "opportunity_identifiers"
+    __table_args__ = (UniqueConstraint("namespace", "value"),)
+
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    namespace: Mapped[str] = mapped_column(String(32))
+    # Bounded so the unique btree entry stays well under PostgreSQL's index row limit.
+    value: Mapped[str] = mapped_column(String(1024))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    opportunity: Mapped[Opportunity] = relationship(back_populates="identifiers")
 
 
 class OpportunityRequirement(IdMixin, TimestampMixin, Base):

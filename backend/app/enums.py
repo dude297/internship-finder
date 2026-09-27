@@ -122,3 +122,34 @@ class ApplicationStatus(StrEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
     WITHDRAWN = "withdrawn"
+
+
+class IngestionSourceKind(StrEnum):
+    """Automated source types (ADR-008). Each kind has one adapter with hard-coded hosts."""
+
+    COMMUNITY_FEED = "community_feed"
+    GREENHOUSE = "greenhouse"
+    LEVER = "lever"
+
+
+class SourceRegion(StrEnum):
+    """Lever hosts postings on a global and an EU API."""
+
+    GLOBAL = "global"
+    EU = "eu"
+
+
+class IngestionRunStatus(StrEnum):
+    RUNNING = "running"
+    SUCCESS = "success"  # complete snapshot, every item processed
+    PARTIAL = "partial"  # some items failed; unseen records are not closed
+    FAILED = "failed"  # nothing usable fetched; nothing changed
+    NO_CHANGE = "no_change"  # HTTP 304
+
+
+class IngestionStage(StrEnum):
+    FETCH = "fetch"
+    VALIDATE = "validate"
+    NORMALIZE = "normalize"
+    IDENTIFY = "identify"
+    PERSIST = "persist"
