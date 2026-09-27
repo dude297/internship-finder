@@ -177,10 +177,26 @@ def test_deleting_a_profile_removes_its_private_data(db: Session) -> None:
     [
         {"education_status_as_of": None},  # level without an as-of date
         {"expected_enrollment_date": date(2041, 1, 1)},  # enrollment before graduation
+        # Current level recorded after, or on, the expected graduation (bypassing Pydantic).
+        {"education_status_as_of": date(2041, 9, 1)},
+        {"education_status_as_of": date(2041, 6, 10)},
     ],
 )
 def test_profile_check_constraints(db: Session, changes: dict[str, Any]) -> None:
     assert_rejected(db, make_profile(**changes))
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"education_status_as_of": date(2041, 6, 9)},  # the day before graduation
+        {"expected_graduation_date": None, "expected_enrollment_date": None},
+        {"current_education_level": None, "education_status_as_of": None},
+    ],
+)
+def test_profile_timeline_boundaries_are_accepted(db: Session, changes: dict[str, Any]) -> None:
+    db.add(make_profile(**changes))
+    db.flush()
 
 
 @pytest.mark.parametrize(

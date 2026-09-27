@@ -38,6 +38,12 @@ class ProfileBody(BaseModel):
             and self.expected_enrollment_date < self.expected_graduation_date
         ):
             raise ValueError("expected_enrollment_date can't be before expected_graduation_date")
+        if (
+            self.expected_graduation_date
+            and self.education_status_as_of
+            and self.expected_graduation_date <= self.education_status_as_of
+        ):
+            raise ValueError("expected_graduation_date must be after education_status_as_of")
         if self.date_of_birth and self.date_of_birth > datetime.now(UTC).date():
             raise ValueError("date_of_birth can't be in the future")
         return self

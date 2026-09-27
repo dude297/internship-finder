@@ -33,6 +33,13 @@ class Profile(IdMixin, TimestampMixin, Base):
             " OR expected_enrollment_date >= expected_graduation_date",
             name="enrollment_not_before_graduation",
         ),
+        # The transition takes effect on the graduation date, so a current level recorded on or
+        # after it would claim both the pre- and post-graduation state (Milestone 2).
+        CheckConstraint(
+            "expected_graduation_date IS NULL OR education_status_as_of IS NULL"
+            " OR expected_graduation_date > education_status_as_of",
+            name="graduation_after_status_as_of",
+        ),
     )
 
     # Time-aware education status (ADR-005). See app.profile.education for the projection.
