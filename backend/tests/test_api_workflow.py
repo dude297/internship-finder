@@ -394,7 +394,7 @@ def test_failed_evaluation_leaves_no_partial_opportunity(
     def fail(*_: object) -> None:
         raise RuntimeError("synthetic evaluation failure")
 
-    monkeypatch.setattr(opportunity_service, "evaluate_and_save", fail)
+    monkeypatch.setattr(opportunity_service, "evaluate_if_changed", fail)
     client_no_raise = TestClient(
         client.app, base_url="https://testserver", raise_server_exceptions=False
     )

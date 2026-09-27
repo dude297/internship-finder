@@ -1,0 +1,442 @@
+"""The shared ingestion pipeline (ADR-002, ADR-008): the only code that writes imported data.
+
+    fetch → validate → normalize (adapter) → identify → upsert → evaluate → close → run summary
+
+Transactions: the `running` run is committed first (a per-source guard), the fetch happens
+outside any transaction, every item is written in its own savepoint, and the run is finalized
+and committed at the end. A failed or partial run never closes unseen records.
+"""
+
+import logging
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+
+import httpx2
+from sqlalchemy import select, tuple_, update
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, defer
+
+from app.enums import IngestionRunStatus, IngestionStage
+from app.ingestion.adapters import SourceConfig, adapter_for
+from app.ingestion.http import FetchError, fetch_json
+from app.ingestion.normalize import ItemError, NormalizedOpportunity, SnapshotError
+from app.models import (
+    IngestionRun,
+    IngestionRunError,
+    IngestionSource,
+    Opportunity,
+    OpportunityIdentifier,
+    OpportunitySourceRecord,
+    Profile,
+)
+from app.repositories import evaluate_and_save, evaluate_if_changed, get_profile
+
+logger = logging.getLogger(__name__)
+
+MAX_STORED_ERRORS = 100
+# A run still `running` after this long was interrupted (e.g. the process stopped).
+ABANDONED_AFTER = timedelta(minutes=15)
+
+
+class SyncInProgress(Exception):
+    """Another sync of the same source is running."""
+
+
+class IdentityConflict(Exception):
+    """The item's identifiers point at more than one canonical opportunity (ADR-008 §7)."""
+
+
+@dataclass
+class _Outcome:
+    created: bool = False
+    updated: bool = False
+    deduplicated: bool = False
+    reactivated: bool = False
+
+
+def _add_error(
+    run: IngestionRun,
+    stage: IngestionStage,
+    code: str,
+    message: str,
+    external_id: str | None = None,
+) -> None:
+    if len(run.errors) < MAX_STORED_ERRORS:
+        run.errors.append(
+            IngestionRunError(
+                stage=stage, code=code[:50], message=message[:500], external_id=external_id
+            )
+        )
+
+
+def _start_run(db: Session, source: IngestionSource, now: datetime) -> IngestionRun:
+    running = db.scalars(
+        select(IngestionRun).where(
+            IngestionRun.source_id == source.id,
+            IngestionRun.status == IngestionRunStatus.RUNNING,
+        )
+    ).all()
+    for stale in running:
+        if now - stale.started_at < ABANDONED_AFTER:
+            raise SyncInProgress(f"{source.display_name} is already syncing.")
+        stale.status = IngestionRunStatus.FAILED
+        stale.finished_at = now
+        stale.error_summary = "The run was interrupted before it finished."
+    run = IngestionRun(source=source, status=IngestionRunStatus.RUNNING, started_at=now)
+    source.last_attempted_at = now
+    db.add(run)
+    db.commit()
+    return run
+
+
+def _finish(db: Session, run: IngestionRun, status: IngestionRunStatus) -> IngestionRun:
+    run.status = status
+    run.finished_at = datetime.now(UTC)
+    db.commit()
+    logger.info(
+        "ingestion run source=%s status=%s fetched=%d created=%d updated=%d deduplicated=%d"
+        " unchanged=%d closed=%d reactivated=%d invalid=%d errors=%d",
+        run.source.key,
+        status.value,
+        run.fetched_count,
+        run.created_count,
+        run.updated_count,
+        run.deduplicated_count,
+        run.unchanged_count,
+        run.closed_count,
+        run.reactivated_count,
+        run.invalid_count,
+        run.error_count,
+    )
+    return run
+
+
+def _fail(
+    db: Session, run: IngestionRun, stage: IngestionStage, code: str, message: str
+) -> IngestionRun:
+    run.error_count += 1
+    run.error_summary = message[:500]
+    _add_error(run, stage, code, message)
+    return _finish(db, run, IngestionRunStatus.FAILED)
+
+
+def _write_canonical(opportunity: Opportunity, item: NormalizedOpportunity) -> None:
+    """Source-derived canonical fields. Never called for curated opportunities, and never touches
+    dates, requirements, or the assessment status (the owner reviews those)."""
+    opportunity.title = item.title
+    opportunity.organization = item.organization
+    opportunity.description = item.description
+    opportunity.opportunity_type = item.opportunity_type
+    opportunity.application_url = item.application_url
+    opportunity.location = item.location
+    opportunity.remote_mode = item.remote_mode
+    opportunity.posted_at = item.posted_at
+
+
+def _write_record(
+    record: OpportunitySourceRecord, item: NormalizedOpportunity, content_hash: str, now: datetime
+) -> None:
+    record.source_url = item.application_url
+    record.raw_payload = item.raw_payload
+    record.source_published_at = item.source_published_at
+    record.source_updated_at = item.source_updated_at
+    record.content_hash = content_hash
+    record.is_active = True
+    record.closed_at = None
+    record.fetched_at = now
+    record.last_seen_at = now
+
+
+def _claimed(db: Session, item: NormalizedOpportunity) -> dict[tuple[str, str], uuid.UUID]:
+    """Which of the item's identifiers already belong to an opportunity."""
+    if not item.identifiers:
+        return {}
+    keys = [(i.namespace, i.value) for i in item.identifiers]
+    rows = db.execute(
+        select(
+            OpportunityIdentifier.namespace,
+            OpportunityIdentifier.value,
+            OpportunityIdentifier.opportunity_id,
+        ).where(tuple_(OpportunityIdentifier.namespace, OpportunityIdentifier.value).in_(keys))
+    ).all()
+    return {(namespace, value): opportunity_id for namespace, value, opportunity_id in rows}
+
+
+def _register_identifiers(
+    db: Session,
+    opportunity: Opportunity,
+    item: NormalizedOpportunity,
+    claimed: dict[tuple[str, str], uuid.UUID],
+) -> None:
+    """Add the item's identifiers that nobody has claimed yet. One claimed by another
+    opportunity stays with it: identifiers never move."""
+    for identifier in item.identifiers:
+        if (identifier.namespace, identifier.value) not in claimed:
+            db.add(
+                OpportunityIdentifier(
+                    opportunity_id=opportunity.id,
+                    namespace=identifier.namespace,
+                    value=identifier.value,
+                )
+            )
+
+
+def _has_record_from(db: Session, opportunity_id: uuid.UUID, source: IngestionSource) -> bool:
+    return (
+        db.scalar(
+            select(OpportunitySourceRecord.id)
+            .where(
+                OpportunitySourceRecord.opportunity_id == opportunity_id,
+                OpportunitySourceRecord.ingestion_source_id == source.id,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _apply(
+    db: Session,
+    source: IngestionSource,
+    record: OpportunitySourceRecord | None,
+    item: NormalizedOpportunity,
+    content_hash: str,
+    now: datetime,
+    profile: Profile | None,
+) -> _Outcome:
+    outcome = _Outcome()
+    claimed = _claimed(db, item)
+
+    if record is not None:  # 1. same source, same external ID
+        outcome.reactivated = not record.is_active
+        outcome.updated = record.content_hash != content_hash
+        _write_record(record, item, content_hash, now)
+        opportunity = record.opportunity
+        opportunity.last_seen_at = now
+        _register_identifiers(db, opportunity, item, claimed)
+        if outcome.updated and opportunity.manually_curated_at is None:
+            _write_canonical(opportunity, item)
+            db.flush()
+            if profile is not None:
+                evaluate_if_changed(db, profile, opportunity)
+        db.flush()
+        return outcome
+
+    matches = set(claimed.values())
+    if len(matches) > 1:  # 3. identity conflict: never merge
+        raise IdentityConflict(
+            "Identifiers match more than one existing opportunity; nothing was merged."
+        )
+    opportunity = db.get(Opportunity, next(iter(matches))) if matches else None
+    if opportunity is not None and _has_record_from(db, opportunity.id, source):
+        # 4. One source can't hold the same posting twice: a false duplicate beats a false merge.
+        # (The claimed identifiers stay with the existing opportunity.)
+        opportunity = None
+    if opportunity is None:  # new canonical opportunity
+        opportunity = Opportunity(
+            title=item.title,
+            organization=item.organization,
+            opportunity_type=item.opportunity_type,
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+        _write_canonical(opportunity, item)
+        db.add(opportunity)
+        outcome.created = True
+    else:  # 2. deduplicated onto an existing opportunity
+        opportunity.last_seen_at = max(opportunity.last_seen_at, now)
+        outcome.deduplicated = True
+    db.flush()
+
+    new_record = OpportunitySourceRecord(
+        opportunity_id=opportunity.id,
+        ingestion_source_id=source.id,
+        source_name=source.key,
+        source_type=adapter_for(source.kind).source_type,
+        external_id=item.external_id,
+        first_seen_at=now,
+    )
+    _write_record(new_record, item, content_hash, now)
+    db.add(new_record)
+    _register_identifiers(db, opportunity, item, claimed)
+    db.flush()
+    if outcome.created and profile is not None:
+        evaluate_and_save(db, profile, opportunity)  # a new opportunity has no evaluation yet
+    return outcome
+
+
+def _process(
+    db: Session,
+    source: IngestionSource,
+    run: IngestionRun,
+    items: list[NormalizedOpportunity | ItemError],
+    now: datetime,
+) -> None:
+    existing = {
+        r.external_id: r
+        for r in db.scalars(
+            select(OpportunitySourceRecord)
+            .where(OpportunitySourceRecord.ingestion_source_id == source.id)
+            .options(defer(OpportunitySourceRecord.raw_payload))
+        )
+    }
+    profile = get_profile(db)
+    seen: set[str] = set()
+    unchanged: list[uuid.UUID] = []
+
+    for item in items:
+        if isinstance(item, ItemError):
+            run.invalid_count += 1
+            _add_error(run, IngestionStage.NORMALIZE, item.code, item.message, item.external_id)
+            continue
+        run.normalized_count += 1
+        if item.external_id in seen:
+            run.error_count += 1
+            _add_error(
+                run,
+                IngestionStage.IDENTIFY,
+                "duplicate_item",
+                "The same ID appears more than once in the snapshot.",
+                item.external_id,
+            )
+            continue
+        seen.add(item.external_id)
+
+        record = existing.get(item.external_id)
+        content_hash = item.content_hash()
+        if record is not None and record.is_active and record.content_hash == content_hash:
+            unchanged.append(record.id)
+            run.unchanged_count += 1
+            continue
+        try:
+            # begin_nested() flushes the run's counters/errors first, so rolling back this
+            # savepoint undoes only this item.
+            with db.begin_nested():
+                outcome = _apply(db, source, record, item, content_hash, now, profile)
+        except IdentityConflict as error:
+            run.error_count += 1
+            _add_error(
+                run, IngestionStage.IDENTIFY, "identity_conflict", str(error), item.external_id
+            )
+            continue
+        except SQLAlchemyError as error:
+            logger.warning(
+                "ingestion item failed source=%s item=%s error=%s",
+                source.key,
+                item.external_id,
+                type(error).__name__,
+            )
+            run.error_count += 1
+            _add_error(
+                run,
+                IngestionStage.PERSIST,
+                "persist_failed",
+                "The item couldn't be saved.",
+                item.external_id,
+            )
+            continue
+        run.created_count += outcome.created
+        run.updated_count += outcome.updated
+        run.deduplicated_count += outcome.deduplicated
+        run.reactivated_count += outcome.reactivated
+        if not (outcome.created or outcome.updated or outcome.deduplicated):
+            run.unchanged_count += 1  # only reactivated
+
+    if unchanged:  # seen again, nothing else changed: one statement instead of one per item
+        db.execute(
+            update(OpportunitySourceRecord)
+            .where(OpportunitySourceRecord.id.in_(unchanged))
+            .values(last_seen_at=now, fetched_at=now)
+        )
+        db.execute(
+            update(Opportunity)
+            .where(
+                Opportunity.id.in_(
+                    select(OpportunitySourceRecord.opportunity_id).where(
+                        OpportunitySourceRecord.id.in_(unchanged)
+                    )
+                )
+            )
+            .values(last_seen_at=now)
+        )
+
+    if run.invalid_count == 0 and run.error_count == 0:
+        # Complete successful snapshot: anything of this source not in it is closed (not deleted).
+        closed = db.scalars(
+            update(OpportunitySourceRecord)
+            .where(
+                OpportunitySourceRecord.ingestion_source_id == source.id,
+                OpportunitySourceRecord.is_active,
+                OpportunitySourceRecord.external_id.not_in(list(seen)),
+            )
+            .values(is_active=False, closed_at=now)
+            .returning(OpportunitySourceRecord.id)
+        ).all()
+        run.closed_count = len(closed)
+
+
+def sync_source(
+    db: Session, source: IngestionSource, *, transport: httpx2.BaseTransport | None = None
+) -> IngestionRun:
+    """Sync one source and return its finished run. Raises SyncInProgress only; every source,
+    network, or item failure is recorded on the run instead."""
+    now = datetime.now(UTC)
+    run = _start_run(db, source, now)
+    config = SourceConfig(source.kind, source.identifier, source.region, source.display_name)
+    adapter = adapter_for(source.kind)
+    try:
+        fetched = fetch_json(
+            adapter.url(config),
+            etag=source.etag,
+            last_modified=source.last_modified,
+            transport=transport,
+        )
+    except (FetchError, SnapshotError) as error:
+        return _fail(db, run, IngestionStage.FETCH, error.code, error.message)
+    if fetched.not_modified:
+        source.last_success_at = now
+        return _finish(db, run, IngestionRunStatus.NO_CHANGE)
+    try:
+        snapshot = adapter.parse(fetched.data, config)
+    except SnapshotError as error:
+        return _fail(db, run, IngestionStage.VALIDATE, error.code, error.message)
+
+    run.fetched_count = len(snapshot.items)
+    run.source_generated_at = snapshot.generated_at
+    try:
+        _process(db, source, run, snapshot.items, now)
+    except Exception:
+        logger.exception("ingestion run failed unexpectedly source=%s", source.key)
+        db.rollback()
+        run = db.get_one(IngestionRun, run.id)
+        return _fail(
+            db, run, IngestionStage.PERSIST, "internal_error", "The sync failed unexpectedly."
+        )
+
+    if run.invalid_count or run.error_count:
+        return _finish(db, run, IngestionRunStatus.PARTIAL)
+    # Validators are kept only after a complete snapshot, so a partial run refetches in full.
+    source.etag = fetched.etag
+    source.last_modified = fetched.last_modified
+    source.last_success_at = now
+    return _finish(db, run, IngestionRunStatus.SUCCESS)
+
+
+def sync_enabled_sources(
+    db: Session, *, transport: httpx2.BaseTransport | None = None
+) -> list[IngestionRun]:
+    """Sync every enabled source in turn. One source failing doesn't stop the others; a source
+    that is already syncing is skipped."""
+    runs: list[IngestionRun] = []
+    sources = db.scalars(
+        select(IngestionSource)
+        .where(IngestionSource.enabled)
+        .order_by(IngestionSource.created_at, IngestionSource.id)
+    ).all()
+    for source in sources:
+        try:
+            runs.append(sync_source(db, source, transport=transport))
+        except SyncInProgress:
+            continue
+    return runs

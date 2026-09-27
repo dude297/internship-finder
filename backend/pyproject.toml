@@ -12,12 +12,13 @@ dependencies = [
     "psycopg[binary]>=3.3,<4",
     "pwdlib[argon2]>=0.3.1,<0.4",
     "uvicorn[standard]>=0.54,<1",
+    # Ingestion HTTP client (ADR-008 §10); also FastAPI's test client.
+    "httpx2>=2.13,<3",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=9.1,<10",
-    "httpx2>=2.13,<3",
     "ruff>=0.16,<0.17",
     "pyright>=1.1.414,<1.2",
 ]
