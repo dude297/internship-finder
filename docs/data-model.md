@@ -2,16 +2,23 @@
 
 ## Current Database State
 
-The schema is created by two Alembic migrations in `backend/alembic/versions/`:
+The schema is created by three Alembic migrations in `backend/alembic/versions/`:
 
 | Revision | Milestone | Tables |
 |---|---|---|
 | `3b9c6b57bb60` (initial core domain schema) | 1 (merged, **immutable**) | `profiles`, `profile_sources`, `profile_facts`, `opportunities`, `opportunity_source_records`, `opportunity_requirements`, `opportunity_evaluations`, `eligibility_rule_results` |
-| `7d7f4f8b9a3c` (auth sessions and application tracking) | 2 | `auth_users`, `auth_sessions`, `applications`; adds `ck_profiles_graduation_after_status_as_of` to `profiles` |
+| `7d7f4f8b9a3c` (auth sessions and application tracking) | 2 (merged) | `auth_users`, `auth_sessions`, `applications`; adds `ck_profiles_graduation_after_status_as_of` to `profiles` |
+| `726372d627b8` (opportunity ingestion and deduplication) | 3 | `ingestion_sources` (seeds the built-in discovery feed), `ingestion_runs`, `ingestion_run_errors`, `opportunity_identifiers`; new columns on `opportunities`, `opportunity_source_records`, `opportunity_evaluations`; reconciles `ck_profiles_graduation_after_status_as_of` (below) |
 
-The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain) and [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication). Both migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that also step through `3b9c6b57bb60`). No hosted database is provisioned (Neon is selected, [ADR-004](decisions/ADR-004-technology-stack.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
+The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), and [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). No hosted database is provisioned (Neon is selected, [ADR-004](decisions/ADR-004-technology-stack.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
 ORM models are in `backend/app/models/`. Shared enums are in `backend/app/enums.py`.
+
+### Graduation-constraint reconciliation (`726372d627b8`)
+
+`ck_profiles_graduation_after_status_as_of` was added to `7d7f4f8b9a3c` during PR #5 review, before it merged. A development database upgraded with the earlier local version of `7d7f4f8b9a3c` reports that revision but lacks the constraint (`alembic check` doesn't compare CHECK constraints). `726372d627b8` repairs this automatically: on upgrade it looks the constraint up in `pg_constraint` and creates it only if it's missing (fresh databases already have it from `7d7f4f8b9a3c`). No manual SQL is needed.
+
+The reconciliation is intentionally **asymmetric**: downgrading `726372d627b8` leaves the constraint in place, because it's part of `7d7f4f8b9a3c`'s intended final schema; downgrading further to `3b9c6b57bb60` removes it (that's `7d7f4f8b9a3c`'s own downgrade). As with `7d7f4f8b9a3c`, a stored profile that violates the rule makes the upgrade fail; fix the dates and upgrade again. `tests/test_migrations.py` simulates the stale database (upgrade to `7d7f4f8b9a3c`, drop the constraint, upgrade to head) and checks the constraint comes back.
 
 All tables contain **private runtime data**. Nothing from them is ever committed ([ENGINEERING_GUIDELINES.md §16](../ENGINEERING_GUIDELINES.md#16-public-repository-security-and-privacy)).
 
@@ -93,8 +100,10 @@ Canonical, source-independent opportunity.
 | `location` | varchar(200), null | |
 | `remote_mode` | enum `onsite` / `remote` / `hybrid`, null | |
 | `application_deadline`, `start_date`, `end_date` | date, null | CHECK: end ≥ start |
-| `requirements_assessment_status` | enum `unassessed` / `partial` / `complete`, default `unassessed` | Whether `opportunity_requirements` holds every hard requirement. Set explicitly, never inferred from the row count. Only `complete` lets zero requirements mean `eligible` ([ELIG-REQ-000](eligibility.md#elig-req-000)) |
-| `first_seen_at`, `last_seen_at` | timestamptz | CHECK: last ≥ first |
+| `requirements_assessment_status` | enum `unassessed` / `partial` / `complete`, default `unassessed` | Whether `opportunity_requirements` holds every hard requirement. Set explicitly, never inferred from the row count. Only `complete` lets zero requirements mean `eligible` ([ELIG-REQ-000](eligibility.md#elig-req-000)). Imported opportunities start `unassessed` |
+| `first_seen_at`, `last_seen_at` | timestamptz | When any source first/last saw it (not a posting date). CHECK: last ≥ first |
+| `posted_at` | timestamptz, null, indexed | When the source says it was published (feed `posted_at`, Greenhouse `first_published`, Lever `createdAt`). Never an ATS "updated" time. Discovery sorting only; eligibility doesn't read it (Milestone 3) |
+| `manually_curated_at` | timestamptz, null | Set when the owner creates or edits the opportunity through the API. Sync never overwrites the canonical fields, requirements, or assessment of a curated opportunity. NULL for imported opportunities the owner hasn't edited. Backfilled from `updated_at` for opportunities that existed before Milestone 3 (Milestone 3) |
 | `created_at`, `updated_at` | timestamptz | |
 
 ### `opportunity_source_records`
@@ -108,8 +117,73 @@ Each place an opportunity was seen. An opportunity can have many source records.
 | `source_type` | enum `public_feed` / `ats` / `career_page` / `browser` / `manual` / `other` | |
 | `external_id` | varchar(255), null | UNIQUE with `source_name`. NULLs don't collide |
 | `source_url` | varchar(2048), null | |
-| `raw_payload` | json, null | Original data, never overwritten by normalization |
+| `raw_payload` | json, null | The original source item (≤ 256 KB), never altered by normalization. Replaced by the item's newest version when it changes. Never sent to the browser |
 | `fetched_at`, `first_seen_at`, `last_seen_at` | timestamptz | CHECK: last ≥ first |
+| `ingestion_source_id` | FK → `ingestion_sources`, null | Automated records only; NULL for manual provenance (Milestone 3) |
+| `is_active` | boolean, default true | Present in the source's latest complete successful snapshot. CHECK: `is_active = (closed_at IS NULL)` |
+| `closed_at` | timestamptz, null | When a complete successful snapshot no longer contained it. Cleared if it returns. Sync never deletes records |
+| `source_published_at`, `source_updated_at` | timestamptz, null | The source's own dates, as stated |
+| `content_hash` | varchar(64), null | SHA-256 of the normalized item including the raw payload: unchanged items skip every write except last-seen |
+
+For automated records `source_name` is the source key (`community_feed:zshah-tech-internships`, `greenhouse:<board>`, `lever:<region>:<site>`), so `(source_name, external_id)` is unique per source. Index: `(ingestion_source_id, is_active)`.
+
+An opportunity's **availability** is derived, not stored: `open` if any automated record is active, `closed` if it has automated records and none is active, `manual` if it has none.
+
+### `opportunity_identifiers`
+
+Deterministic identities shared across sources ([ADR-008 §6](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#6-cross-source-identifiers)). Milestone 3.
+
+| Column | Type | Notes |
+|---|---|---|
+| `opportunity_id` | FK → `opportunities`, cascade, indexed | |
+| `namespace` | varchar(32) | `zshah`, `greenhouse`, `lever`, `url` |
+| `value` | varchar(1024) | e.g. `examplerobotics:1001`, `global:examplesite:<uuid>`, a canonical URL |
+| `created_at` | timestamptz | |
+
+UNIQUE `(namespace, value)`: an identity belongs to exactly one opportunity, and identifiers never move. Only ingestion writes them; manual opportunities have none.
+
+### `ingestion_sources`
+
+The source registry. Safe configuration only: no URLs, no credentials. Milestone 3.
+
+| Column | Type | Notes |
+|---|---|---|
+| `kind` | enum `community_feed` / `greenhouse` / `lever` | Picks the adapter and its hard-coded host |
+| `identifier` | varchar(64) | Greenhouse board token, Lever site name, or the built-in feed's key |
+| `region` | enum `global` / `eu`, null | CHECK: set exactly when `kind = 'lever'` |
+| `display_name` | varchar(200) | Shown in the UI; the organization of opportunities imported from an ATS source |
+| `enabled` | boolean, default true | Disabled sources are skipped by "sync all" and can't be synced individually |
+| `last_attempted_at`, `last_success_at` | timestamptz, null | `no_change` counts as a success |
+| `etag`, `last_modified` | varchar, null | HTTP validators, stored only after a complete successful run |
+| `created_at`, `updated_at` | timestamptz | |
+
+UNIQUE `(kind, identifier, region)` with `NULLS NOT DISTINCT`. The migration seeds the built-in feed (`community_feed`, `zshah-tech-internships`, "Tech Internship Discovery Feed"). The API can't create `community_feed` rows or change any identifier.
+
+### `ingestion_runs`
+
+One sync of one source. Milestone 3.
+
+| Column | Type | Notes |
+|---|---|---|
+| `source_id` | FK → `ingestion_sources`, cascade | Index `(source_id, started_at)` |
+| `status` | enum `running` / `success` / `partial` / `failed` / `no_change` | A run still `running` after 15 minutes is marked `failed` by the next sync of that source |
+| `started_at`, `finished_at` | timestamptz | |
+| `source_generated_at` | timestamptz, null | The source's own snapshot time (the feed's `generated_at`) |
+| `fetched_count`, `normalized_count`, `created_count`, `updated_count`, `deduplicated_count`, `unchanged_count`, `closed_count`, `reactivated_count`, `invalid_count`, `error_count` | int, default 0 | |
+| `error_summary` | varchar(500), null | Safe one-line reason for a failed run |
+
+### `ingestion_run_errors`
+
+Bounded, safe per-item problems: at most 100 stored per run; no stack traces, headers, credentials, or payloads. Milestone 3.
+
+| Column | Type | Notes |
+|---|---|---|
+| `run_id` | FK → `ingestion_runs`, cascade, indexed | |
+| `external_id` | varchar(255), null | The item's source ID, when known |
+| `stage` | enum `fetch` / `validate` / `normalize` / `identify` / `persist` | |
+| `code` | varchar(50) | e.g. `timeout`, `schema_mismatch`, `invalid_item`, `identity_conflict` |
+| `message` | varchar(500) | |
+| `created_at` | timestamptz | |
 
 ### `opportunity_requirements`
 
@@ -147,6 +221,7 @@ One eligibility evaluation of an opportunity for a profile. Rows are **history**
 | `eligibility_rules_version` | varchar(20) | e.g. `v1` |
 | `depends_on_projected_status` | boolean | True only when the final status depends on projected-status rule results (not merely that one was evaluated); see [eligibility.md](eligibility.md#time-aware-evaluation) |
 | `evaluated_at` | timestamptz | |
+| `input_fingerprint` | varchar(64), null | SHA-256 of the canonical eligibility inputs ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion)). Automatic evaluation skips when the latest evaluation has the same fingerprint. NULL for evaluations made before Milestone 3 (Milestone 3) |
 
 Index: `ix_opportunity_evaluations_pair_evaluated_at` (`profile_id`, `opportunity_id`, `evaluated_at`). Fit columns (`fit_score`, `score_breakdown`, `scoring_version`) will be added by the scoring v1 migration.
 
@@ -206,7 +281,6 @@ The owner's application tracking. Private runtime data; never read by eligibilit
 
 ## Not Yet Modeled
 
-- Source metadata / ingestion runs (with source collectors)
 - Fit-scoring columns (with scoring v1)
 - Profile preferences, remote preference, availability windows (fit inputs, with scoring)
 
@@ -221,9 +295,18 @@ Design rules from [ENGINEERING_GUIDELINES.md §6](../ENGINEERING_GUIDELINES.md#6
 ## How the Private API Writes
 
 - The API keeps exactly one `profiles` row (created by the first `PUT /api/profile`).
-- A manually created opportunity always gets one `opportunity_source_records` row: `source_type = manual`, `source_name = manual`, no `external_id`, no raw payload.
-- Requirement rows written by the API have `extraction_method = manual`. An opportunity update replaces the complete requirement set: old rows are deleted, and past `eligibility_rule_results` keep their text with `requirement_id` set to NULL.
-- Every opportunity create/update, and every eligibility-relevant profile change, appends `opportunity_evaluations` rows (history) when a profile exists. Nothing is overwritten.
+- A manually created opportunity always gets one `opportunity_source_records` row: `source_type = manual`, `source_name = manual`, no `external_id`, no raw payload. It's curated from creation (`manually_curated_at`).
+- Requirement rows written by the API have `extraction_method = manual`. An opportunity update replaces the complete requirement set: old rows are deleted, and past `eligibility_rule_results` keep their text with `requirement_id` set to NULL. Any update (including of an imported opportunity) sets `manually_curated_at`.
+- Opportunity create/update appends an `opportunity_evaluations` row when a profile exists **and** the eligibility inputs changed (fingerprint). Every eligibility-relevant profile change re-evaluates every opportunity, and `POST /api/opportunities/{id}/evaluate` always appends. Nothing is overwritten.
+
+## How Ingestion Writes
+
+Only `app/ingestion/pipeline.py` writes imported data ([ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md)):
+
+- A new item creates an `opportunities` row (`unassessed`, no requirements), one automated `opportunity_source_records` row, its unclaimed `opportunity_identifiers`, and (with a profile) one evaluation.
+- An item matching another source's opportunity by identifier adds only a source record (and any unclaimed identifiers).
+- A changed item updates its source record, and the canonical fields only when the opportunity isn't curated. An unchanged item only moves `last_seen_at`/`fetched_at` (one bulk statement per run).
+- A complete successful run closes the source's active records it didn't contain. Nothing is deleted.
 
 ## Keeping This File in Sync
 

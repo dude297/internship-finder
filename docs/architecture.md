@@ -2,44 +2,51 @@
 
 ## Current
 
-Milestones 0 and 1 are merged. Milestone 2 (private single-user workflow MVP) is implemented on `feature/private-workflow-mvp`, awaiting review. The application runs **locally only**. Nothing is **provisioned** (no accounts, hosted databases, or deployments).
+Milestones 0–2 are merged. Milestone 3 (automated opportunity discovery and ingestion) is implemented on `feature/opportunity-ingestion`, awaiting review. The application runs **locally only**. Nothing is **provisioned** (no accounts, hosted databases, deployments, or schedulers).
 
 ```text
 Browser ── same origin ──► Vite dev server (localhost:5173)
    │  HttpOnly session cookie      │  /api/* proxied
    │  X-CSRF-Token on mutations    ▼
-   │                         FastAPI (localhost:8000)
+   │                         FastAPI (localhost:8000)            python -m app.cli sync-source(s)
    │                           ├─ public:  GET /api/health, POST /api/auth/login, GET /api/auth/session
-   │                           └─ private (require_owner): logout, profile, opportunities, tracking
-   │                                  │
-   │                                  ▼
-   └───────────────────────── PostgreSQL 18 (Docker Compose, local only)
+   │                           └─ private (require_owner): logout, profile, opportunities, tracking,
+   │                                  │                    sources + manual sync
+   │                                  │         ┌──────────────────────────────┘
+   │                                  │         ▼
+   │                                  │   ingestion pipeline ── HTTPS GET, allowlisted hosts only ──►
+   │                                  │         │                 zshah101.github.io (discovery feed)
+   │                                  ▼         ▼                 boards-api.greenhouse.io
+   └───────────────────────── PostgreSQL 18 (Docker Compose)      api.lever.co / api.eu.lever.co
 ```
 
 ### Backend (`backend/app/`)
 
 | Layer | Location | Responsibility |
 |---|---|---|
-| Route handlers | `api/` (`auth.py`, `profile.py`, `opportunities.py`, `health.py`) | Thin: parse the request, call a service, commit once, shape the response |
+| Route handlers | `api/` (`auth.py`, `profile.py`, `opportunities.py`, `sources.py`, `health.py`) | Thin: parse the request, call a service, commit once, shape the response (sync endpoints delegate their commits to the pipeline) |
 | Authorization boundary | `api/deps.py` (`require_owner`) | Session cookie → `401`; unsafe method without a valid CSRF header → `403`. Mounted once on the parent router of every private route (`main.py`) |
 | API schemas | `schemas/` | Pydantic request/response models (the HTTP contract), ISO country validation. Response models don't reuse request validators, so any stored row can be read back |
-| Services | `services/` (`auth.py`, `profile.py`, `opportunities.py`) | Domain workflows: sessions, profile save + re-evaluation, opportunity/requirement/provenance writes, evaluation, tracking. They flush but never commit |
-| Persistence helpers | `repositories.py` | Load the profile/opportunity, evaluate and save, latest evaluation |
-| Domain | `profile/education.py`, `opportunities/eligibility/` | Pure: temporal education resolver and eligibility rules v1 (Milestone 1, unchanged) |
+| Services | `services/` (`auth.py`, `profile.py`, `opportunities.py`, `sources.py`, `discovery.py`) | Domain workflows: sessions, profile save + re-evaluation, opportunity/requirement/provenance writes, evaluation, tracking, the source registry, and the paginated/filtered discovery query. They flush but never commit |
+| Ingestion | `ingestion/` (`http.py`, `adapters/`, `normalize.py`, `pipeline.py`) | [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md): the only network client (allowlisted HTTPS hosts, size/time/retry limits), adapters that build URLs from hard-coded hosts and normalize items (no database access), and the shared pipeline that dedupes, persists, evaluates, closes, and records runs |
+| Persistence helpers | `repositories.py` | Load the profile/opportunity, evaluate and save (forced or only when the input fingerprint changed), latest evaluation |
+| Domain | `profile/education.py`, `opportunities/eligibility/` | Pure: temporal education resolver and eligibility rules v1 (unchanged since Milestone 1) |
 | ORM | `models/` | Tables ([data-model.md](data-model.md)) |
-| CLI | `cli.py` | `create-owner`, `set-password` (the only way to create or change credentials) |
+| CLI | `cli.py` | `create-owner`, `set-password` (the only way to create or change credentials); `sync-sources`, `sync-source` (the same pipeline as the API) |
 
-**Transactions.** One database session per request (`db/session.py`). The handler commits once after its service call; if anything raises first, the session closes and everything is rolled back. So "opportunity + manual source record + requirements + evaluation" and "profile update + every resulting re-evaluation" are each atomic.
+**Transactions.** One database session per request (`db/session.py`). The handler commits once after its service call; if anything raises first, the session closes and everything is rolled back. So "opportunity + manual source record + requirements + evaluation" and "profile update + every resulting re-evaluation" are each atomic. Source sync is the deliberate exception ([ADR-008 §4](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#4-run-history-and-partial-success)): it commits a `running` run first, fetches outside any transaction, writes each item in its own savepoint, and commits the results with the finished run, so one bad item can't discard the rest.
+
+**Ingestion.** `fetch → validate → normalize → identify → upsert → evaluate → close → run summary`. Identity is exact only: same source + external ID, then deterministic identifiers (`zshah`, `greenhouse`, `lever`, canonical `url`). Identifiers that point at two opportunities are an error, never a merge. Only a complete successful snapshot closes postings it no longer lists; closed postings are kept (with their tracking) and reopen if they return. Opportunities the owner has edited (`manually_curated_at`) keep their canonical fields and requirements across syncs. Imported opportunities start `unassessed`.
 
 **Errors.** FastAPI's standard shape: `{"detail": "message"}` or, for `422`, `{"detail": [{"loc", "msg", "type"}]}` without the echoed input. Integrity conflicts → `409`; anything unexpected → `500 {"detail": "Internal server error."}` (logged server-side). Details: [ADR-007 §9](decisions/ADR-007-single-user-auth-and-private-api.md#9-api-error-model).
 
-**Automatic evaluation.** Creating or updating an opportunity appends an evaluation when a profile exists (otherwise the opportunity is saved and reported as not evaluated). Saving the profile re-evaluates every opportunity, synchronously and in the same transaction, when a field that eligibility reads changed (the fields of `ProfileInput`: education timeline, date of birth, citizenships). `POST /api/opportunities/{id}/evaluate` appends one on demand. Application tracking never triggers evaluation.
+**Automatic evaluation.** Creating or updating an opportunity (by hand or by a sync) appends an evaluation when a profile exists and the eligibility inputs changed, compared by a SHA-256 input fingerprint, so repeated syncs don't grow the history ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion)). Without a profile, the opportunity is saved and reported as not evaluated. Saving the profile re-evaluates every opportunity, synchronously and in the same transaction, when a field that eligibility reads changed (the fields of `ProfileInput`: education timeline, date of birth, citizenships). `POST /api/opportunities/{id}/evaluate` appends one on demand. Application tracking never triggers evaluation.
 
 ### Frontend (`frontend/src/`)
 
 | Area | Location |
 |---|---|
-| Routing | `App.tsx` (react-router): `/login`, `/profile`, `/opportunities`, `/opportunities/new`, `/opportunities/:id`, `/opportunities/:id/edit` |
+| Routing | `App.tsx` (react-router): `/login`, `/profile`, `/opportunities` (paginated; filters in the URL query), `/opportunities/new`, `/opportunities/:id`, `/opportunities/:id/edit` (also the requirement review for imported opportunities), `/sources` |
 | Auth state | `auth/` context from `GET /api/auth/session`. `RequireAuth` redirects to `/login` (a UX convenience; the API enforces access). An auth generation counter drops a session check that resolves after a newer login/logout/session loss. Logout clears local state only once the server confirms it (`204`, or `401` = already invalid); otherwise the user stays signed in and sees an error ([ADR-007 §3](decisions/ADR-007-single-user-auth-and-private-api.md#3-opaque-server-side-sessions)) |
 | API client | `api/client.ts` (the only `fetch` caller): relative `/api` URLs, same-origin credentials, Zod validation (`api/schemas.ts`), central `401` handling, `X-CSRF-Token` on mutations, CSRF token in memory only |
 | Pages / components | `pages/`, `components/` (presentation only) |
@@ -133,7 +140,7 @@ PostgreSQL (Neon)
                    Vercel
 ```
 
-Scheduled workflows run Python application commands (the same backend package) against the database. The workflow YAML only orchestrates, and core logic lives in reusable Python modules. Sources are layered: public feeds → ATS APIs → early-college/research programs → custom career pages → browser automation ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
+Milestone 3 implements the sources, normalize/validate/dedupe, and persistence stages, run manually (UI, API, CLI). Scheduled collection is **not** implemented: the database is local, and a GitHub-hosted runner can't reach it. Once a hosted database exists, scheduled workflows run Python application commands (the same backend package, e.g. `python -m app.cli sync-sources`) against the database. The workflow YAML only orchestrates, and core logic lives in reusable Python modules. Sources are layered: public feeds → ATS APIs → early-college/research programs → custom career pages → browser automation ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
 
 ### Profile Flow (future)
 
@@ -155,13 +162,13 @@ Original source documents are kept unchanged, and extracted facts are stored sep
 
 Everything in this flow is private runtime data (database or gitignored local storage), never repository content. The public repository holds only code, schemas, migrations, synthetic fixtures, and generic docs ([ENGINEERING_GUIDELINES.md §16](../ENGINEERING_GUIDELINES.md#public-code--private-data-boundary)).
 
-### Components (planned)
+### Components (target; the first four exist since Milestone 3)
 
 | Component | Responsibility | Reference |
 |---|---|---|
-| Source adapters | Fetch raw records from one source and normalize them. No DB writes, scoring, eligibility, or dedupe | [sources.md](sources.md), [ADR-002](decisions/ADR-002-shared-ingestion-pipeline.md), [ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md) |
+| Source adapters | Fetch raw records from one source and normalize them. No DB writes, scoring, eligibility, or dedupe (implemented: discovery feed, Greenhouse, Lever) | [sources.md](sources.md), [ADR-002](decisions/ADR-002-shared-ingestion-pipeline.md), [ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md) |
 | Normalization | Map raw records to a common opportunity shape; validate with Pydantic | [ADR-002](decisions/ADR-002-shared-ingestion-pipeline.md) |
-| Deduplication | Match by stable external ID, then by fallback heuristics | [sources.md](sources.md) |
+| Deduplication | Match by stable external ID, then by exact deterministic identifiers; no fuzzy matching ([ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md)) | [sources.md](sources.md) |
 | Shared ingestion pipeline | Only path that persists opportunities; produces run summaries | [operations.md](operations.md) |
 | Opportunity database | Stores opportunities, profile, evaluations, application state | [data-model.md](data-model.md) |
 | Profile ingestion | Raw profile sources → parsed facts with provenance → user review → canonical profile | [ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md) |
@@ -224,7 +231,7 @@ This is the approximate target structure. Directories are created when they have
 These are future capabilities. They stay unimplemented until built and recorded in `PROJECT_STATE.md`:
 
 - **AI enrichment:** requirement extraction, summarization, explanations, profile fact inference. Optional, enrichment only, and no paid API required ([ADR-003](decisions/ADR-003-ai-as-enrichment.md), [ADR-004](decisions/ADR-004-technology-stack.md)).
-- **Recurring discovery:** GitHub Actions scheduled source runs.
+- **Recurring discovery:** scheduled source runs (for example GitHub Actions calling `python -m app.cli sync-sources`) once the database is hosted. Not possible against the local database.
 - **Alerts:** in-app notifications for new high-fit eligible opportunities. No email/SMS services initially.
 - **Personalized learning:** tuning ranking from user feedback.
 

@@ -4,7 +4,7 @@ A personal, single-user tool for finding internship and research opportunities, 
 
 **Intended user:** a single user (the repository owner). It's still being built to production standards.
 
-> ⚠️ **Status: private single-user workflow MVP (Milestone 2, in review, local only).** Log in, keep a private profile, add opportunities by hand with structured requirements, see eligibility evaluated automatically with plain-language explanations, and track applications. There is no résumé parsing, no automatic opportunity discovery, no fit scoring, no AI, and no hosted deployment. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
+> ⚠️ **Status: automated opportunity discovery (Milestone 3, in review, local only).** Log in, keep a private profile, sync a broad internship feed and any Greenhouse or Lever company boards you add, browse and filter the imported postings with their source and freshness, review an imported posting's requirements, see eligibility evaluated automatically with plain-language explanations, and track applications. Sync runs only when you ask (Sources page or CLI); there's no scheduler. There is no résumé parsing, no AI, no automatic requirement extraction, no fit scoring, and no hosted deployment. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
 
 ## Stack
 
@@ -43,11 +43,13 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and log in. There's no sign-up page: the owner account exists only through the CLI. Lint, typecheck, test, end-to-end, and build commands are in [docs/development.md](docs/development.md).
+Open http://localhost:5173 and log in. There's no sign-up page: the owner account exists only through the CLI. Open **Sources** and choose **Sync now** on the built-in discovery feed to import current postings (or run `python -m app.cli sync-sources`). Lint, typecheck, test, end-to-end, and build commands are in [docs/development.md](docs/development.md).
 
 ## Public Repository
 
 This repository contains application source code only. Personal résumé, profile, application, and credential data must never be committed. See [CLAUDE.md](CLAUDE.md#public-repository-safety).
+
+Imported postings come from public sources listed with their licensing and attribution in [docs/sources.md](docs/sources.md). The repository never contains downloaded postings.
 
 The running app is private: one owner account, created from the command line, with Argon2id password hashing, server-side sessions in an HttpOnly cookie, and CSRF protection ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md)). Your profile, opportunities, and application notes live only in your database. Tests and CI use synthetic data and throwaway databases.
 

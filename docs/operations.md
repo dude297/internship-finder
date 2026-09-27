@@ -1,6 +1,6 @@
 # Operations
 
-There are no hosted services, jobs, or monitoring. The app runs locally (Milestone 2). Each section is labeled planned or implemented.
+There are no hosted services, scheduled jobs, or monitoring. The app runs locally (Milestone 3). Each section is labeled planned or implemented.
 
 ## Owner Account and Sessions (implemented, local)
 
@@ -15,29 +15,27 @@ There are no hosted services, jobs, or monitoring. The app runs locally (Milesto
 
 `compose.yaml` runs PostgreSQL 18 on `127.0.0.1:5432` with a named volume `pgdata`. That volume holds the owner's private data: back it up yourself if it matters (for example, `docker compose exec postgres pg_dump -U internship_finder internship_finder > backup.sql`, stored **outside** the repository). `docker compose down -v` deletes it.
 
-## Source Job Monitoring (planned)
+## Source Sync (implemented, manual)
 
-Each ingestion run should produce a structured run summary per source, for example:
+Sources sync only when the owner asks: **Sync now** / **Sync all** on the Sources page, `POST /api/sources/{id}/sync` / `POST /api/sources/sync`, or `python -m app.cli sync-source <id-or-key>` / `sync-sources`. All use the same pipeline ([ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md)). There is **no scheduler**: the database is local, so a hosted runner can't reach it.
 
-```text
-150 fetched
-143 normalized
-4 duplicates
-2 invalid
-1 source error
-```
+Measured locally on 2026-09-27 against the live discovery feed (disposable database, synthetic profile, Windows + Docker PostgreSQL 18): the first sync of 1,034 postings took about 22 s (including one evaluation per posting); a repeat answered `304` in under 0.5 s; a forced full re-process (validators cleared) found all 1,034 unchanged in under 1 s. A 50-item page of the opportunity list took 30–130 ms at ~1,100 opportunities.
 
-It should also record the start/end time, status, and error categories. Where these summaries are stored and viewed is TBD.
+## Run Summaries (implemented)
 
-## Failed Ingestion Runs (planned)
+Every sync records an `ingestion_runs` row: status (`running`, `success`, `partial`, `failed`, `no_change`), start/finish time, the source's own snapshot time, and counts (fetched, normalized, created, updated, deduplicated, unchanged, closed, reactivated, invalid, errors). Up to 100 safe per-item errors are stored per run (stage, short code, message, source item ID). The Sources page shows each source's latest run; `GET /api/sources/{id}/runs` lists recent ones. Each finished run is also logged as one line with the source key and counts. No payloads, headers, or stack traces are stored or returned.
 
-- One failing source must not stop other sources.
-- Failures are logged with source, operation, and error category.
-- Retry and alerting policy: TBD.
+## Failed and Partial Runs (implemented)
 
-## Stale Opportunity Cleanup (planned)
+- One failing source doesn't stop the others in "sync all".
+- `failed` (network error, timeout, rate limit longer than 30 s, HTTP error, oversized or non-JSON response, unexpected format, incomplete snapshot): nothing is changed. The reason is on the run. Fix or wait, then sync again.
+- `partial` (some items invalid or conflicting): valid items are imported, but nothing is closed, and the HTTP validators aren't stored, so the next sync fetches the full snapshot again. A recurring partial run (for example, a persistent identity conflict) means that source's missing postings won't close until it's resolved; the run's problems list names the items.
+- A run left `running` (e.g. the process stopped mid-sync) is marked `failed` by the next sync of that source after 15 minutes; until then that source reports "already syncing".
+- Retries: at most 3 attempts per request on timeouts, connection errors, 429, and 5xx, with short backoff. There's no alerting; check the Sources page.
 
-Opportunities not seen for a period (TBD) should be marked stale/closed using `last_seen_at`, not deleted, so history and application state are kept.
+## Closed Postings (implemented)
+
+When a complete successful sync no longer lists a posting, its source record is marked closed (`is_active = false`, `closed_at`). Nothing is deleted: the opportunity, its evaluations, and its application tracking stay. An opportunity is shown as **closed** when all of its automated source records are closed; the default list view hides closed postings, and **Show → Closed postings / Everything** finds them. If the posting reappears, the record reopens. There's no age-based "stale" rule.
 
 ## Database Backup Considerations (planned)
 
@@ -49,13 +47,13 @@ Structured logs as described in [ENGINEERING_GUIDELINES.md §11](../ENGINEERING_
 
 ## Evaluation History and Re-evaluation (implemented; not scheduled)
 
-`app.repositories.evaluate_and_save` appends a new `opportunity_evaluations` row with its rule results. Earlier rows are kept as history, and the latest `evaluated_at` is current. It runs automatically:
+`app.repositories` appends `opportunity_evaluations` rows with their rule results. Earlier rows are kept as history, and the latest `evaluated_at` is current. Evaluations run:
 
-- when an opportunity is created or updated (if a profile exists)
+- when an opportunity is created or updated by hand or by a sync (if a profile exists), **only if** its eligibility inputs changed since the latest evaluation (SHA-256 input fingerprint), so unchanged syncs and title-only edits add nothing
 - for **every** opportunity when the profile is saved with a changed eligibility input (education timeline, date of birth, citizenships), in the same transaction as the profile update
-- on demand: `POST /api/opportunities/{id}/evaluate`
+- on demand, always: `POST /api/opportunities/{id}/evaluate`
 
-Scaling note: profile re-evaluation is synchronous and proportional to the number of opportunities. That's fine for a manual, single-user catalog (tens to hundreds). Once ingestion adds thousands, move it to batched or background re-evaluation (and consider evaluating only opportunities whose requirements read the changed fields). Each evaluation appends rows, so history grows with every edit; pruning is TBD.
+Scaling note: profile re-evaluation is synchronous and proportional to the number of opportunities. With ~1,100 imported opportunities it took about 4 s locally (2026-09-27). Acceptable for a local single-user app; before hosted use or a much larger catalog, move it to batched or background re-evaluation (and consider evaluating only opportunities whose requirements read the changed fields). History still grows with every real input change; pruning is TBD.
 
 Still not automatic: re-evaluation when the eligibility rules version changes, and when time passes an expected graduation or enrollment date (see Future Scheduled Jobs).
 
@@ -73,9 +71,8 @@ For a single-user tool, the minimum is to detect the failure (run summary or err
 
 ## Future Scheduled Jobs (planned)
 
-- Recurring source discovery/refresh (ATS refreshes, deadline refreshes)
-- Stale opportunity cleanup
-- Source health checks
+- Recurring source sync (`python -m app.cli sync-sources`; the command exists, only the schedule is missing, and it needs a hosted database first)
+- Source health checks (e.g. alert on repeated `failed`/`partial` runs)
 - Re-evaluation when eligibility rules or scoring version change, or when the user's projected education status crosses a date (graduation, enrollment)
 - In-app alerts/digests (no email/SMS services initially)
 
