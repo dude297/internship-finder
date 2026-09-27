@@ -11,7 +11,7 @@ from tests.conftest import alembic_config
 
 pytestmark = pytest.mark.postgres
 
-TABLES = {
+MILESTONE_1_TABLES = {
     "profiles",
     "profile_sources",
     "profile_facts",
@@ -21,6 +21,8 @@ TABLES = {
     "opportunity_evaluations",
     "eligibility_rule_results",
 }
+MILESTONE_1_REVISION = "3b9c6b57bb60"
+TABLES = MILESTONE_1_TABLES | {"auth_users", "auth_sessions", "applications"}
 
 
 def tables(engine: Engine) -> set[str]:
@@ -31,8 +33,14 @@ def test_upgrade_downgrade_upgrade(pg_engine: Engine, pg_url: str) -> None:
     config = alembic_config(pg_url)
     assert tables(pg_engine) == TABLES  # pg_engine migrated to head
 
+    command.downgrade(config, MILESTONE_1_REVISION)
+    assert tables(pg_engine) == MILESTONE_1_TABLES
+
     command.downgrade(config, "base")
     assert tables(pg_engine) == set()
+
+    command.upgrade(config, MILESTONE_1_REVISION)
+    assert tables(pg_engine) == MILESTONE_1_TABLES
 
     command.upgrade(config, "head")
     assert tables(pg_engine) == TABLES

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.enums import (
+    ApplicationStatus,
     EducationLevel,
     EligibilityStatus,
     ExtractionMethod,
@@ -22,6 +23,9 @@ from app.enums import (
     RequirementType,
 )
 from app.models import (
+    Application,
+    AuthSession,
+    AuthUser,
     EligibilityRuleResult,
     Opportunity,
     OpportunityEvaluation,
@@ -465,3 +469,58 @@ def test_deleting_a_requirement_keeps_rule_results(db: Session) -> None:
     ).one()
     assert result.requirement_id is None
     assert result.rule_id == "ELIG-AGE-001"
+
+
+# --- Milestone 2 tables ------------------------------------------------------------------------
+
+
+def test_one_application_per_opportunity(db: Session) -> None:
+    opp = make_opportunity()
+    db.add(opp)
+    db.flush()
+    db.add(Application(opportunity_id=opp.id, status=ApplicationStatus.SAVED))
+    db.flush()
+
+    assert_rejected(db, Application(opportunity_id=opp.id, status=ApplicationStatus.APPLIED))
+
+
+def test_application_status_is_checked_by_the_database(db: Session) -> None:
+    opp = make_opportunity()
+    db.add(opp)
+    db.flush()
+    db.add(Application(opportunity_id=opp.id, status=ApplicationStatus.SAVED))
+    db.flush()
+
+    with pytest.raises(IntegrityError):
+        db.connection().exec_driver_sql("UPDATE applications SET status = 'ghosted'")
+    db.rollback()
+
+
+def test_usernames_and_session_hashes_are_unique(db: Session) -> None:
+    user = AuthUser(username="synthetic-owner", password_hash="not-a-real-hash")
+    db.add(user)
+    db.flush()
+    assert_rejected(db, AuthUser(username="synthetic-owner", password_hash="x"))
+
+    db.add(user := AuthUser(username="synthetic-owner", password_hash="not-a-real-hash"))
+    db.flush()
+    expires = datetime(2041, 1, 1, tzinfo=UTC)
+    db.add(AuthSession(user_id=user.id, token_hash="a" * 64, expires_at=expires))
+    db.flush()
+    assert_rejected(db, AuthSession(user_id=user.id, token_hash="a" * 64, expires_at=expires))
+
+
+def test_deleting_a_user_removes_their_sessions(db: Session) -> None:
+    user = AuthUser(username="synthetic-owner", password_hash="not-a-real-hash")
+    db.add(user)
+    db.flush()
+    db.add(
+        AuthSession(
+            user_id=user.id, token_hash="b" * 64, expires_at=datetime(2041, 1, 1, tzinfo=UTC)
+        )
+    )
+    db.flush()
+
+    db.connection().exec_driver_sql("DELETE FROM auth_users")
+
+    assert db.scalar(text("SELECT count(*) FROM auth_sessions")) == 0

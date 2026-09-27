@@ -108,3 +108,17 @@ class EligibilityStatus(StrEnum):
     ELIGIBLE = "eligible"
     NEEDS_VERIFICATION = "needs_verification"
     INELIGIBLE = "ineligible"
+
+
+class ApplicationStatus(StrEnum):
+    """The owner's application state for one opportunity. Any status may follow any other:
+    real processes skip steps and reopen, so no transition rules are enforced."""
+
+    SAVED = "saved"
+    APPLYING = "applying"
+    APPLIED = "applied"
+    INTERVIEW = "interview"
+    OFFER = "offer"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
