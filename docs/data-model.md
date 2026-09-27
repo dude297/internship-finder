@@ -7,7 +7,7 @@ The schema is created by two Alembic migrations in `backend/alembic/versions/`:
 | Revision | Milestone | Tables |
 |---|---|---|
 | `3b9c6b57bb60` (initial core domain schema) | 1 (merged, **immutable**) | `profiles`, `profile_sources`, `profile_facts`, `opportunities`, `opportunity_source_records`, `opportunity_requirements`, `opportunity_evaluations`, `eligibility_rule_results` |
-| `7d7f4f8b9a3c` (auth sessions and application tracking) | 2 | `auth_users`, `auth_sessions`, `applications` (additive only) |
+| `7d7f4f8b9a3c` (auth sessions and application tracking) | 2 | `auth_users`, `auth_sessions`, `applications`; adds `ck_profiles_graduation_after_status_as_of` to `profiles` |
 
 The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain) and [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication). Both migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that also step through `3b9c6b57bb60`). No hosted database is provisioned (Neon is selected, [ADR-004](decisions/ADR-004-technology-stack.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
@@ -44,7 +44,9 @@ The canonical profile: user-entered or user-confirmed values. It's the only inpu
 | `location` | varchar(200), null | |
 | `created_at`, `updated_at` | timestamptz | |
 
-Constraints: `ck_profiles_education_level_has_as_of` (level and as-of date are both set or both NULL), `ck_profiles_enrollment_not_before_graduation`.
+Constraints: `ck_profiles_education_level_has_as_of` (level and as-of date are both set or both NULL), `ck_profiles_enrollment_not_before_graduation`, and `ck_profiles_graduation_after_status_as_of` (Milestone 2, migration `7d7f4f8b9a3c`).
+
+**Education timeline invariant.** When both are set, `expected_graduation_date > education_status_as_of` (strict). The resolver applies the graduation transition **on** the graduation date, so a current level recorded on or after that date would claim both the pre- and post-graduation state at once (e.g. "high school as of 2041-09-01" with graduation on 2041-06-10 would let the resolver project undergraduate status over the authoritative current level). Missing dates are still allowed; a graduation date is never required. `PUT /api/profile` rejects a violation with `422` (`expected_graduation_date must be after education_status_as_of`), and the database constraint stops any code path that bypasses the API. This is input integrity, not an eligibility-rule change: the rules version stays `v1`.
 
 ### `profile_sources`
 
