@@ -188,6 +188,10 @@ def fetch_json(
             except httpx2.TransportError as error:
                 if last:
                     raise FetchError("network_error", "Couldn't connect to the source.") from error
+            except httpx2.HTTPError as error:  # e.g. an undecodable body: not worth retrying
+                raise FetchError(
+                    "network_error", "The source response couldn't be read."
+                ) from error
             delay = _retry_delay(response, attempt)
             if delay > MAX_RETRY_AFTER_SECONDS:
                 raise FetchError("rate_limited", "The source asked us to wait too long; try later.")

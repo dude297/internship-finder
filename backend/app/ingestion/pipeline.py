@@ -380,9 +380,27 @@ def sync_source(
     db: Session, source: IngestionSource, *, transport: httpx2.BaseTransport | None = None
 ) -> IngestionRun:
     """Sync one source and return its finished run. Raises SyncInProgress only; every source,
-    network, or item failure is recorded on the run instead."""
+    network, or item failure is recorded on the run instead, and a run never stays `running`."""
     now = datetime.now(UTC)
     run = _start_run(db, source, now)
+    try:
+        return _sync(db, source, run, now, transport)
+    except Exception:
+        logger.exception("ingestion run failed unexpectedly source=%s", source.key)
+        db.rollback()
+        run = db.get_one(IngestionRun, run.id)
+        return _fail(
+            db, run, IngestionStage.PERSIST, "internal_error", "The sync failed unexpectedly."
+        )
+
+
+def _sync(
+    db: Session,
+    source: IngestionSource,
+    run: IngestionRun,
+    now: datetime,
+    transport: httpx2.BaseTransport | None,
+) -> IngestionRun:
     config = SourceConfig(source.kind, source.identifier, source.region, source.display_name)
     adapter = adapter_for(source.kind)
     try:
@@ -404,15 +422,7 @@ def sync_source(
 
     run.fetched_count = len(snapshot.items)
     run.source_generated_at = snapshot.generated_at
-    try:
-        _process(db, source, run, snapshot.items, now)
-    except Exception:
-        logger.exception("ingestion run failed unexpectedly source=%s", source.key)
-        db.rollback()
-        run = db.get_one(IngestionRun, run.id)
-        return _fail(
-            db, run, IngestionStage.PERSIST, "internal_error", "The sync failed unexpectedly."
-        )
+    _process(db, source, run, snapshot.items, now)
 
     if run.invalid_count or run.error_count:
         return _finish(db, run, IngestionRunStatus.PARTIAL)

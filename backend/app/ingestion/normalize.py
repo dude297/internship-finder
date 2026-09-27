@@ -60,7 +60,11 @@ def _http_url(value: str | None) -> str | None:
     still has it)."""
     if value is None or len(value) > 2048:
         return None
-    parts = urlsplit(value.strip())
+    try:
+        parts = urlsplit(value.strip())
+        parts.port  # noqa: B018 -- raises ValueError for an invalid port
+    except ValueError:
+        return None
     if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
         return None
     if parts.username or parts.password or re.search(r"\s", value.strip()):
