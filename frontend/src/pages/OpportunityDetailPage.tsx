@@ -4,16 +4,19 @@ import { api } from '../api/client'
 import type { OpportunityDetail } from '../api/schemas'
 import { ApplicationTracker } from '../components/ApplicationTracker'
 import { EligibilityPanel } from '../components/EligibilityPanel'
+import { SourceProvenance } from '../components/SourceProvenance'
 import { ErrorMessage } from '../components/ui'
 import {
   appliesAtLabels,
+  assessmentDescriptions,
   assessmentLabels,
   formatDate,
+  formatDay,
   opportunityTypeLabels,
   remoteModeLabels,
   requirementTypeLabels,
 } from '../lib/labels'
-import { dangerButtonClass, secondaryButtonClass } from '../lib/styles'
+import { buttonClass, dangerButtonClass, secondaryButtonClass } from '../lib/styles'
 
 function describeValue(value: Record<string, unknown>): string {
   if (typeof value.years === 'number') return `at least ${value.years} years old`
@@ -80,8 +83,10 @@ export function OpportunityDetailPage() {
     }
   }
 
+  const needsReview = o.requirements_assessment_status !== 'complete'
   const facts: [string, string][] = [
     ['Type', opportunityTypeLabels[o.opportunity_type]],
+    ['Posted', formatDay(o.posted_at)],
     ['Location', o.location ?? '—'],
     ['Remote mode', o.remote_mode ? remoteModeLabels[o.remote_mode] : '—'],
     ['Application deadline', formatDate(o.application_deadline)],
@@ -97,7 +102,17 @@ export function OpportunityDetailPage() {
         </Link>
         <h1 className="text-2xl font-semibold">{o.title}</h1>
         <p className="text-slate-600">{o.organization}</p>
+        {o.availability === 'closed' && (
+          <p className="inline-block rounded bg-slate-700 px-2 py-0.5 text-sm text-white">
+            Closed: no source lists this posting anymore
+          </p>
+        )}
         <div className="flex flex-wrap gap-2 pt-2">
+          {needsReview && (
+            <Link to={`/opportunities/${o.id}/edit`} className={buttonClass}>
+              Review requirements
+            </Link>
+          )}
           <Link to={`/opportunities/${o.id}/edit`} className={secondaryButtonClass}>
             Edit
           </Link>
@@ -157,6 +172,14 @@ export function OpportunityDetailPage() {
           <span className="text-slate-500">Assessment: </span>
           {assessmentLabels[o.requirements_assessment_status]}
         </p>
+        {needsReview && (
+          <p className="rounded border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            {assessmentDescriptions[o.requirements_assessment_status]}{' '}
+            {o.origin === 'imported'
+              ? 'Imported postings are never assessed automatically: open the original posting, then use Review requirements to record its hard requirements.'
+              : 'Use Review requirements to record them.'}
+          </p>
+        )}
         {o.requirements.length === 0 ? (
           <p className="text-slate-600">No requirements recorded.</p>
         ) : (
@@ -180,6 +203,8 @@ export function OpportunityDetailPage() {
           </ul>
         )}
       </section>
+
+      <SourceProvenance opportunity={o} />
 
       <ApplicationTracker
         opportunityId={o.id}

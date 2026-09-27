@@ -7,6 +7,7 @@ import { OpportunityDetailPage } from './pages/OpportunityDetailPage'
 import { OpportunityFormPage } from './pages/OpportunityFormPage'
 import { OpportunityListPage } from './pages/OpportunityListPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { SourcesPage } from './pages/SourcesPage'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
             <Route path="/opportunities/new" element={<OpportunityFormPage />} />
             <Route path="/opportunities/:id" element={<OpportunityDetailPage />} />
             <Route path="/opportunities/:id/edit" element={<OpportunityFormPage />} />
+            <Route path="/sources" element={<SourcesPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/opportunities" replace />} />

@@ -1,10 +1,12 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { detail, json, loggedIn, mockApi, renderAt, summary } from './helpers'
+import { detail, json, listPage, loggedIn, mockApi, renderAt, summary } from './helpers'
+
+const noSources = { 'GET /api/sources': () => [] }
 
 describe('opportunity list', () => {
   it('shows an empty state with a way to add one', async () => {
-    mockApi({ ...loggedIn, 'GET /api/opportunities': () => [] })
+    mockApi({ ...loggedIn, ...noSources, 'GET /api/opportunities': () => listPage([]) })
     renderAt('/opportunities')
 
     expect(await screen.findByText(/No opportunities yet/)).toBeInTheDocument()
@@ -17,22 +19,24 @@ describe('opportunity list', () => {
   it('keeps every eligibility state distinct', async () => {
     mockApi({
       ...loggedIn,
-      'GET /api/opportunities': () => [
-        summary({ id: 'a', title: 'A', eligibility_status: 'eligible' }),
-        summary({
-          id: 'b',
-          title: 'B',
-          eligibility_status: 'needs_verification',
-          requirements_assessment_status: 'unassessed',
-        }),
-        summary({ id: 'c', title: 'C', eligibility_status: 'ineligible' }),
-        summary({
-          id: 'd',
-          title: 'D',
-          eligibility_status: null,
-          application_status: 'applied',
-        }),
-      ],
+      ...noSources,
+      'GET /api/opportunities': () =>
+        listPage([
+          summary({ id: 'a', title: 'A', eligibility_status: 'eligible' }),
+          summary({
+            id: 'b',
+            title: 'B',
+            eligibility_status: 'needs_verification',
+            requirements_assessment_status: 'unassessed',
+          }),
+          summary({ id: 'c', title: 'C', eligibility_status: 'ineligible' }),
+          summary({
+            id: 'd',
+            title: 'D',
+            eligibility_status: null,
+            application_status: 'applied',
+          }),
+        ]),
     })
     renderAt('/opportunities')
 
@@ -52,6 +56,7 @@ describe('opportunity list', () => {
   it('shows an error state', async () => {
     mockApi({
       ...loggedIn,
+      ...noSources,
       'GET /api/opportunities': () => json({ detail: 'Internal server error.' }, 500),
     })
     renderAt('/opportunities')
@@ -60,7 +65,11 @@ describe('opportunity list', () => {
   })
 
   it('rejects a malformed response safely', async () => {
-    mockApi({ ...loggedIn, 'GET /api/opportunities': () => [{ id: 1 }] })
+    mockApi({
+      ...loggedIn,
+      ...noSources,
+      'GET /api/opportunities': () => listPage([{ id: 1 }]),
+    })
     renderAt('/opportunities')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(

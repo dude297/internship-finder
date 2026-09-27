@@ -3,13 +3,17 @@ import {
   applicationSchema,
   evaluationSchema,
   opportunityDetailSchema,
-  opportunitySummarySchema,
+  opportunityPageSchema,
   profileSaveSchema,
   profileSchema,
+  runSchema,
   sessionSchema,
+  sourceSchema,
   type ApplicationInput,
   type OpportunityInput,
+  type OpportunityQuery,
   type ProfileInput,
+  type SourceInput,
 } from './schemas'
 
 // The only place that talks to the backend. Requests are same-origin (/api, proxied by Vite in
@@ -122,8 +126,12 @@ export const api = {
   saveProfile: (profile: ProfileInput) =>
     request('PUT', '/profile', profileSaveSchema, profile),
 
-  listOpportunities: () =>
-    request('GET', '/opportunities', z.array(opportunitySummarySchema)),
+  listOpportunities: (query: OpportunityQuery) => {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined && value !== '') params.set(key, String(value))
+    return request('GET', `/opportunities?${params}`, opportunityPageSchema)
+  },
   getOpportunity: (id: string) =>
     request('GET', `/opportunities/${encodeURIComponent(id)}`, opportunityDetailSchema),
   createOpportunity: (body: OpportunityInput) =>
@@ -157,4 +165,12 @@ export const api = {
       `/opportunities/${encodeURIComponent(opportunityId)}/application`,
       null,
     ),
+
+  listSources: () => request('GET', '/sources', z.array(sourceSchema)),
+  createSource: (body: SourceInput) => request('POST', '/sources', sourceSchema, body),
+  updateSource: (id: string, body: { display_name: string; enabled: boolean }) =>
+    request('PUT', `/sources/${encodeURIComponent(id)}`, sourceSchema, body),
+  syncSource: (id: string) =>
+    request('POST', `/sources/${encodeURIComponent(id)}/sync`, runSchema),
+  syncAllSources: () => request('POST', '/sources/sync', z.array(runSchema)),
 }
