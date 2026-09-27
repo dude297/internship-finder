@@ -36,6 +36,9 @@ class OpportunityEvaluation(IdMixin, Base):
     evaluated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # SHA-256 of the canonical eligibility inputs (ADR-008 §9). Automatic evaluation skips when
+    # the latest evaluation has the same fingerprint. NULL for evaluations before Milestone 3.
+    input_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
     rule_results: Mapped[list["EligibilityRuleResult"]] = relationship(
         back_populates="evaluation",
