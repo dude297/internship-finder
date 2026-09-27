@@ -37,14 +37,15 @@ Rules should be deterministic. AI may help **extract** requirements from posting
 
 Implementation: `backend/app/opportunities/eligibility/`. The single entry point is `evaluate_eligibility(profile, opportunity, requirements)`. Persisting is `app.repositories.evaluate_and_save`.
 
-### When evaluations run (Milestone 2)
+### When evaluations run (Milestone 2, refined in Milestone 3)
 
-- Creating or updating an opportunity (including its requirement set or assessment status) appends an evaluation if a profile exists. Without a profile, nothing is evaluated and the UI says so. An evaluation is never faked.
+- Creating or updating an opportunity (by hand or by a source sync) appends an evaluation if a profile exists **and** the eligibility inputs changed since the latest evaluation. The inputs are compared by a SHA-256 fingerprint of the rules version, the canonical profile inputs, the opportunity's reference dates and assessment status, and its requirements ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion)), so a title-only edit or an unchanged sync adds nothing. Without a profile, nothing is evaluated and the UI says so. An evaluation is never faked.
+- Imported opportunities start `unassessed` (ELIG-REQ-000 → at least `needs_verification`). Source fields such as the discovery feed's sponsorship, H-1B, or skill tags never become requirements. The owner records requirements with **Review requirements** (the regular editor) and marks the assessment `partial` or `complete`; later syncs never overwrite that review.
 - Saving the profile re-evaluates every opportunity when an input the rules read changed (the fields of `ProfileInput`: the education timeline, date of birth, and citizenships). Changing only the grade, location, or work authorizations doesn't, because no v1 rule reads them.
 - `POST /api/opportunities/{id}/evaluate` appends one on demand.
 - Application tracking never affects eligibility.
 
-Every run appends history; nothing is overwritten. The rules (and `v1`) are unchanged by Milestone 2.
+Every evaluation appends history; nothing is overwritten. The rules (and `v1`) are unchanged by Milestones 2 and 3.
 
 ### How the UI presents results
 

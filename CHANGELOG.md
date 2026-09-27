@@ -6,6 +6,19 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Milestone 3: automated opportunity discovery and ingestion ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md)).
+  - Migration `726372d627b8`: `ingestion_sources` (with the built-in "Tech Internship Discovery Feed"), `ingestion_runs`, `ingestion_run_errors`, `opportunity_identifiers`; `opportunities.posted_at` and `manually_curated_at`; source-record lifecycle (`ingestion_source_id`, `is_active`, `closed_at`, source dates, `content_hash`); `opportunity_evaluations.input_fingerprint`.
+  - Automatic repair of development databases migrated with the pre-merge `7d7f4f8b9a3c` (restores `ck_profiles_graduation_after_status_as_of`; no manual SQL).
+  - Shared ingestion pipeline: typed normalized adapter output, per-item savepoints, run history with counts and bounded safe errors, partial-success semantics, closure only after complete successful snapshots, reactivation, and conditional requests (ETag / Last-Modified → `no_change`).
+  - Adapters: zshah101 discovery feed (public JSON API), Greenhouse Job Board API, Lever Postings API (global and EU). Source HTML is converted to plain text.
+  - Safe HTTP client (`httpx2`, now a runtime dependency): allowlisted HTTPS hosts, public-address check, timeouts, bounded redirects/retries/size, `Retry-After`.
+  - Conservative deduplication through deterministic identifiers (feed ID, Greenhouse/Lever provider IDs, exact canonical URL); identity conflicts are recorded, never merged.
+  - Manual-curation protection: owner edits survive later syncs.
+  - Sources API (`/api/sources`: list, add from board links, rename/enable, sync one, sync all, run history) and CLI (`sync-sources`, `sync-source`).
+  - Paginated opportunity list (`limit` ≤ 100) with search and availability/source/eligibility/application/work-mode filters, freshest first.
+  - Frontend: Sources page, filters and pagination, imported/manual/closed labels, Source provenance and a Review requirements action on the detail page.
+  - Tests: ingestion unit and PostgreSQL tests with synthetic provider fixtures, Sources API and CLI tests, migration reconciliation tests, Vitest for the new pages, and a network-free Playwright ingestion workflow.
+
 - Milestone 2: private single-user workflow MVP ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md)).
   - Owner authentication: Argon2id (`pwdlib[argon2]`), CLI-only account creation and password rotation (`python -m app.cli create-owner` / `set-password`), opaque server-side sessions (SHA-256 stored), HttpOnly `SameSite=Lax` cookie (`Secure` by default), HMAC-derived CSRF token on every unsafe private request, one `require_owner` boundary, generic login failures, and an in-memory failed-login throttle.
   - Migration `7d7f4f8b9a3c`: `auth_users`, `auth_sessions`, `applications`, and the `profiles` CHECK `ck_profiles_graduation_after_status_as_of`.
@@ -36,6 +49,8 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- `GET /api/opportunities` returns a page (`{items, total, limit, offset}`) instead of an array, and each summary includes origin, availability, source names, and posted/first-seen dates.
+- Automatic evaluation (opportunity create/update, sync) appends a new evaluation only when the eligibility inputs changed. `POST /api/opportunities/{id}/evaluate` still always appends. This resolves the Milestone 2 debt "updates always append an evaluation, even when only the title changed".
 - The frontend calls relative `/api` URLs through a Vite proxy (same-origin). `VITE_API_BASE_URL`, the backend's `FRONTEND_ORIGIN`, and the CORS middleware were removed.
 - The health-only home page was replaced by the authenticated app.
 

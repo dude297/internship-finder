@@ -251,3 +251,10 @@ When résumé ingestion is implemented:
 - Database dumps containing profile facts are never committed.
 
 "Where the original file is stored" (§3) is still an implementation decision, but the answer can't be Git.
+
+## Clarification (2026-09-27): Reference repository review outcome
+
+This clarification records the verification that §10 required. It doesn't change the decision above. Details are in [ADR-008 §11](ADR-008-opportunity-ingestion-and-deduplication.md#11-source-licensing-and-attribution) and [docs/sources.md](../sources.md#source-review-and-attribution) (an engineering source-use review, not legal advice):
+
+- `zshah101/...Tech-Internships` (MIT): its published JSON API is consumed as the built-in layer-1 discovery feed through an ordinary adapter. None of its code is copied, and its sponsorship/skill classifications are never used as hard eligibility.
+- `SuryaHarikrishnan/2027-internship-tracker`: its software license doesn't clearly cover the aggregated listing data, so that data is **not** ingested. It remains a reference only.

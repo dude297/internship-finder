@@ -39,6 +39,13 @@ $0/month, and no payment method required. Before provisioning any service:
 
 GitHub Actions scheduled workflows (selected, not configured). Workflows call Python commands from the backend package. Scheduled jobs can connect to the database directly, so they don't depend on the Render service being awake.
 
+Source sync exists as `python -m app.cli sync-sources` (Milestone 3) but runs only by hand today: the database is local, and a GitHub-hosted runner can't (and mustn't) reach it. Considerations for a future scheduled sync, once a hosted database exists:
+
+- `DATABASE_URL` comes from a repository/environment secret, never workflow YAML, and the workflow must not run for forked pull requests.
+- Keep the cadence courteous (the discovery feed updates about every 30 minutes; conditional requests make an unchanged sync nearly free). Hosted-runner minutes and Neon compute are free-tier limits: fail visibly rather than escalate ([ADR-004](decisions/ADR-004-technology-stack.md)).
+- Outbound access is only to the allowlisted source hosts ([ADR-008 §10](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#10-external-network-safety)). `INGESTION_FIXTURE_FILE` is test-only and must never be set in a hosted environment.
+- Profile re-evaluation is synchronous (about 4 s per ~1,100 opportunities locally); a hosted instance with a request timeout may need it moved to background work first.
+
 ## Environment Variables
 
 None are provisioned anywhere yet. Local variables are listed in [development.md](development.md#environment-variables). For production: `DATABASE_URL` (server-only secret), `SESSION_COOKIE_SECURE=true`, and optionally `SESSION_TTL_HOURS`. The frontend needs no build-time variables because it calls relative `/api` URLs; the hosting layer must route `/api` to the backend (see the blockers above). When adding more:

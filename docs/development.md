@@ -66,10 +66,12 @@ These commands have all been run successfully in this repository.
 | Build | — | `npm run build` (output in `frontend/dist/`) |
 | Migrations | see [Migrations Workflow](#migrations-workflow) | — |
 | Owner account | `python -m app.cli create-owner` / `set-password` | — |
+| Source sync | `python -m app.cli sync-sources` / `sync-source <id-or-key>` (live network) | — |
 
 ### Test boundary: unit vs PostgreSQL vs end-to-end
 
-- **Unit tests** (education resolver, eligibility rules, password hashing, CSRF, throttle, config, health) are pure and need no database.
+- **Unit tests** (education resolver, eligibility rules, password hashing, CSRF, throttle, config, health, the ingestion HTTP client, HTML-to-text, URL canonicalization, adapters, the evaluation fingerprint) are pure and need no database.
+- **No test calls a real job board.** Ingestion tests serve fabricated provider payloads (`tests/ingestion_fixtures.py`: "Example Robotics", "Example Institute", fictional dates) through an in-memory `httpx2` transport. Live sources are exercised only by the manual smoke test below.
 - **PostgreSQL tests** (`@pytest.mark.postgres`: models, constraints, repositories, migrations, the owner CLI, and the whole HTTP API through FastAPI's `TestClient`) run against a real, disposable PostgreSQL database named by `TEST_DATABASE_URL`. The session fixture migrates it to head, each test runs in a rolled-back transaction (the API's commits become savepoints), and `tests/test_migrations.py` steps down through the Milestone 1 revision to base and back up. Never point `TEST_DATABASE_URL` at a database whose data you want to keep.
 - **Frontend component tests** stub `fetch`, so they need no backend.
 - **End-to-end tests** (`frontend/e2e/`) run the real stack in Chromium against a disposable database named by `E2E_DATABASE_URL`.
@@ -105,7 +107,9 @@ npm run test:e2e
 
 `playwright.config.ts` starts uvicorn on :8000 (with `DATABASE_URL=$E2E_DATABASE_URL`) and Vite on :5173, so stop your own dev servers first. The global setup runs `alembic upgrade head` and creates the synthetic owner (`e2e-synthetic-owner`) through the CLI with `--password-stdin`, or resets its password if an earlier run created it. `E2E_DATABASE_URL` has no default, so the tests can't touch your development database by accident. Set `E2E_PYTHON` if the backend virtualenv isn't `backend/.venv`.
 
-The scenario (`e2e/workflow.spec.ts`): a wrong password is rejected; log in; create the profile; add a manual opportunity with a minimum-age and an incoming-undergraduate requirement, marked complete; see **Eligible** with the projected-status notice; change the date of birth and see **Ineligible** after automatic re-evaluation; track the application as Applied with a date and notes; log out; confirm the UI redirects and the API returns `401`; log back in and confirm everything persisted. Failure traces and screenshots go to `frontend/test-results/` (gitignored).
+`e2e/ingestion.spec.ts` covers ingestion without the network: the backend's test-only `INGESTION_FIXTURE_FILE` (set by `playwright.config.ts` to a file in the OS temp directory) maps source URLs to synthetic JSON bodies, and the test rewrites it between syncs. It adds a Greenhouse board by link, syncs twice (created, then unchanged), opens an imported opportunity (needs verification, unassessed), reviews its requirements to complete (eligible), tracks a second posting, then publishes a snapshot where the first is renamed upstream and the second is gone: the review survives, and the second posting is closed (not deleted) with its tracking intact. Board and organization names are unique per run, so it's repeatable on a reused database.
+
+The original scenario (`e2e/workflow.spec.ts`): a wrong password is rejected; log in; create the profile; add a manual opportunity with a minimum-age and an incoming-undergraduate requirement, marked complete; see **Eligible** with the projected-status notice; change the date of birth and see **Ineligible** after automatic re-evaluation; track the application as Applied with a date and notes; log out; confirm the UI redirects and the API returns `401`; log back in and confirm everything persisted. Failure traces and screenshots go to `frontend/test-results/` (gitignored).
 
 ### Environment variables
 
@@ -118,12 +122,26 @@ The scenario (`e2e/workflow.spec.ts`): a wrong password is rejected; log in; cre
 | `E2E_DATABASE_URL` | Playwright | Local/CI only | For `npm run test:e2e` | Disposable E2E database |
 | `E2E_OWNER_USERNAME`, `E2E_OWNER_PASSWORD` | Playwright | Local/CI only, synthetic | No (synthetic defaults) | The throwaway owner the E2E test logs in as |
 | `E2E_PYTHON` | Playwright | Local only | No | Backend Python executable |
+| `INGESTION_FIXTURE_FILE` | backend | **Test-only** | No (unset = real network) | JSON file `{url: body}` that source sync reads instead of the network. Set only by the E2E config for its disposable database; the backend logs a warning while it's active. Never set it for real use |
 
 The frontend has **no** environment variables: it calls relative `/api` URLs. (`VITE_API_BASE_URL` and the backend's `FRONTEND_ORIGIN` were removed in Milestone 2.) There's no cookie-signing secret because sessions are opaque database rows.
 
 The example is `backend/.env.example`. Never commit `.env` files.
 
 Backend tests ignore `backend/.env` and any of these variables set in your shell (`backend/tests/conftest.py`), so they run against defaults. Tests that need a value set it explicitly.
+
+### Syncing sources locally
+
+The Sources page (`/sources`) syncs on demand. The same pipeline runs from the command line (in `backend/`, venv active, `DATABASE_URL` set):
+
+```bash
+python -m app.cli sync-sources                                         # every enabled source
+python -m app.cli sync-source community_feed:zshah-tech-internships    # one source, by key or ID
+```
+
+These call real public APIs (see [sources.md](sources.md)). Be courteous: sync when you need fresh data, not in a loop; an unchanged feed answers `304` and costs almost nothing. Output is counts only. The exit code is `1` when a requested sync failed.
+
+**Live smoke test (manual, never in CI).** Use a disposable database, not your own: create one (`CREATE DATABASE internship_finder_smoke`), `alembic upgrade head` against it, run `sync-source community_feed:zshah-tech-internships` twice, and check the second run is `no_change` (or all `unchanged` if the feed changed its validators). Never commit downloaded payloads.
 
 ## Version Control
 
@@ -145,6 +163,7 @@ GitHub Actions, within included free usage only. No paid runners, scheduled jobs
 
 - Frontend (Node 24): `npm ci`, lint, format check, typecheck, tests, build
 - Backend (Python 3.12): install, `ruff check`, `ruff format --check`, `pyright`, unit tests, then against an ephemeral PostgreSQL 18 service container (test-only credentials in the workflow, not secrets): `alembic upgrade head`, `alembic check` (models match migrations), `alembic downgrade base`, `alembic upgrade head`, and the PostgreSQL tests (including the API and CLI)
+- No CI job calls a third-party job board; ingestion is tested with synthetic fixtures only
 - E2E: its own ephemeral PostgreSQL 18, backend install, `npm ci`, Playwright Chromium, and `npx playwright test` with synthetic, clearly labeled test-only owner credentials in the workflow `env` (no repository secrets). On failure it uploads the Playwright report and traces (synthetic data only) for 7 days
 
 Planned later: docs checks where practical.
@@ -161,7 +180,7 @@ See [ENGINEERING_GUIDELINES.md §12](../ENGINEERING_GUIDELINES.md#12-testing-sta
 
 ## Migrations Workflow
 
-Alembic is set up in `backend/`. Migrations: `3b9c6b57bb60` (initial core domain schema, Milestone 1, merged and **immutable**: never edit it) and `7d7f4f8b9a3c` (auth sessions and application tracking, Milestone 2). Schema changes are new revisions. (Before PR #5 merged, `7d7f4f8b9a3c` itself gained `ck_profiles_graduation_after_status_as_of`. A local database upgraded to `7d7f4f8b9a3c` earlier than that lacks the constraint, and `alembic check` doesn't compare CHECK constraints. Recreate disposable test/E2E databases. For a database with data you want to keep, add the constraint by hand with the migration's SQL; don't downgrade, because that drops the auth and application tables.) `alembic/env.py` uses `sqlalchemy.url` if it's set programmatically (the tests do this), otherwise `DATABASE_URL` from app settings. The autogenerate target is `app.models.Base.metadata`. Add new model modules to `app/models/__init__.py` so autogenerate sees them. Enum columns autogenerate duplicate CHECK constraints: keep one named `ck_…` constraint per enum and set `create_constraint=False` on the `sa.Enum` (see the initial migration).
+Alembic is set up in `backend/`. Migrations: `3b9c6b57bb60` (initial core domain schema, Milestone 1), `7d7f4f8b9a3c` (auth sessions and application tracking, Milestone 2), and `726372d627b8` (opportunity ingestion and deduplication, Milestone 3). Merged migrations are **immutable**: never edit them. Schema changes are new revisions. A development database migrated with the pre-merge local version of `7d7f4f8b9a3c` (missing `ck_profiles_graduation_after_status_as_of`) is repaired automatically by `alembic upgrade head` ([data-model.md](data-model.md#graduation-constraint-reconciliation-726372d627b8)); no manual SQL is needed. `alembic/env.py` uses `sqlalchemy.url` if it's set programmatically (the tests do this), otherwise `DATABASE_URL` from app settings. The autogenerate target is `app.models.Base.metadata`. Add new model modules to `app/models/__init__.py` so autogenerate sees them. Enum columns autogenerate duplicate CHECK constraints: keep one named `ck_…` constraint per enum and set `create_constraint=False` on the `sa.Enum` (see the initial migration).
 
 From `backend/` with the venv active and `DATABASE_URL` set:
 
@@ -174,7 +193,7 @@ alembic current                                       # show the applied revisio
 alembic check                                         # fail if models and migrations differ
 ```
 
-Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade 3b9c6b57bb60`, `downgrade base`, `upgrade head`, `check` (CI skips the intermediate downgrade; `tests/test_migrations.py` covers it). Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. No hosted database is provisioned yet. Rules:
+Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade 7d7f4f8b9a3c`, `downgrade 3b9c6b57bb60`, `downgrade base`, `upgrade head`, `check` (CI skips the intermediate downgrades; `tests/test_migrations.py` covers them, plus the stale-`7d7f4f8b9a3c` repair). Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. No hosted database is provisioned yet. Rules:
 
 - every schema change is an Alembic migration, committed with the code that needs it
 - update [data-model.md](data-model.md) in the same change
