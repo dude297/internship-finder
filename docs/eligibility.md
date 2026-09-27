@@ -37,6 +37,19 @@ Rules should be deterministic. AI may help **extract** requirements from posting
 
 Implementation: `backend/app/opportunities/eligibility/`. The single entry point is `evaluate_eligibility(profile, opportunity, requirements)`. Persisting is `app.repositories.evaluate_and_save`.
 
+### When evaluations run (Milestone 2)
+
+- Creating or updating an opportunity (including its requirement set or assessment status) appends an evaluation if a profile exists. Without a profile, nothing is evaluated and the UI says so. An evaluation is never faked.
+- Saving the profile re-evaluates every opportunity when an input the rules read changed (the fields of `ProfileInput`: the education timeline, date of birth, and citizenships). Changing only the grade, location, or work authorizations doesn't, because no v1 rule reads them.
+- `POST /api/opportunities/{id}/evaluate` appends one on demand.
+- Application tracking never affects eligibility.
+
+Every run appends history; nothing is overwritten. The rules (and `v1`) are unchanged by Milestone 2.
+
+### How the UI presents results
+
+The UI shows `needs_verification` as its own state ("Needs verification") and never folds it into eligible. Opportunities without an evaluation show "Not evaluated". Each rule result gets a plain-language line (e.g. "Education — Eligible: based on your projected status on …: incoming undergraduate") rephrased from the stored status and details, with the stored reason and rule ID under "More detail". When the evaluation's `depends_on_projected_status` is true, the UI shows "This result depends on expected future education dates." with the resolver's explanation.
+
 ## Time-Aware Evaluation
 
 The user's status changes over time. For example, a high-school senior is expected to become an undergraduate after graduation ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Rules evaluate the user's **projected status at the date the requirement applies**, not only their status today.

@@ -2,7 +2,17 @@
 
 **Deployment is not configured yet.**
 
-Hosting and database providers are **selected** ([ADR-004](decisions/ADR-004-technology-stack.md)) but **not provisioned**. No accounts, projects, databases, or production environment exist.
+Hosting and database providers are **selected** ([ADR-004](decisions/ADR-004-technology-stack.md)) but **not provisioned**. No accounts, projects, databases, or production environment exist. Milestone 2 runs locally only.
+
+## Blockers Before Any Hosted Deployment
+
+The authentication design ([ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md)) is **not** claimed to be Internet-production-ready. Production deployment is blocked until each item below is reviewed and resolved:
+
+1. **Same-origin topology.** The browser must reach the API on the frontend's origin (e.g. the static host rewrites `/api/*` to the backend) or at least the same site. A frontend on one provider's random subdomain calling a backend on another provider's random subdomain is not accepted: `SameSite=Lax` cookies wouldn't be sent, and `SameSite=None` would weaken the CSRF defenses.
+2. **Secure cookies.** `SESSION_COOKIE_SECURE` must be `true` (the default) and the site served only over HTTPS.
+3. **Login rate limiting.** The current limiter is in memory, per process, keyed by client IP, and reset on restart. Behind a proxy it may see one IP for everyone. **Production deployment is blocked until login rate limiting is reviewed** with the real topology (trusted forwarded headers, process count, persistent or shared counters).
+4. **Hosted configuration.** `DATABASE_URL` as a host secret (never in the repository or workflow YAML), migrations applied before the new code serves traffic, and the owner created with the CLI against the hosted database from a trusted machine.
+5. **Owner bootstrap.** Decide how `python -m app.cli create-owner` is run against the hosted database without exposing the password (interactive `getpass` from a trusted shell).
 
 ## Cost Constraint
 
@@ -31,7 +41,7 @@ GitHub Actions scheduled workflows (selected, not configured). Workflows call Py
 
 ## Environment Variables
 
-None are provisioned anywhere yet. Local variables are listed in [development.md](development.md#environment-variables). For production, `VITE_API_BASE_URL` must be set at frontend build time (it's public), and `FRONTEND_ORIGIN` must be set to the deployed frontend origin (never `*`). When adding more:
+None are provisioned anywhere yet. Local variables are listed in [development.md](development.md#environment-variables). For production: `DATABASE_URL` (server-only secret), `SESSION_COOKIE_SECURE=true`, and optionally `SESSION_TTL_HOURS`. The frontend needs no build-time variables because it calls relative `/api` URLs; the hosting layer must route `/api` to the backend (see the blockers above). When adding more:
 
 - list every variable in [`.env.example`](../.env.example) with placeholder values
 - note here which are server-only (e.g. database URL: backend and GitHub Actions secrets only) and which may be exposed to the frontend (e.g. the public API base URL)

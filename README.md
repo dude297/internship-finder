@@ -4,7 +4,7 @@ A personal, single-user tool for finding internship and research opportunities, 
 
 **Intended user:** a single user (the repository owner). It's still being built to production standards.
 
-> ⚠️ **Status: backend domain foundation (Milestone 1, in review).** The database schema, temporal education resolver, and deterministic eligibility rules v1 exist and are tested. There is no product API or UI yet; the frontend only shows backend health. Other capabilities in `docs/` are **planned**. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
+> ⚠️ **Status: private single-user workflow MVP (Milestone 2, in review, local only).** Log in, keep a private profile, add opportunities by hand with structured requirements, see eligibility evaluated automatically with plain-language explanations, and track applications. There is no résumé parsing, no automatic opportunity discovery, no fit scoring, no AI, and no hosted deployment. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
 
 ## Stack
 
@@ -22,31 +22,38 @@ Opportunity sourcing and profile ingestion strategy: [ADR-005](docs/decisions/AD
 
 ## Local Development
 
-Requires Node.js 24 and Python 3.12+. The frontend and backend run independently.
+Requires Node.js 24, Python 3.12+, and Docker (for the local PostgreSQL 18).
 
 ```bash
-# Backend: http://localhost:8000/api/health
+docker compose up -d                 # local-only PostgreSQL, data in a Docker volume
+
+# Backend (first terminal): http://localhost:8000
 cd backend
 python -m venv .venv
-source .venv/bin/activate          # Windows (PowerShell): .venv\Scripts\Activate.ps1
+source .venv/bin/activate            # Windows (PowerShell): .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
+cp .env.example .env
+alembic upgrade head
+python -m app.cli create-owner --username <your-username>   # password via a hidden prompt
 uvicorn app.main:app --reload
 
-# Frontend: http://localhost:5173 (in a second terminal)
+# Frontend (second terminal): http://localhost:5173, proxies /api to the backend
 cd frontend
 npm install
 npm run dev
 ```
 
-The page should show "Backend status: Healthy". Lint, typecheck, test, and build commands are in [docs/development.md](docs/development.md).
+Open http://localhost:5173 and log in. There's no sign-up page: the owner account exists only through the CLI. Lint, typecheck, test, end-to-end, and build commands are in [docs/development.md](docs/development.md).
 
 ## Public Repository
 
 This repository contains application source code only. Personal résumé, profile, application, and credential data must never be committed. See [CLAUDE.md](CLAUDE.md#public-repository-safety).
 
+The running app is private: one owner account, created from the command line, with Argon2id password hashing, server-side sessions in an HttpOnly cookie, and CSRF protection ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md)). Your profile, opportunities, and application notes live only in your database. Tests and CI use synthetic data and throwaway databases.
+
 ## Environment
 
-Each app has its own example file: [`frontend/.env.example`](frontend/.env.example) and [`backend/.env.example`](backend/.env.example). None of the variables are required for local development. `DATABASE_URL` isn't used by the health-only scaffold. Never commit real values.
+The backend's example file is [`backend/.env.example`](backend/.env.example) (it points at the local Compose database). The frontend needs no variables. Never commit real values.
 
 ## Documentation
 
