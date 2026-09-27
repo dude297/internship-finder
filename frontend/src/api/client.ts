@@ -1,21 +1,160 @@
 import { z } from 'zod'
+import {
+  applicationSchema,
+  evaluationSchema,
+  opportunityDetailSchema,
+  opportunitySummarySchema,
+  profileSaveSchema,
+  profileSchema,
+  sessionSchema,
+  type ApplicationInput,
+  type OpportunityInput,
+  type ProfileInput,
+} from './schemas'
 
-// ponytail: localhost fallback only in dev; production builds must set VITE_API_BASE_URL.
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV ? 'http://localhost:8000' : undefined)
+// The only place that talks to the backend. Requests are same-origin (/api, proxied by Vite in
+// development), so the HttpOnly session cookie is sent automatically and never touches JS.
 
-export const healthResponseSchema = z.object({ status: z.literal('ok') })
-export type HealthResponse = z.infer<typeof healthResponseSchema>
+export interface FieldIssue {
+  field: string | null
+  message: string
+}
 
-export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
-  if (!API_BASE_URL) throw new Error('VITE_API_BASE_URL is not configured')
+export class ApiError extends Error {
+  readonly status: number
+  readonly issues: FieldIssue[]
 
-  const response = await fetch(`${API_BASE_URL}/api/health`, { signal })
-  if (!response.ok) throw new Error(`Health check failed (HTTP ${response.status})`)
+  constructor(status: number, message: string, issues: FieldIssue[] = []) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.issues = issues
+  }
+}
 
-  const body: unknown = await response.json().catch(() => undefined)
-  const parsed = healthResponseSchema.safeParse(body)
-  if (!parsed.success) throw new Error('Backend returned an unexpected health response')
+// CSRF token for unsafe requests (ADR-007 §5). In memory only, never in browser storage.
+let csrfToken: string | null = null
+let onUnauthorized: () => void = () => {}
+
+export function setCsrfToken(token: string | null) {
+  csrfToken = token
+}
+
+/** Called when any request (other than login) gets a 401, e.g. an expired session. */
+export function setUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler
+}
+
+const validationIssue = z.object({
+  loc: z.array(z.union([z.string(), z.number()])),
+  msg: z.string(),
+})
+const errorBody = z.object({ detail: z.union([z.string(), z.array(validationIssue)]) })
+
+function toIssue(issue: z.infer<typeof validationIssue>): FieldIssue {
+  // loc is ["body", field, ...]; a model-level error has no field.
+  const field =
+    issue.loc[0] === 'body' && typeof issue.loc[1] === 'string' ? issue.loc[1] : null
+  const message = issue.msg.replace(/^Value error, /, '')
+  const index = issue.loc[2]
+  return {
+    field,
+    message:
+      field === 'requirements' && typeof index === 'number'
+        ? `Requirement ${index + 1}: ${message}`
+        : message,
+  }
+}
+
+async function toError(response: Response): Promise<ApiError> {
+  const parsed = errorBody.safeParse(await response.json().catch(() => undefined))
+  if (!parsed.success)
+    return new ApiError(response.status, `Request failed (HTTP ${response.status})`)
+  const { detail } = parsed.data
+  if (typeof detail === 'string') return new ApiError(response.status, detail)
+  return new ApiError(
+    response.status,
+    'Please correct the highlighted fields.',
+    detail.map(toIssue),
+  )
+}
+
+async function request<T>(
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  path: string,
+  schema: z.ZodType<T> | null,
+  body?: unknown,
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken
+
+  const response = await fetch(`/api${path}`, {
+    method,
+    headers,
+    credentials: 'same-origin',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    if (response.status === 401 && path !== '/auth/login') onUnauthorized()
+    throw await toError(response)
+  }
+  if (schema === null) return undefined as T
+
+  const parsed = schema.safeParse(await response.json().catch(() => undefined))
+  if (!parsed.success)
+    throw new ApiError(response.status, 'The server sent an unexpected response.')
   return parsed.data
+}
+
+export const api = {
+  getSession: () => request('GET', '/auth/session', sessionSchema),
+  login: (username: string, password: string) =>
+    request('POST', '/auth/login', sessionSchema, { username, password }),
+  logout: () => request('POST', '/auth/logout', null),
+
+  /** The profile, or null before it has been created. */
+  getProfile: () =>
+    request('GET', '/profile', profileSchema).catch((error: unknown) => {
+      if (error instanceof ApiError && error.status === 404) return null
+      throw error
+    }),
+  saveProfile: (profile: ProfileInput) =>
+    request('PUT', '/profile', profileSaveSchema, profile),
+
+  listOpportunities: () =>
+    request('GET', '/opportunities', z.array(opportunitySummarySchema)),
+  getOpportunity: (id: string) =>
+    request('GET', `/opportunities/${encodeURIComponent(id)}`, opportunityDetailSchema),
+  createOpportunity: (body: OpportunityInput) =>
+    request('POST', '/opportunities', opportunityDetailSchema, body),
+  updateOpportunity: (id: string, body: OpportunityInput) =>
+    request(
+      'PUT',
+      `/opportunities/${encodeURIComponent(id)}`,
+      opportunityDetailSchema,
+      body,
+    ),
+  deleteOpportunity: (id: string) =>
+    request('DELETE', `/opportunities/${encodeURIComponent(id)}`, null),
+  evaluateOpportunity: (id: string) =>
+    request(
+      'POST',
+      `/opportunities/${encodeURIComponent(id)}/evaluate`,
+      evaluationSchema,
+    ),
+
+  saveApplication: (opportunityId: string, body: ApplicationInput) =>
+    request(
+      'PUT',
+      `/opportunities/${encodeURIComponent(opportunityId)}/application`,
+      applicationSchema,
+      body,
+    ),
+  deleteApplication: (opportunityId: string) =>
+    request(
+      'DELETE',
+      `/opportunities/${encodeURIComponent(opportunityId)}/application`,
+      null,
+    ),
 }
