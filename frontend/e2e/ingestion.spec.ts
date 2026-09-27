@@ -10,6 +10,8 @@ const board = `examplerobotics${run}`
 const boardUrl = `https://boards-api.greenhouse.io/v1/boards/${board}/jobs?content=true`
 const titleA = `Synthetic Robotics Intern ${run}`
 const titleB = `Synthetic Controls Intern ${run}`
+// Unique per run: a reused E2E database keeps the sources of earlier runs.
+const organization = `Example Robotics ${run}`
 
 function job(id: number, title: string) {
   return {
@@ -36,8 +38,8 @@ function publish(...jobs: ReturnType<typeof job>[]) {
 
 async function syncBoard(page: Page) {
   await page.getByRole('link', { name: 'Sources', exact: true }).click()
-  await page.getByRole('button', { name: 'Sync Example Robotics now' }).click()
-  await expect(page.getByText('Example Robotics: sync finished.')).toBeVisible()
+  await page.getByRole('button', { name: `Sync ${organization} now` }).click()
+  await expect(page.getByText(`${organization}: sync finished.`)).toBeVisible()
   return page.getByRole('listitem').filter({ hasText: board })
 }
 
@@ -75,12 +77,12 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   // Add a Greenhouse board by its public link; the built-in feed is already listed.
   await page.getByRole('link', { name: 'Sources', exact: true }).click()
   await expect(page.getByText('Tech Internship Discovery Feed')).toBeVisible()
-  await page.getByLabel('Organization name').fill('Example Robotics')
+  await page.getByLabel('Organization name').fill(organization)
   await page
     .getByLabel('Job board link or name')
     .fill(`https://job-boards.greenhouse.io/${board}`)
   await page.getByRole('button', { name: 'Add source' }).click()
-  await expect(page.getByText('Added Example Robotics.', { exact: false })).toBeVisible()
+  await expect(page.getByText(`Added ${organization}.`, { exact: false })).toBeVisible()
 
   // First sync imports two postings; the identical second sync changes nothing.
   publish(job(1, titleA), job(2, titleB))
