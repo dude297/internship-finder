@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router'
 import { useAuth } from '../auth/context'
+import { ErrorMessage } from './ui'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded px-2 py-1 ${isActive ? 'bg-slate-200 font-medium' : 'hover:bg-slate-100'}`
@@ -7,9 +9,16 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 export function AppShell() {
   const { logout } = useAuth()
   const navigate = useNavigate()
+  const [logoutFailed, setLogoutFailed] = useState(false)
 
   async function handleLogout() {
-    await logout().catch(() => undefined)
+    setLogoutFailed(false)
+    try {
+      await logout()
+    } catch {
+      setLogoutFailed(true) // server didn't confirm: the session may still be valid
+      return
+    }
     navigate('/login', { replace: true })
   }
 
@@ -36,6 +45,11 @@ export function AppShell() {
         </div>
       </header>
       <main className="mx-auto max-w-4xl p-4">
+        {logoutFailed && (
+          <div className="mb-4">
+            <ErrorMessage>Couldn't log out. You're still signed in.</ErrorMessage>
+          </div>
+        )}
         <Outlet />
       </main>
     </div>
