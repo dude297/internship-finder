@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     session_ttl_hours: int = Field(default=24, ge=1, le=24 * 30)
     # Keep true anywhere but plain-HTTP development on a non-localhost host (ADR-007 §4).
     session_cookie_secure: bool = True
+    # Test-only (E2E): serve ingestion responses from this JSON file ({url: body}) instead of
+    # the network. Never set it outside disposable test environments.
+    ingestion_fixture_file: str | None = None
 
 
 @lru_cache

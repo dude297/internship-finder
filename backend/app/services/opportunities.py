@@ -1,8 +1,9 @@
 """Manual opportunities, their requirements, evaluation, and application tracking.
 
-Every mutation that can change eligibility appends an evaluation (history is kept) when a
-profile exists. Functions flush; the caller commits once, so an opportunity, its source record,
-its requirements, and its evaluation are saved together or not at all.
+Every mutation that can change eligibility evaluates automatically when a profile exists: a new
+evaluation is appended (history is kept) only when the eligibility inputs changed (ADR-008 §9).
+Functions flush; the caller commits once, so an opportunity, its source record, its
+requirements, and its evaluation are saved together or not at all.
 """
 
 import uuid
@@ -22,7 +23,7 @@ from app.models import (
     OpportunitySourceRecord,
     Profile,
 )
-from app.repositories import evaluate_and_save, get_profile, latest_evaluation
+from app.repositories import evaluate_and_save, evaluate_if_changed, get_profile, latest_evaluation
 from app.schemas.application import ApplicationBody
 from app.schemas.opportunity import OpportunityBody, RequirementBody
 
@@ -46,9 +47,17 @@ def get_opportunity(db: Session, opportunity_id: uuid.UUID) -> Opportunity | Non
 
 
 def evaluate(db: Session, opportunity: Opportunity) -> OpportunityEvaluation | None:
-    """Append an evaluation for the current profile, or None when there's no profile yet."""
+    """Append an evaluation for the current profile (forced, even if nothing changed), or None
+    when there's no profile yet."""
     profile = get_profile(db)
     return evaluate_and_save(db, profile, opportunity) if profile else None
+
+
+def evaluate_automatically(db: Session, opportunity: Opportunity) -> None:
+    """After a change: append an evaluation only if an eligibility input changed."""
+    profile = get_profile(db)
+    if profile is not None:
+        evaluate_if_changed(db, profile, opportunity)
 
 
 def evaluate_all(db: Session, profile: Profile) -> int:
@@ -68,6 +77,7 @@ def create_opportunity(db: Session, body: OpportunityBody) -> Opportunity:
     now = datetime.now(UTC)
     opportunity = Opportunity(
         **_fields(body),
+        manually_curated_at=now,
         requirements=[_requirement(r) for r in body.requirements],
         source_records=[
             OpportunitySourceRecord(
@@ -80,18 +90,22 @@ def create_opportunity(db: Session, body: OpportunityBody) -> Opportunity:
     )
     db.add(opportunity)
     db.flush()
-    evaluate(db, opportunity)
+    evaluate_automatically(db, opportunity)
     return opportunity
 
 
 def update_opportunity(db: Session, opportunity: Opportunity, body: OpportunityBody) -> None:
     """Replace the fields and the complete requirement set, then evaluate. Old requirement rows
-    are deleted; past rule results keep their text (requirement_id becomes NULL)."""
+    are deleted; past rule results keep their text (requirement_id becomes NULL).
+
+    An owner edit marks the opportunity curated: later syncs keep updating its source records
+    but never overwrite these fields or requirements (ADR-008 §8)."""
     for name, value in _fields(body).items():
         setattr(opportunity, name, value)
     opportunity.requirements = [_requirement(r) for r in body.requirements]
+    opportunity.manually_curated_at = datetime.now(UTC)
     db.flush()
-    evaluate(db, opportunity)
+    evaluate_automatically(db, opportunity)
 
 
 def list_opportunities(

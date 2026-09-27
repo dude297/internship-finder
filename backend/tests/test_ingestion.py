@@ -1,0 +1,642 @@
+"""The shared ingestion pipeline against PostgreSQL: dedupe, idempotency, closure, partial and
+failed runs, curation protection, and evaluation history. Synthetic payloads only."""
+
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
+
+import httpx2
+import pytest
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.enums import (
+    ApplicationStatus,
+    EducationLevel,
+    EligibilityStatus,
+    IngestionRunStatus,
+    IngestionSourceKind,
+    OpportunityType,
+    RequirementsAssessmentStatus,
+    RequirementType,
+    SourceRegion,
+)
+from app.ingestion.adapters.community_feed import BUILTIN_IDENTIFIER
+from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_source
+from app.models import (
+    Application,
+    IngestionRun,
+    IngestionSource,
+    Opportunity,
+    OpportunityEvaluation,
+    OpportunityIdentifier,
+    OpportunityRequirement,
+    OpportunitySourceRecord,
+    Profile,
+)
+from app.repositories import latest_evaluation
+from tests.ingestion_fixtures import (
+    FEED_URL,
+    GREENHOUSE_BOARD,
+    GREENHOUSE_URL,
+    LEVER_POSTING_ID,
+    LEVER_SITE,
+    LEVER_URL,
+    FakeSource,
+    feed,
+    feed_job,
+    greenhouse_board,
+    greenhouse_job,
+    lever_posting,
+)
+
+pytestmark = pytest.mark.postgres
+
+
+def count(db: Session, model: type[Any]) -> int:
+    return db.scalar(select(func.count()).select_from(model)) or 0
+
+
+@pytest.fixture
+def web() -> FakeSource:
+    return FakeSource()
+
+
+@pytest.fixture
+def feed_source(db: Session) -> IngestionSource:
+    return db.scalars(
+        select(IngestionSource).where(IngestionSource.identifier == BUILTIN_IDENTIFIER)
+    ).one()
+
+
+@pytest.fixture
+def gh_source(db: Session) -> IngestionSource:
+    source = IngestionSource(
+        kind=IngestionSourceKind.GREENHOUSE,
+        identifier=GREENHOUSE_BOARD,
+        display_name="Example Robotics",
+    )
+    db.add(source)
+    db.commit()
+    return source
+
+
+@pytest.fixture
+def lever_source(db: Session) -> IngestionSource:
+    source = IngestionSource(
+        kind=IngestionSourceKind.LEVER,
+        identifier=LEVER_SITE,
+        region=SourceRegion.GLOBAL,
+        display_name="Example Institute",
+    )
+    db.add(source)
+    db.commit()
+    return source
+
+
+@pytest.fixture
+def profile(db: Session) -> Profile:
+    row = Profile(
+        current_education_level=EducationLevel.HIGH_SCHOOL,
+        education_status_as_of=date(2040, 9, 1),
+        expected_graduation_date=date(2041, 6, 10),
+        expected_enrollment_date=date(2041, 8, 25),
+        expected_future_education_level=EducationLevel.UNDERGRADUATE,
+        date_of_birth=date(2023, 6, 20),
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+def sync(db: Session, source: IngestionSource, web: FakeSource) -> IngestionRun:
+    return sync_source(db, source, transport=web.transport())
+
+
+def counts(run: IngestionRun) -> dict[str, int]:
+    return {
+        name: getattr(run, f"{name}_count")
+        for name in (
+            "fetched",
+            "created",
+            "updated",
+            "deduplicated",
+            "unchanged",
+            "closed",
+            "reactivated",
+            "invalid",
+            "error",
+        )
+        if getattr(run, f"{name}_count")
+    }
+
+
+def record(db: Session, source: IngestionSource, external_id: str) -> OpportunitySourceRecord:
+    return db.scalars(
+        select(OpportunitySourceRecord).where(
+            OpportunitySourceRecord.ingestion_source_id == source.id,
+            OpportunitySourceRecord.external_id == external_id,
+        )
+    ).one()
+
+
+JOB_A = feed_job("workday:example:/job/A")
+JOB_B = feed_job("workday:example:/job/B", title="Synthetic Data Intern")
+
+
+# --- First sync, idempotency, conditional requests ----------------------------------------------
+
+
+def test_first_sync_imports_unassessed_opportunities_with_provenance(
+    db: Session, feed_source: IngestionSource, web: FakeSource, profile: Profile
+) -> None:
+    web.json(FEED_URL, feed(JOB_A, JOB_B), headers={"ETag": '"v1"'})
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert counts(run) == {"fetched": 2, "created": 2}
+    assert run.normalized_count == 2
+    assert run.source_generated_at == datetime(2040, 9, 21, 6, tzinfo=UTC)
+    assert feed_source.etag == '"v1"' and feed_source.last_success_at is not None
+
+    rec = record(db, feed_source, JOB_A["id"])
+    opportunity = rec.opportunity
+    assert opportunity.title == "Synthetic Engineering Intern"
+    assert opportunity.opportunity_type is OpportunityType.INTERNSHIP
+    assert opportunity.posted_at == datetime(2040, 9, 20, tzinfo=UTC)
+    assert opportunity.manually_curated_at is None
+    assert opportunity.requirements_assessment_status is RequirementsAssessmentStatus.UNASSESSED
+    assert opportunity.requirements == []  # sponsorship never becomes a requirement
+    assert rec.raw_payload == JOB_A
+    assert rec.source_name == "community_feed:zshah-tech-internships"
+    assert rec.is_active and rec.closed_at is None and rec.content_hash
+    evaluation = latest_evaluation(db, profile.id, opportunity.id)
+    assert evaluation is not None
+    assert evaluation.eligibility_status is EligibilityStatus.NEEDS_VERIFICATION
+    assert {(i.namespace, i.value) for i in opportunity.identifiers} == {
+        ("zshah", JOB_A["id"]),
+        ("url", JOB_A["url"]),
+    }
+
+
+def test_identical_second_sync_changes_nothing(
+    db: Session, feed_source: IngestionSource, web: FakeSource, profile: Profile
+) -> None:
+    web.json(FEED_URL, feed(JOB_A, JOB_B))
+    sync(db, feed_source, web)
+    before = {
+        m: count(db, m)
+        for m in (
+            Opportunity,
+            OpportunitySourceRecord,
+            OpportunityIdentifier,
+            OpportunityEvaluation,
+        )
+    }
+    first_seen = record(db, feed_source, JOB_A["id"]).last_seen_at
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert counts(run) == {"fetched": 2, "unchanged": 2}
+    after = {m: count(db, m) for m in before}
+    assert after == before
+    db.expire_all()
+    assert record(db, feed_source, JOB_A["id"]).last_seen_at > first_seen
+
+
+def test_not_modified_is_no_change(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(JOB_A), headers={"ETag": '"v1"', "Last-Modified": "Fri, 21 Sep 2040"})
+    sync(db, feed_source, web)
+    last_seen = record(db, feed_source, JOB_A["id"]).last_seen_at
+    web.respond(FEED_URL, lambda _r: httpx2.Response(304))
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.NO_CHANGE
+    assert counts(run) == {}
+    assert web.requests[-1].headers["If-None-Match"] == '"v1"'
+    assert web.requests[-1].headers["If-Modified-Since"] == "Fri, 21 Sep 2040"
+    db.expire_all()
+    assert record(db, feed_source, JOB_A["id"]).last_seen_at == last_seen
+    assert record(db, feed_source, JOB_A["id"]).is_active
+
+
+# --- Updates, closure, reactivation -------------------------------------------------------------
+
+
+def test_changed_item_updates_the_opportunity(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(JOB_A))
+    sync(db, feed_source, web)
+    web.json(FEED_URL, feed(JOB_A | {"title": "Renamed Synthetic Intern"}))
+
+    run = sync(db, feed_source, web)
+
+    assert counts(run) == {"fetched": 1, "updated": 1}
+    rec = record(db, feed_source, JOB_A["id"])
+    assert rec.opportunity.title == "Renamed Synthetic Intern"
+    assert rec.raw_payload["title"] == "Renamed Synthetic Intern"
+
+
+def test_missing_item_is_closed_not_deleted_and_can_return(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(JOB_A, JOB_B))
+    sync(db, feed_source, web)
+    opportunity_b = record(db, feed_source, JOB_B["id"]).opportunity
+    opportunity_b.application = Application(status=ApplicationStatus.APPLIED, notes="Synthetic.")
+    db.commit()
+
+    web.json(FEED_URL, feed(JOB_A))
+    closed = sync(db, feed_source, web)
+
+    assert counts(closed) == {"fetched": 1, "unchanged": 1, "closed": 1}
+    db.expire_all()
+    rec_b = record(db, feed_source, JOB_B["id"])
+    assert not rec_b.is_active and rec_b.closed_at is not None
+    assert count(db, Opportunity) == 2  # nothing deleted
+    assert rec_b.opportunity.application is not None
+    assert rec_b.opportunity.application.notes == "Synthetic."
+
+    web.json(FEED_URL, feed(JOB_A, JOB_B))
+    back = sync(db, feed_source, web)
+
+    assert counts(back) == {"fetched": 2, "unchanged": 2, "reactivated": 1}
+    db.expire_all()
+    rec_b = record(db, feed_source, JOB_B["id"])
+    assert rec_b.is_active and rec_b.closed_at is None
+
+
+def test_an_empty_complete_snapshot_closes_everything(
+    db: Session, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(1), greenhouse_job(2)))
+    sync(db, gh_source, web)
+    web.json(GREENHOUSE_URL, greenhouse_board())
+
+    run = sync(db, gh_source, web)
+
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert run.closed_count == 2
+
+
+# --- Failures never close unseen records ---------------------------------------------------------
+
+
+def _no_sleep(_seconds: float) -> None:
+    pass
+
+
+def _timeout(request: httpx2.Request) -> httpx2.Response:
+    raise httpx2.ConnectTimeout("synthetic", request=request)
+
+
+FAILURES: dict[str, Callable[[httpx2.Request], httpx2.Response]] = {
+    "timeout": _timeout,
+    "rate_limited": lambda _r: httpx2.Response(429, headers={"Retry-After": "600"}),
+    "http_error": lambda _r: httpx2.Response(500),
+    "invalid_json": lambda _r: httpx2.Response(
+        200, content=b"{", headers={"Content-Type": "application/json"}
+    ),
+    "schema_mismatch": lambda _r: httpx2.Response(200, json={"unexpected": []}),
+    "incomplete_snapshot": lambda _r: httpx2.Response(200, json=feed(count=5)),
+}
+
+
+@pytest.mark.parametrize("code", sorted(FAILURES))
+def test_failed_runs_change_nothing(
+    db: Session,
+    feed_source: IngestionSource,
+    web: FakeSource,
+    code: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.ingestion.http.time.sleep", _no_sleep)
+    web.json(FEED_URL, feed(JOB_A, JOB_B), headers={"ETag": '"v1"'})
+    sync(db, feed_source, web)
+    web.respond(FEED_URL, FAILURES[code])
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.FAILED
+    assert run.errors[0].code == code
+    assert run.error_summary
+    assert run.closed_count == 0
+    db.expire_all()
+    assert all(r.is_active for r in db.scalars(select(OpportunitySourceRecord)))
+    assert feed_source.etag == '"v1"'  # validators only change on success
+
+
+def test_oversized_response_fails_the_run(
+    db: Session, feed_source: IngestionSource, web: FakeSource, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.ingestion.http.MAX_BYTES", 50)
+    web.json(FEED_URL, feed(JOB_A))
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.FAILED
+    assert run.errors[0].code == "response_too_large"
+    assert count(db, Opportunity) == 0
+
+
+def test_one_malformed_item_is_a_partial_run_without_closures(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(JOB_A, JOB_B), headers={"ETag": '"v1"'})
+    sync(db, feed_source, web)
+    job_c = feed_job("workday:example:/job/C")
+    web.json(
+        FEED_URL,
+        feed(job_c, feed_job("workday:example:/job/broken", title=None)),
+        headers={"ETag": '"v2"'},
+    )
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert counts(run) == {"fetched": 2, "created": 1, "invalid": 1}
+    assert [(e.stage.value, e.code, e.external_id) for e in run.errors] == [
+        ("normalize", "invalid_item", "workday:example:/job/broken")
+    ]
+    db.expire_all()
+    # A and B are missing from this snapshot, but a partial run never closes anything.
+    assert all(r.is_active for r in db.scalars(select(OpportunitySourceRecord)))
+    assert record(db, feed_source, job_c["id"]).opportunity is not None
+    assert feed_source.etag == '"v1"'  # refetched in full next time
+
+
+def test_duplicate_ids_in_one_snapshot_are_errors(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(JOB_A, JOB_A))
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert counts(run) == {"fetched": 2, "created": 1, "error": 1}
+    assert run.errors[0].code == "duplicate_item"
+
+
+def test_errors_stored_per_run_are_capped(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    broken = [feed_job(f"broken-{n}", title=None) for n in range(130)]
+    web.json(FEED_URL, feed(*broken))
+
+    run = sync(db, feed_source, web)
+
+    assert run.invalid_count == 130
+    assert len(run.errors) == 100
+
+
+def test_unexpected_persist_failure_rolls_back_only_that_item(
+    db: Session, feed_source: IngestionSource, web: FakeSource, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sqlalchemy.exc import DataError
+
+    from app.ingestion import pipeline
+
+    real = pipeline._write_canonical  # pyright: ignore[reportPrivateUsage]
+
+    def flaky(opportunity: Opportunity, item: Any) -> None:
+        if item.external_id == JOB_B["id"]:
+            raise DataError("synthetic", None, Exception("synthetic"))
+        real(opportunity, item)
+
+    monkeypatch.setattr(pipeline, "_write_canonical", flaky)
+    web.json(FEED_URL, feed(JOB_A, JOB_B))
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert counts(run) == {"fetched": 2, "created": 1, "error": 1}
+    assert run.errors[0].code == "persist_failed"
+    assert count(db, Opportunity) == 1 and count(db, OpportunitySourceRecord) == 1
+
+
+# --- Cross-source deduplication -----------------------------------------------------------------
+
+
+def test_feed_and_greenhouse_sightings_share_one_opportunity(
+    db: Session, feed_source: IngestionSource, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    feed_item = feed_job(
+        f"greenhouse:{GREENHOUSE_BOARD}:1001",
+        url="https://careers.example.com/robotics?gh_jid=1001",
+    )
+    web.json(FEED_URL, feed(feed_item))
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(1001)))
+
+    sync(db, feed_source, web)
+    run = sync(db, gh_source, web)
+
+    assert counts(run) == {"fetched": 1, "deduplicated": 1}
+    assert count(db, Opportunity) == 1
+    [opportunity] = db.scalars(select(Opportunity)).all()
+    assert {r.source_name for r in opportunity.source_records} == {
+        "community_feed:zshah-tech-internships",
+        f"greenhouse:{GREENHOUSE_BOARD}",
+    }
+    assert {i.namespace for i in opportunity.identifiers} == {"zshah", "greenhouse", "url"}
+    assert count(db, OpportunityIdentifier) == 4  # the two different URLs are both kept
+
+    again = sync(db, gh_source, web)
+    assert counts(again) == {"fetched": 1, "unchanged": 1}
+    assert count(db, Opportunity) == 1 and count(db, OpportunitySourceRecord) == 2
+
+
+def test_lever_first_then_feed(
+    db: Session, feed_source: IngestionSource, lever_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(LEVER_URL, [lever_posting()])
+    feed_item = feed_job(
+        f"lever:{LEVER_SITE}:{LEVER_POSTING_ID}",
+        url=f"https://jobs.lever.co/{LEVER_SITE}/{LEVER_POSTING_ID}",
+    )
+    web.json(FEED_URL, feed(feed_item))
+
+    sync(db, lever_source, web)
+    run = sync(db, feed_source, web)
+
+    assert counts(run) == {"fetched": 1, "deduplicated": 1}
+    assert count(db, Opportunity) == 1
+    # The first source's canonical content stays; the feed only adds provenance.
+    assert db.scalars(select(Opportunity)).one().title == "Synthetic Research Intern"
+
+
+def test_same_title_and_company_never_merge(
+    db: Session, feed_source: IngestionSource, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(feed_job("workday:example:/job/X", title="Synthetic Robotics Intern")))
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(1001)))
+
+    sync(db, feed_source, web)
+    sync(db, gh_source, web)
+
+    assert count(db, Opportunity) == 2
+
+
+def test_identity_conflict_is_recorded_and_changes_nothing(
+    db: Session, feed_source: IngestionSource, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    shared_url = "https://careers.example.com/robotics/role-7"
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(7)))
+    sync(db, gh_source, web)  # opportunity X: greenhouse examplerobotics:7
+    web.json(FEED_URL, feed(feed_job("workday:example:/job/Y", url=shared_url)))
+    sync(db, feed_source, web)  # opportunity Y: url shared_url
+    before = {
+        m: count(db, m) for m in (Opportunity, OpportunitySourceRecord, OpportunityIdentifier)
+    }
+
+    # Points at X (greenhouse ID) and Y (URL) at once.
+    conflicting = feed_job(f"greenhouse:{GREENHOUSE_BOARD}:7", url=shared_url)
+    web.json(FEED_URL, feed(feed_job("workday:example:/job/Y", url=shared_url), conflicting))
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert counts(run) == {"fetched": 2, "unchanged": 1, "error": 1}
+    assert [(e.stage.value, e.code) for e in run.errors] == [("identify", "identity_conflict")]
+    assert {m: count(db, m) for m in before} == before
+
+
+def test_same_url_twice_in_one_source_is_not_merged(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    shared = "https://careers.example.com/internships/apply"
+    web.json(
+        FEED_URL,
+        feed(feed_job("workday:a:/1", url=shared), feed_job("workday:a:/2", url=shared)),
+    )
+
+    run = sync(db, feed_source, web)
+
+    assert counts(run) == {"fetched": 2, "created": 2}
+    assert count(db, Opportunity) == 2
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert counts(sync(db, feed_source, web)) == {"fetched": 2, "unchanged": 2}
+
+
+# --- Manual curation and evaluation -------------------------------------------------------------
+
+
+def test_curated_opportunity_keeps_owner_content_but_provenance_updates(
+    db: Session, feed_source: IngestionSource, web: FakeSource, profile: Profile
+) -> None:
+    web.json(FEED_URL, feed(JOB_A))
+    sync(db, feed_source, web)
+    opportunity = record(db, feed_source, JOB_A["id"]).opportunity
+    opportunity.title = "Owner-Corrected Title"
+    opportunity.description = "Owner notes on the posting."
+    opportunity.start_date = date(2041, 6, 20)
+    opportunity.requirements_assessment_status = RequirementsAssessmentStatus.COMPLETE
+    opportunity.requirements = [
+        OpportunityRequirement(
+            requirement_type=RequirementType.MINIMUM_AGE,
+            value={"years": 16},
+            extraction_method="manual",
+        )
+    ]
+    opportunity.manually_curated_at = datetime.now(UTC)
+    db.commit()
+    evaluations = count(db, OpportunityEvaluation)
+
+    web.json(FEED_URL, feed(JOB_A | {"title": "Upstream Rename", "location": "Elsewhere"}))
+    run = sync(db, feed_source, web)
+
+    assert counts(run) == {"fetched": 1, "updated": 1}
+    db.expire_all()
+    rec = record(db, feed_source, JOB_A["id"])
+    assert rec.raw_payload["title"] == "Upstream Rename"  # provenance updated
+    kept = rec.opportunity
+    assert kept.title == "Owner-Corrected Title"
+    assert kept.description == "Owner notes on the posting."
+    assert kept.location == "Example City"
+    assert kept.start_date == date(2041, 6, 20)
+    assert kept.requirements_assessment_status is RequirementsAssessmentStatus.COMPLETE
+    assert [r.value for r in kept.requirements] == [{"years": 16}]
+    assert count(db, OpportunityEvaluation) == evaluations
+
+
+def test_unchanged_eligibility_inputs_append_no_evaluation(
+    db: Session, feed_source: IngestionSource, web: FakeSource, profile: Profile
+) -> None:
+    web.json(FEED_URL, feed(JOB_A))
+    sync(db, feed_source, web)
+    assert count(db, OpportunityEvaluation) == 1
+
+    # The title changes (canonical update) but nothing eligibility reads does.
+    web.json(FEED_URL, feed(JOB_A | {"title": "Renamed"}))
+    sync(db, feed_source, web)
+
+    assert count(db, OpportunityEvaluation) == 1
+
+
+def test_no_profile_means_no_evaluations(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(JOB_A))
+    sync(db, feed_source, web)
+    assert count(db, OpportunityEvaluation) == 0
+
+
+# --- Run bookkeeping ----------------------------------------------------------------------------
+
+
+def test_a_running_sync_blocks_a_second_one(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    db.add(
+        IngestionRun(
+            source=feed_source, status=IngestionRunStatus.RUNNING, started_at=datetime.now(UTC)
+        )
+    )
+    db.commit()
+
+    with pytest.raises(SyncInProgress):
+        sync(db, feed_source, web)
+
+
+def test_an_abandoned_run_is_marked_failed(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    stale = IngestionRun(
+        source=feed_source,
+        status=IngestionRunStatus.RUNNING,
+        started_at=datetime.now(UTC) - timedelta(hours=1),
+    )
+    db.add(stale)
+    db.commit()
+    web.json(FEED_URL, feed(JOB_A))
+
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert stale.status is IngestionRunStatus.FAILED and stale.finished_at is not None
+
+
+def test_sync_enabled_sources_continues_past_a_failure(
+    db: Session, feed_source: IngestionSource, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    lever = IngestionSource(
+        kind=IngestionSourceKind.LEVER,
+        identifier="disabledsite",
+        region=SourceRegion.EU,
+        display_name="Disabled",
+        enabled=False,
+    )
+    db.add(lever)
+    db.commit()
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(1)))  # the feed URL isn't served: 404
+
+    runs = sync_enabled_sources(db, transport=web.transport())
+
+    assert [(r.source.key, r.status) for r in runs] == [
+        ("community_feed:zshah-tech-internships", IngestionRunStatus.FAILED),
+        (f"greenhouse:{GREENHOUSE_BOARD}", IngestionRunStatus.SUCCESS),
+    ]
