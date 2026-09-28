@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { json, listPage, loggedIn, loggedOut, mockApi, renderAt } from './helpers'
 
 function fillLogin(username: string, password: string) {
@@ -199,6 +199,136 @@ describe('authentication', () => {
     await waitFor(() => {
       expect(localStorage.length).toBe(0)
       expect(sessionStorage.length).toBe(0)
+    })
+  })
+
+  describe('when the backend is unavailable (e.g. Render waking up)', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    const html = (status: number) =>
+      new Response('<html>Service waking up</html>', {
+        status,
+        headers: { 'Content-Type': 'text/html' },
+      })
+
+    it.each([
+      ['a network error', () => Promise.reject(new TypeError('Failed to fetch'))],
+      ['HTTP 502', () => json({ detail: 'Bad Gateway' }, 502)],
+      ['an HTML 503 page', () => html(503)],
+      ['a non-JSON 200 page', () => html(200)],
+    ])('shows a waking state, not the login form, on %s', async (_label, failure) => {
+      mockApi({ 'GET /api/auth/session': failure })
+      renderAt('/opportunities')
+
+      expect(await screen.findByText(/Server is waking up…/)).toHaveAttribute(
+        'role',
+        'status',
+      )
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+      expect(screen.queryByRole('form', { name: 'Log in' })).not.toBeInTheDocument()
+    })
+
+    it('restores the existing session on Retry', async () => {
+      let up = false
+      const calls = mockApi({
+        'GET /api/auth/session': () =>
+          up ? loggedIn['GET /api/auth/session']() : json({ detail: 'Bad Gateway' }, 502),
+        'GET /api/opportunities': () => listPage([]),
+        'POST /api/auth/logout': () => new Response(null, { status: 204 }),
+      })
+      renderAt('/opportunities')
+      await screen.findByText(/Server is waking up/)
+
+      up = true
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+      expect(
+        await screen.findByRole('heading', { name: 'Opportunities' }),
+      ).toBeInTheDocument()
+      // The CSRF token from the recovered session is used (memory only).
+      fireEvent.click(screen.getByRole('button', { name: 'Log out' }))
+      await screen.findByRole('form', { name: 'Log in' })
+      const logout = calls.find((c) => c.path === '/api/auth/logout')
+      expect(logout?.headers['X-CSRF-Token']).toBe('synthetic-csrf')
+    })
+
+    it('retries automatically and recovers once the server is up', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      let attempts = 0
+      mockApi({
+        'GET /api/auth/session': () =>
+          ++attempts < 3
+            ? json({ detail: 'Service Unavailable' }, 503)
+            : loggedIn['GET /api/auth/session'](),
+        'GET /api/opportunities': () => listPage([]),
+      })
+      renderAt('/opportunities')
+      await screen.findByText(/Server is waking up/)
+
+      await act(() => vi.advanceTimersByTimeAsync(2000 + 4000))
+
+      expect(
+        await screen.findByRole('heading', { name: 'Opportunities' }),
+      ).toBeInTheDocument()
+      expect(attempts).toBe(3)
+    })
+
+    it('stops retrying after about a minute but keeps a Retry button', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      let attempts = 0
+      mockApi({
+        'GET /api/auth/session': () => {
+          attempts += 1
+          return json({ detail: 'Bad Gateway' }, 502)
+        },
+      })
+      renderAt('/opportunities')
+      await screen.findByText(/Server is waking up/)
+
+      await act(() => vi.advanceTimersByTimeAsync(120_000))
+
+      expect(
+        await screen.findByText("Can't reach the server right now."),
+      ).toHaveAttribute('role', 'status')
+      expect(attempts).toBe(7) // the first check plus six retries
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    })
+
+    it('treats a 401 from the session check as logged out', async () => {
+      mockApi({
+        'GET /api/auth/session': () => json({ detail: 'Not authenticated.' }, 401),
+      })
+      renderAt('/opportunities')
+
+      expect(await screen.findByRole('form', { name: 'Log in' })).toBeInTheDocument()
+    })
+
+    it('does not let a pending retry overwrite a newer login', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      let sessionChecks = 0
+      mockApi({
+        'GET /api/auth/session': () => {
+          sessionChecks += 1
+          return json({ detail: 'Bad Gateway' }, 502)
+        },
+        'POST /api/auth/login': () => ({
+          authenticated: true,
+          username: 'synthetic-owner',
+          csrf_token: 'synthetic-csrf',
+        }),
+        'GET /api/opportunities': () => listPage([]),
+      })
+      renderAt('/login')
+      await waitFor(() => expect(sessionChecks).toBe(1))
+
+      fillLogin('synthetic-owner', 'synthetic-password')
+      await screen.findByRole('heading', { name: 'Opportunities' })
+      await act(() => vi.advanceTimersByTimeAsync(120_000))
+
+      expect(sessionChecks).toBe(1)
+      expect(screen.getByRole('heading', { name: 'Opportunities' })).toBeInTheDocument()
     })
   })
 })

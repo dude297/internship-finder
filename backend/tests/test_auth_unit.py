@@ -1,6 +1,8 @@
 """Password hashing, token, CSRF, and throttle primitives. No database. Synthetic values only."""
 
 import hashlib
+import threading
+import time
 
 import pytest
 
@@ -63,3 +65,80 @@ def test_limiter_forgets_old_failures() -> None:
     limiter.record_failure("k", now=20.0)
 
     assert not limiter.blocked("k", now=21.0)
+
+
+def test_limiter_global_cap_blocks_every_client() -> None:
+    limiter = auth.FailedLoginLimiter(max_failures=3, max_global_failures=5, window_seconds=60)
+    for i in range(5):  # five clients, one failure each: none reaches its own limit
+        assert not limiter.blocked(f"proxy:198.51.100.{i}", now=float(i))
+        limiter.record_failure(f"proxy:198.51.100.{i}", now=float(i))
+
+    assert limiter.blocked("proxy:203.0.113.9", now=10.0)  # a fresh client too
+    assert limiter.blocked("direct", now=10.0)
+    assert not limiter.blocked("proxy:203.0.113.9", now=60.5)  # the first failure expired
+
+
+def test_limiter_window_expiry_unblocks_the_client() -> None:
+    limiter = auth.FailedLoginLimiter(max_failures=2, window_seconds=900)
+    limiter.record_failure("direct", now=0.0)
+    limiter.record_failure("direct", now=1.0)
+
+    assert limiter.blocked("direct", now=899.9)
+    assert not limiter.blocked("direct", now=901.0)
+
+
+def test_limiter_default_policy() -> None:
+    limiter = auth.FailedLoginLimiter()
+
+    assert (limiter.max_failures, limiter.max_global_failures) == (10, 50)
+    assert limiter.window_seconds == 15 * 60
+
+
+def test_limiter_sweeps_stale_keys() -> None:
+    limiter = auth.FailedLoginLimiter(max_failures=10, max_global_failures=2, window_seconds=10)
+    for i in range(5):
+        limiter.record_failure(f"k{i}", now=0.0)
+    limiter.record_failure("fresh", now=100.0)
+
+    assert set(limiter._failures) == {"fresh"}  # pyright: ignore[reportPrivateUsage]
+
+
+def test_argon2_work_is_capped_per_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Many concurrent logins never run more than ARGON2_CONCURRENCY hashes at once."""
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def slow_verify(password: str, password_hash: str) -> bool:
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return False
+
+    monkeypatch.setattr(auth._password_hash, "verify", slow_verify)  # pyright: ignore[reportPrivateUsage]
+    threads = [
+        threading.Thread(target=auth.verify_password, args=(PASSWORD, "hash")) for _ in range(8)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert peak == auth.ARGON2_CONCURRENCY == 2
+
+
+def test_argon2_guard_is_released_after_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(password: str, password_hash: str) -> bool:
+        raise RuntimeError("synthetic failure")
+
+    monkeypatch.setattr(auth._password_hash, "verify", broken)  # pyright: ignore[reportPrivateUsage]
+    for _ in range(auth.ARGON2_CONCURRENCY + 1):
+        with pytest.raises(RuntimeError):
+            auth.verify_password(PASSWORD, "hash")
+    monkeypatch.undo()
+
+    assert auth.verify_password(PASSWORD, auth.hash_password(PASSWORD))  # slots still free
