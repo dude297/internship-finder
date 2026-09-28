@@ -1,6 +1,6 @@
 # Operations
 
-There are no hosted services, scheduled jobs, or monitoring. The app runs locally (Milestone 3). Each section is labeled planned or implemented.
+The app runs locally and, since Milestone 3.5, hosted on Vercel → Render → Neon ([deployment.md](deployment.md), [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)). There are no scheduled jobs or monitoring. Each section is labeled planned or implemented.
 
 ## Owner Account and Sessions (implemented, local)
 
@@ -8,7 +8,7 @@ There are no hosted services, scheduled jobs, or monitoring. The app runs locall
 - Rotate the password: `python -m app.cli set-password --username <name>`. This revokes every session of that user.
 - Sessions expire after `SESSION_TTL_HOURS` (default 24). Logout deletes the session row. Expired rows are removed the next time the user logs in; there's no background cleanup yet.
 - Disable an account without deleting data: `UPDATE auth_users SET is_active = false WHERE username = '<name>'` (its sessions stop working immediately).
-- Failed logins are throttled per client IP in memory (10 per 15 minutes). A restart clears the counter. This is a local safeguard only ([deployment.md](deployment.md#blockers-before-any-hosted-deployment)).
+- Failed logins are throttled in memory: 10 per client key and 50 in total per sliding 15 minutes, checked before any password work. The client key is the browser address only for requests carrying the Vercel proxy secret; everything else (direct Render calls, local development) shares one `direct` key ([ADR-009 §6](decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)). A restart or deploy clears the counters. Argon2 hashing/verification runs at most 2 at a time.
 - Nothing logs passwords, session tokens, CSRF tokens, or request bodies. Unexpected errors are logged server-side with their stack trace; clients get a generic `500`.
 
 ## Local Database (implemented)
@@ -60,11 +60,11 @@ Still not automatic: re-evaluation when the eligibility rules version changes, a
 
 ## Migrations
 
-Schema changes are Alembic migrations (`backend/alembic/versions/`), validated in CI against a disposable PostgreSQL. No hosted database exists yet. Locally, run `alembic upgrade head` after pulling new migrations; it's applied to your own Compose database only.
+Schema changes are Alembic migrations (`backend/alembic/versions/`), validated in CI against a disposable PostgreSQL. Locally, run `alembic upgrade head` after pulling new migrations. The hosted Neon database is migrated by hand from a trusted shell before the code that needs it is deployed, and never downgraded ([deployment.md](deployment.md#deploy-order)).
 
 ## Environment Configuration
 
-Backend: `DATABASE_URL` (required for everything except `/api/health`), `SESSION_TTL_HOURS`, `SESSION_COOKIE_SECURE`. See [`backend/.env.example`](../backend/.env.example), [development.md](development.md#environment-variables), and [deployment.md](deployment.md).
+Backend: `DATABASE_URL` (required for everything except `/api/health`), `SESSION_TTL_HOURS`, `SESSION_COOKIE_SECURE`, and hosted only `HOSTED`, `PROXY_SHARED_SECRET`. See [`backend/.env.example`](../backend/.env.example), [development.md](development.md#environment-variables), and [deployment.md](deployment.md).
 
 ## Incident Handling (planned)
 
