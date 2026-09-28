@@ -2,10 +2,10 @@
 
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
-Last Updated: 2026-09-27
-Current Milestone: **Milestone 3 — Automated Opportunity Discovery and Ingestion**, implemented on `feature/opportunity-ingestion`; **awaiting review** (not merged). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Last Updated: 2026-09-28
+Current Milestone: **Milestone 3.5 — Hosted Deployment Foundation** (partially provisioned; see In Progress). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
 Current Production Version: None (not deployed)
-Active Development Branch: `feature/opportunity-ingestion`. Remote: https://github.com/dude297/internship-finder
+Active Development Branch: None. Remote: https://github.com/dude297/internship-finder
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Review and merge Milestone 3. Do not start Milestone 4 before that.
+Milestone 3.5 — Hosted Deployment Foundation.
 
 ## Status Summary
 
@@ -27,17 +27,17 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 
 | Area | Status |
 |---|---|
-| Technology stack | **Selected** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)). Runs locally. Not provisioned. |
+| Technology stack | **Selected** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)). Runs locally. Partially provisioned (Neon empty; Render health-only). Not deployed for use. |
 | Source/profile strategy | **Selected** ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Opportunity ingestion implemented (ADR-008). No profile parsers. |
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
 | Authentication / private API | **Implemented, local only** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable). Not Internet-production-ready (see Known Technical Debt) |
-| Opportunity ingestion | **Implemented, local, manual sync only** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`) — in review |
+| Opportunity ingestion | **Implemented, local, manual sync only** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`) |
 | Eligibility | **Implemented** v1 (rules version `v1`), evaluated automatically (only when inputs change) |
 | Application tracking | **Implemented** |
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local) |
-| Next milestone | Milestone 4 (proposed, not started) |
+| Next milestone | Milestone 3.5 — Hosted Deployment Foundation (current); then Milestone 4 (proposed, not started) |
 
 ### Selected stack
 
@@ -46,8 +46,8 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Frontend | React, TypeScript, Vite, Tailwind CSS, Zod, react-router | Yes (`frontend/`) | — |
 | Frontend hosting | Vercel Hobby | — | No |
 | Backend | Python 3.12+, FastAPI, Pydantic, pwdlib (Argon2id), httpx2 (ingestion HTTP) | Yes (`backend/`) | — |
-| Backend hosting | Render Free Web Service | — | No |
-| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (3 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | No |
+| Backend hosting | Render Free Web Service | — | Health-only (no `DATABASE_URL`; auto-deploy off) |
+| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (3 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, empty; no migrations applied) |
 | CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`: frontend, backend, e2e jobs; PR/push only; no scheduled jobs) | Running on GitHub |
 | End-to-end | Playwright (Chromium) | Yes (`frontend/e2e/`) | — |
 
@@ -57,8 +57,9 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 - Milestone 0: Development Foundation ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
 - Milestone 1: Core Domain, Persistence, and Eligibility v1 ([PR #4](https://github.com/dude297/internship-finder/pull/4)).
 - Milestone 2: Private Single-User Workflow MVP ([PR #5](https://github.com/dude297/internship-finder/pull/5)): single-user auth, sessions, CSRF, private profile and opportunity API/UI, structured requirements, automatic eligibility evaluation, application tracking, Playwright, local PostgreSQL.
+- Milestone 3: Automated Opportunity Discovery and Ingestion ([PR #6](https://github.com/dude297/internship-finder/pull/6)).
 
-## Milestone 3 (implemented on `feature/opportunity-ingestion`, awaiting review)
+## Milestone 3 (complete; merged via PR #6)
 
 Implemented:
 
@@ -69,7 +70,8 @@ Implemented:
 - source registry (safe configuration only; URLs built from hard-coded hosts)
 - safe HTTP client (allowlisted HTTPS hosts, public-address check, timeouts, bounded redirects/retries/body size, conditional requests)
 - source/run provenance: run history with counts, bounded safe per-item errors, per-record active/closed state and source dates
-- conservative cross-source dedup (exact deterministic identifiers only; identity conflicts recorded, never merged)
+- conservative cross-source dedup (exact deterministic identifiers only; identity conflicts recorded, never merged, including on the same-source update path)
+- one running sync per source, enforced by the partial unique index `uq_ingestion_runs_one_running_per_source`
 - source closure only after complete successful snapshots; reactivation
 - manual-curation protection (`manually_curated_at`)
 - fingerprinted automatic evaluation (no duplicate history on unchanged syncs or title-only edits)
@@ -92,7 +94,16 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 3 PR review. Next exact task after merge: update this file to "Milestone 3 complete" with the merge commit and post-merge CI run, then plan Milestone 4.
+Milestone 3.5 — Hosted Deployment Foundation. Provisioned only partially:
+
+- Neon Free project exists, empty
+- Render Free backend exists in health-only mode
+- `DATABASE_URL` is not configured
+- Vercel is not yet connected
+- no migrations applied to Neon
+- no owner created in Neon
+
+The deployment blockers in [docs/deployment.md](docs/deployment.md#blockers-before-any-hosted-deployment) still apply.
 
 ## Known Bugs
 
@@ -127,7 +138,7 @@ None known.
 
 ## Database State
 
-Selected: Neon PostgreSQL. Not provisioned. Schema head: migration `726372d627b8` (15 tables) on top of the immutable `7d7f4f8b9a3c` and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and repairs the graduation constraint if needed.
+Selected: Neon PostgreSQL. Neon Free is provisioned but empty (no migrations applied). Schema head: migration `726372d627b8` (15 tables) on top of the immutable `7d7f4f8b9a3c` and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and repairs the graduation constraint if needed.
 
 ## Current Scoring Version
 
@@ -149,21 +160,22 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 ## Environment / Deployment Notes
 
 - Backend variables: `DATABASE_URL` (required except for `/api/health`), `SESSION_TTL_HOURS`, `SESSION_COOKIE_SECURE`, and the test-only `INGESTION_FIXTURE_FILE` (never set for real use). The frontend has none. See [docs/development.md](docs/development.md#environment-variables).
-- Hosting is selected (Vercel Hobby, Render Free, Neon Free) but not provisioned. Deployment blockers are listed in [docs/deployment.md](docs/deployment.md#blockers-before-any-hosted-deployment).
+- Hosting is selected (Vercel Hobby, Render Free, Neon Free). Neon Free is provisioned (empty, PostgreSQL 18, `aws-us-west-2`); Render Free runs a health-only backend (Oregon, no `DATABASE_URL`); Vercel is not provisioned. Deployment blockers are listed in [docs/deployment.md](docs/deployment.md#blockers-before-any-hosted-deployment).
 - Each provisioning step must confirm that no payment method is required before creating the account or project.
 
 ## Deferred Work
 
-- Provisioning Vercel, Render, and Neon, and the same-origin hosted topology review.
+- Provisioning Vercel, applying migrations to Neon, connecting Render to Neon, and the same-origin hosted topology review.
 - Scheduled source sync (needs a hosted database) and deployment workflows.
 - Ashby and early-college/research-program sources (layer 3).
 
 ## Next Planned Task
 
-Review Milestone 3 (PR from `feature/opportunity-ingestion`). After merge: record the merge and post-merge CI here, then plan Milestone 4 (proposed: profile enrichment and fit scoring). Not started.
+Start Milestone 3.5 — Hosted Deployment Foundation from clean `main`. Milestone 4 (proposed: profile enrichment and fit scoring) follows. Not started.
 
 ## Recent Important Decisions
 
+- 2026-09-28: PR #6 review fixes: the same-source/external-ID update path is subject to the identity-conflict rule (the record's own unchanged URL is exempt for rule-4 false duplicates); one running ingestion run per source is enforced by the partial unique index `uq_ingestion_runs_one_running_per_source` (added to `726372d627b8` before merge). Milestone 3 merged via PR #6.
 - 2026-09-27: ADR-008 accepted: source registry with safe configuration only; adapters without database access; one shared pipeline with per-item savepoints and run history; closure only after complete successful snapshots; exact deterministic identifiers for cross-source dedup (no fuzzy matching; conflicts recorded, never merged); manual-curation protection; fingerprinted automatic evaluation; allowlisted HTTPS-only network access via `httpx2`; zshah101 feed consumed through its API only; SuryaHarikrishnan listing data excluded; no scheduler while the database is local.
 - 2026-09-27: Migration `726372d627b8` repairs the pre-merge `7d7f4f8b9a3c` graduation constraint automatically (asymmetric downgrade). The manual-patch instruction was removed from the docs.
 - 2026-09-27: `GET /api/opportunities` is paginated (`limit` ≤ 100) and filtered server-side; the default view is open postings plus manual opportunities.
