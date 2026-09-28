@@ -40,7 +40,7 @@ Each sync creates an `ingestion_runs` row (`running` → `success` / `partial` /
 
 Transactions:
 
-1. Commit a `running` run (it also serves as a per-source "already running" guard; a run left `running` for more than 15 minutes is treated as abandoned and marked `failed`).
+1. Commit a `running` run. It is also the per-source "already running" guard: a PostgreSQL partial unique index (`uq_ingestion_runs_one_running_per_source` on `source_id` where `status = 'running'`) allows at most one running run per source, so two concurrent starts can't both proceed; the loser is reported as "already syncing" (`409`), never a `500`. The application's check before the insert only gives the friendly message early. Different sources may sync at the same time. A run left `running` for more than 15 minutes is treated as abandoned and marked `failed`.
 2. Fetch and validate outside any database transaction.
 3. Process every item in its own savepoint. One malformed or conflicting item rolls back only itself and is recorded; the rest are kept.
 4. Finalize the run and commit.
@@ -73,7 +73,7 @@ Provider identities are derived only from formats that are understood exactly. N
 
 For every normalized item:
 
-1. Same source + same external ID → update that source record (and its opportunity, unless curated).
+1. Same source + same external ID → update that source record (and its opportunity, unless curated). The same-source/external-ID fast path is still subject to identity-conflict validation. If any current identifier for that item belongs to a different canonical opportunity, the item is rejected as a conflict (rule 3) before the source record is mutated. The one exception is the record's own unchanged URL, which a rule-4 false duplicate legitimately shares with another opportunity.
 2. Otherwise look up the item's identifiers. Exactly one existing opportunity → attach a new source record to it (**deduplicated**). None → create a new opportunity.
 3. Identifiers pointing at **two or more** different opportunities → **identity conflict**: nothing is merged or changed, the item is recorded as an error, and the run is `partial`.
 4. An identifier that matches an opportunity which already has a *different* record from the same source isn't used (one source can't contain the same posting twice). The item gets its own opportunity instead: a false duplicate is preferable to a false merge.
