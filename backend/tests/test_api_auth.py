@@ -7,9 +7,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.main import PUBLIC_PATHS, create_app
 from app.models import AuthSession, AuthUser
-from app.services.auth import hash_token
+from app.services import auth as auth_service
+from app.services.auth import FailedLoginLimiter, hash_token
 from tests.conftest import OWNER_PASSWORD, OWNER_USERNAME
 
 pytestmark = pytest.mark.postgres
@@ -45,6 +47,7 @@ def test_cookie_secure_flag_follows_configuration(
     anon_client: TestClient, owner: AuthUser, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "false")
+    get_settings.cache_clear()  # the app factory already read settings
 
     cookie = set_cookie_header(login(anon_client).headers.multi_items()).lower()
 
@@ -227,3 +230,117 @@ def test_repeated_failures_are_throttled(anon_client: TestClient, owner: AuthUse
 
     assert blocked.status_code == 429
     assert "set-cookie" not in blocked.headers
+
+
+# --- Hosted login throttle (ADR-009 §6) -------------------------------------------------------
+
+PROXY_SECRET = "synthetic-proxy-secret-0123456789abcdef"
+
+
+@pytest.fixture
+def proxied(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PROXY_SHARED_SECRET", PROXY_SECRET)
+    get_settings.cache_clear()
+
+
+def via_proxy(client: TestClient, address: str, password: str = OWNER_PASSWORD):
+    return client.post(
+        "/api/auth/login",
+        json={"username": OWNER_USERNAME, "password": password},
+        headers={"X-IF-Proxy-Secret": PROXY_SECRET, "X-Forwarded-For": address},
+    )
+
+
+@pytest.mark.usefixtures("proxied")
+def test_proxied_clients_are_throttled_separately(anon_client: TestClient, owner: AuthUser) -> None:
+    for _ in range(10):
+        assert via_proxy(anon_client, "198.51.100.1", "wrong-synthetic").status_code == 401
+
+    assert via_proxy(anon_client, "198.51.100.1").status_code == 429
+    assert via_proxy(anon_client, "198.51.100.2", "wrong-synthetic").status_code == 401
+    assert via_proxy(anon_client, "198.51.100.2").status_code == 200
+
+
+@pytest.mark.usefixtures("proxied")
+def test_direct_callers_cannot_spoof_new_buckets(anon_client: TestClient, owner: AuthUser) -> None:
+    for i in range(10):
+        response = anon_client.post(
+            "/api/auth/login",
+            json={"username": OWNER_USERNAME, "password": "wrong-synthetic"},
+            headers={"X-Forwarded-For": f"203.0.113.{i}", "X-IF-Proxy-Secret": "forged"},
+        )
+        assert response.status_code == 401
+
+    spoofed = anon_client.post(
+        "/api/auth/login",
+        json={"username": OWNER_USERNAME, "password": OWNER_PASSWORD},
+        headers={"X-Forwarded-For": "203.0.113.200"},
+    )
+    assert spoofed.status_code == 429
+    assert via_proxy(anon_client, "198.51.100.3").status_code == 200  # browsers unaffected
+
+
+@pytest.mark.usefixtures("proxied")
+def test_global_limit_blocks_every_client(anon_client: TestClient, owner: AuthUser) -> None:
+    anon_client.app.state.login_limiter = FailedLoginLimiter(  # type: ignore[attr-defined]
+        max_failures=10, max_global_failures=3
+    )
+    for i in range(3):
+        assert via_proxy(anon_client, f"198.51.100.{i}", "wrong-synthetic").status_code == 401
+
+    assert via_proxy(anon_client, "198.51.100.99").status_code == 429
+    assert login(anon_client).status_code == 429
+
+
+def test_throttle_window_expires(
+    anon_client: TestClient, owner: AuthUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = [1000.0]
+    monkeypatch.setattr(auth_service.time, "monotonic", lambda: clock[0])
+    for _ in range(10):
+        assert login(anon_client, password="wrong-synthetic").status_code == 401
+    assert login(anon_client).status_code == 429
+
+    clock[0] += 15 * 60 + 1
+
+    assert login(anon_client).status_code == 200
+
+
+def test_successful_login_is_not_counted_and_does_not_reset(
+    anon_client: TestClient, owner: AuthUser
+) -> None:
+    for _ in range(9):
+        assert login(anon_client, password="wrong-synthetic").status_code == 401
+    for _ in range(3):
+        assert login(anon_client).status_code == 200  # successes don't count
+
+    assert login(anon_client, password="wrong-synthetic").status_code == 401  # 10th failure
+    assert login(anon_client).status_code == 429  # and the earlier nine still did
+
+
+# --- Private responses are never cacheable (ADR-009 §8) ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/auth/session", "/api/profile", "/api/opportunities", "/api/sources"]
+)
+def test_private_responses_are_no_store(client: TestClient, path: str) -> None:
+    response = client.get(path)
+
+    assert response.status_code in {200, 404}  # the profile is 404 until created
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_rejected_requests_are_no_store(anon_client: TestClient) -> None:
+    assert anon_client.get("/api/profile").headers["cache-control"] == "no-store"
+
+
+def test_login_response_is_no_store(anon_client: TestClient, owner: AuthUser) -> None:
+    assert login(anon_client).headers["cache-control"] == "no-store"
+
+
+def test_collection_paths_are_exact(client: TestClient) -> None:
+    assert client.get("/api/opportunities").status_code == 200
+    response = client.get("/api/opportunities/", follow_redirects=False)
+    assert response.status_code == 404  # no redirect toward the backend host
+    assert client.post("/api/sources/", json={}, follow_redirects=False).status_code in {404, 405}
