@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import re
 import secrets
+import threading
 import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
@@ -25,17 +26,25 @@ USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,64}$")
 
 _password_hash = PasswordHash.recommended()
 
+# Each Argon2id operation holds ~64 MiB (m=65536 KiB). Render Free has 512 MB, and sync routes
+# run on a thread pool, so cap concurrent hash/verify work per process (ADR-009 �7). Extra
+# callers wait; parameters and the dummy verification are unchanged.
+ARGON2_CONCURRENCY = 2
+_argon2_slots = threading.BoundedSemaphore(ARGON2_CONCURRENCY)
+
 
 class OwnerError(Exception):
     """A CLI-facing account problem (duplicate owner, weak password, unknown user)."""
 
 
 def hash_password(password: str) -> str:
-    return _password_hash.hash(password)
+    with _argon2_slots:
+        return _password_hash.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return _password_hash.verify(password, password_hash)
+    with _argon2_slots:
+        return _password_hash.verify(password, password_hash)
 
 
 @cache
@@ -134,30 +143,47 @@ def end_session(db: Session, session: AuthSession) -> None:
 
 
 class FailedLoginLimiter:
-    """In-memory sliding-window count of failed logins per client key (IP).
+    """In-memory sliding-window count of failed logins, per client key and in total.
 
-    Per process and reset on restart: a local safeguard, not a production control (ADR-007 §8).
+    A key is blocked once it has `max_failures` in the window; everyone is blocked once all
+    keys together have `max_global_failures`. Per process and reset on restart, which fits the
+    one-instance, one-worker deployment (ADR-009 �6).
     """
 
-    def __init__(self, max_failures: int = 10, window_seconds: float = 15 * 60) -> None:
+    def __init__(
+        self,
+        max_failures: int = 10,
+        max_global_failures: int = 50,
+        window_seconds: float = 15 * 60,
+    ) -> None:
         self.max_failures = max_failures
+        self.max_global_failures = max_global_failures
         self.window_seconds = window_seconds
         self._failures: dict[str, deque[float]] = {}
+        self._all: deque[float] = deque()
 
-    def _recent(self, key: str, now: float) -> deque[float]:
-        failures = self._failures.setdefault(key, deque())
+    def _prune(self, failures: deque[float], now: float) -> int:
         while failures and failures[0] <= now - self.window_seconds:
             failures.popleft()
-        if not failures:
-            del self._failures[key]
-        return failures
+        return len(failures)
 
     def blocked(self, key: str, now: float | None = None) -> bool:
-        return len(self._recent(key, time.monotonic() if now is None else now)) >= (
-            self.max_failures
-        )
+        now = time.monotonic() if now is None else now
+        if self._prune(self._all, now) >= self.max_global_failures:
+            return True
+        failures = self._failures.get(key)
+        if failures is None:
+            return False
+        if not self._prune(failures, now):
+            del self._failures[key]
+            return False
+        return len(failures) >= self.max_failures
 
     def record_failure(self, key: str, now: float | None = None) -> None:
         now = time.monotonic() if now is None else now
-        self._recent(key, now)
+        if len(self._failures) > 2 * self.max_global_failures:
+            # The global cap bounds live keys, so this sweep keeps memory small.
+            cutoff = now - self.window_seconds
+            self._failures = {k: v for k, v in self._failures.items() if v[-1] > cutoff}
         self._failures.setdefault(key, deque()).append(now)
+        self._all.append(now)
