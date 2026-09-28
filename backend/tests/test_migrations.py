@@ -31,6 +31,8 @@ TABLES = MILESTONE_2_TABLES | {
     "opportunity_identifiers",
 }
 GRADUATION_CHECK = "ck_profiles_graduation_after_status_as_of"
+MILESTONE_3_REVISION = "726372d627b8"
+RUNNING_INDEX = "uq_ingestion_runs_one_running_per_source"
 
 
 def tables(engine: Engine) -> set[str]:
@@ -41,10 +43,34 @@ def profile_checks(engine: Engine) -> set[str]:
     return {str(c["name"]) for c in inspect(engine).get_check_constraints("profiles")}
 
 
+def running_index_definition(engine: Engine) -> str | None:
+    with engine.connect() as connection:
+        return connection.scalar(
+            text("SELECT indexdef FROM pg_indexes WHERE indexname = :name"),
+            {"name": RUNNING_INDEX},
+        )
+
+
+def insert_running_runs(engine: Engine, count: int) -> None:
+    with engine.begin() as connection:
+        for _ in range(count):
+            connection.execute(
+                text(
+                    "INSERT INTO ingestion_runs (id, source_id, status, started_at)"
+                    " SELECT gen_random_uuid(), id, 'running', now() FROM ingestion_sources"
+                )
+            )
+
+
 def test_upgrade_downgrade_upgrade(pg_engine: Engine, pg_url: str) -> None:
     config = alembic_config(pg_url)
     assert tables(pg_engine) == TABLES  # pg_engine migrated to head
     assert GRADUATION_CHECK in profile_checks(pg_engine)
+    assert running_index_definition(pg_engine) is not None
+
+    command.downgrade(config, MILESTONE_3_REVISION)
+    # Asymmetric on purpose: the index belongs to 726372d627b8's intended schema.
+    assert running_index_definition(pg_engine) is not None
 
     command.downgrade(config, MILESTONE_2_REVISION)
     assert tables(pg_engine) == MILESTONE_2_TABLES
@@ -87,6 +113,43 @@ def test_stale_milestone_2_database_gets_the_graduation_check(
             {"name": GRADUATION_CHECK},
         )
     assert "expected_graduation_date > education_status_as_of" in str(definition)
+
+
+def test_stale_milestone_3_database_gets_the_running_index(pg_engine: Engine, pg_url: str) -> None:
+    """A database migrated with the pre-merge local 726372d627b8 reports that revision but lacks
+    the partial unique index. Upgrading to head restores it; one running run per source is fine."""
+    config = alembic_config(pg_url)
+    command.downgrade(config, MILESTONE_3_REVISION)
+    with pg_engine.begin() as connection:
+        connection.execute(text(f"DROP INDEX {RUNNING_INDEX}"))
+    insert_running_runs(pg_engine, 1)
+
+    command.upgrade(config, "head")
+
+    definition = str(running_index_definition(pg_engine))
+    assert "CREATE UNIQUE INDEX" in definition
+    assert "(source_id) WHERE" in definition and "'running'" in definition
+    with pg_engine.begin() as connection:
+        connection.execute(text("DELETE FROM ingestion_runs"))
+
+
+def test_running_index_reconciliation_refuses_duplicate_running_runs(
+    pg_engine: Engine, pg_url: str
+) -> None:
+    config = alembic_config(pg_url)
+    command.downgrade(config, MILESTONE_3_REVISION)
+    with pg_engine.begin() as connection:
+        connection.execute(text(f"DROP INDEX {RUNNING_INDEX}"))
+    insert_running_runs(pg_engine, 2)
+
+    with pytest.raises(RuntimeError, match="more than one run with status 'running'"):
+        command.upgrade(config, "head")
+
+    with pg_engine.begin() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM ingestion_runs")) == 2  # untouched
+        connection.execute(text("DELETE FROM ingestion_runs"))
+    command.upgrade(config, "head")
+    assert running_index_definition(pg_engine) is not None
 
 
 def test_upgrade_backfills_curation_and_seeds_the_builtin_feed(
