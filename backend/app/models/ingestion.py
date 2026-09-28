@@ -9,12 +9,15 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
     true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampMixin, str_enum
 from app.enums import IngestionRunStatus, IngestionSourceKind, IngestionStage, SourceRegion
+
+RUNNING_RUN_INDEX = "uq_ingestion_runs_one_running_per_source"
 
 
 class IngestionSource(IdMixin, TimestampMixin, Base):
@@ -57,7 +60,16 @@ class IngestionRun(IdMixin, Base):
     """One sync of one source, with its counts. Never stores payloads or stack traces."""
 
     __tablename__ = "ingestion_runs"
-    __table_args__ = (Index("ix_ingestion_runs_source_id_started_at", "source_id", "started_at"),)
+    __table_args__ = (
+        Index("ix_ingestion_runs_source_id_started_at", "source_id", "started_at"),
+        # The per-source sync guard (ADR-008 §4): at most one running run per source.
+        Index(
+            RUNNING_RUN_INDEX,
+            "source_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+    )
 
     source_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("ingestion_sources.id", ondelete="CASCADE")

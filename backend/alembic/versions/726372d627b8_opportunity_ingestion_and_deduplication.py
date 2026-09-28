@@ -159,6 +159,13 @@ def upgrade() -> None:
     op.create_index(
         "ix_ingestion_runs_source_id_started_at", "ingestion_runs", ["source_id", "started_at"]
     )
+    op.create_index(
+        "uq_ingestion_runs_one_running_per_source",
+        "ingestion_runs",
+        ["source_id"],
+        unique=True,
+        postgresql_where=sa.text("status = 'running'"),
+    )
     op.create_table(
         "ingestion_run_errors",
         sa.Column("run_id", sa.Uuid(), nullable=False),
@@ -308,6 +315,7 @@ def downgrade() -> None:
     op.drop_table("opportunity_identifiers")
     op.drop_index(op.f("ix_ingestion_run_errors_run_id"), table_name="ingestion_run_errors")
     op.drop_table("ingestion_run_errors")
+    op.drop_index("uq_ingestion_runs_one_running_per_source", table_name="ingestion_runs")
     op.drop_index("ix_ingestion_runs_source_id_started_at", table_name="ingestion_runs")
     op.drop_table("ingestion_runs")
     op.drop_table("ingestion_sources")

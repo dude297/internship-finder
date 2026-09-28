@@ -14,13 +14,19 @@ from datetime import UTC, datetime, timedelta
 
 import httpx2
 from sqlalchemy import select, tuple_, update
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
 from app.enums import IngestionRunStatus, IngestionStage
 from app.ingestion.adapters import SourceConfig, adapter_for
 from app.ingestion.http import FetchError, fetch_json
-from app.ingestion.normalize import ItemError, NormalizedOpportunity, SnapshotError
+from app.ingestion.normalize import (
+    URL,
+    ItemError,
+    NormalizedOpportunity,
+    SnapshotError,
+    canonical_url,
+)
 from app.models import (
     IngestionRun,
     IngestionRunError,
@@ -30,6 +36,7 @@ from app.models import (
     OpportunitySourceRecord,
     Profile,
 )
+from app.models.ingestion import RUNNING_RUN_INDEX
 from app.repositories import evaluate_and_save, evaluate_if_changed, get_profile
 
 logger = logging.getLogger(__name__)
@@ -86,7 +93,16 @@ def _start_run(db: Session, source: IngestionSource, now: datetime) -> Ingestion
     run = IngestionRun(source=source, status=IngestionRunStatus.RUNNING, started_at=now)
     source.last_attempted_at = now
     db.add(run)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as error:
+        # The query above is only a fast path; the partial unique index is the real guard, so a
+        # concurrent start that lost the race lands here.
+        db.rollback()
+        constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if constraint == RUNNING_RUN_INDEX:
+            raise SyncInProgress(f"{source.display_name} is already syncing.") from None
+        raise
     return run
 
 
@@ -209,6 +225,18 @@ def _apply(
     claimed = _claimed(db, item)
 
     if record is not None:  # 1. same source, same external ID
+        # Still subject to the conflict rule: an identifier of another opportunity rejects the
+        # item before anything is written. The record's own unchanged URL is exempt, so a rule-4
+        # false duplicate (sharing that URL with another record) can keep updating.
+        previous_url = canonical_url(record.source_url)
+        if any(
+            opportunity_id != record.opportunity_id
+            and not (namespace == URL and value == previous_url)
+            for (namespace, value), opportunity_id in claimed.items()
+        ):
+            raise IdentityConflict(
+                "Identifiers match more than one existing opportunity; nothing was changed."
+            )
         outcome.reactivated = not record.is_active
         outcome.updated = record.content_hash != content_hash
         _write_record(record, item, content_hash, now)
