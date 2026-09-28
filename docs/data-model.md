@@ -165,7 +165,7 @@ One sync of one source. Milestone 3.
 
 | Column | Type | Notes |
 |---|---|---|
-| `source_id` | FK → `ingestion_sources`, cascade | Index `(source_id, started_at)` |
+| `source_id` | FK → `ingestion_sources`, cascade | Index `(source_id, started_at)`; partial UNIQUE `uq_ingestion_runs_one_running_per_source` on `(source_id)` WHERE `status = 'running'`: at most one running run per source, enforced by the database |
 | `status` | enum `running` / `success` / `partial` / `failed` / `no_change` | A run still `running` after 15 minutes is marked `failed` by the next sync of that source |
 | `started_at`, `finished_at` | timestamptz | |
 | `source_generated_at` | timestamptz, null | The source's own snapshot time (the feed's `generated_at`) |
