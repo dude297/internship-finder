@@ -1,13 +1,15 @@
 import logging
+from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.exc import IntegrityError
 
 from app.api import auth, health, opportunities, profile, sources
 from app.api.deps import require_owner
+from app.core.config import get_settings
 from app.services.auth import FailedLoginLimiter
 
 logger = logging.getLogger(__name__)
@@ -42,14 +44,35 @@ async def _unexpected_error(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def _no_store(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    # Private data must never be cached by the browser or the Vercel proxy (ADR-009 §8).
+    response = await call_next(request)
+    if request.url.path.startswith("/api"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Personal Internship Finder API", version="0.0.0")
+    hosted = get_settings().hosted
+    app = FastAPI(
+        title="Personal Internship Finder API",
+        version="0.0.0",
+        # Behind the Vercel proxy an automatic slash redirect would point at the Render host.
+        redirect_slashes=False,
+        # No public interactive docs when hosted; app.openapi() still works in-process.
+        docs_url=None if hosted else "/docs",
+        redoc_url=None if hosted else "/redoc",
+        openapi_url=None if hosted else "/openapi.json",
+    )
     # No CORS middleware: the browser reaches the API same-origin (/api via a proxy), and
     # without Access-Control-Allow-Origin, browsers refuse cross-origin reads (ADR-007 §6).
     app.state.login_limiter = FailedLoginLimiter()
     app.add_exception_handler(RequestValidationError, _validation_error)  # type: ignore[arg-type]
     app.add_exception_handler(IntegrityError, _integrity_error)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, _unexpected_error)
+    app.middleware("http")(_no_store)
 
     app.include_router(health.router, prefix="/api")
     app.include_router(auth.public_router, prefix="/api")

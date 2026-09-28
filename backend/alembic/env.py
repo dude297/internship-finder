@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine
 
-from app.core.config import get_settings
+from app.core.config import get_settings, normalize_database_url
 from app.models import Base  # importing app.models registers every table on Base.metadata
 
 config = context.config
@@ -15,10 +15,8 @@ target_metadata = Base.metadata
 
 def _database_url() -> str:
     # An explicit sqlalchemy.url (set programmatically, e.g. by the migration tests) wins.
-    url = config.get_main_option("sqlalchemy.url") or get_settings().database_url
-    if not url:
-        raise RuntimeError("DATABASE_URL must be set to run Alembic migrations")
-    return url
+    url = config.get_main_option("sqlalchemy.url")
+    return normalize_database_url(url) if url else get_settings().database_url_for_driver()
 
 
 def run_migrations_offline() -> None:

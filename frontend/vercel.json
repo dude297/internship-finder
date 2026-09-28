@@ -1,0 +1,35 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "git": { "deploymentEnabled": false },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "same-origin"
+      },
+      "continue": true
+    },
+    {
+      "src": "^/api(/.*)?$",
+      "dest": "https://internship-finder-api-eld4.onrender.com/api$1",
+      "headers": { "Cache-Control": "no-store" },
+      "transforms": [
+        {
+          "type": "request.headers",
+          "op": "set",
+          "target": { "key": "X-IF-Proxy-Secret" },
+          "args": "$PROXY_SHARED_SECRET",
+          "env": ["PROXY_SHARED_SECRET"]
+        }
+      ]
+    },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
