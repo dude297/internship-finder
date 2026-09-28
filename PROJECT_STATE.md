@@ -47,7 +47,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Frontend hosting | Vercel Hobby | — | No |
 | Backend | Python 3.12+, FastAPI, Pydantic, pwdlib (Argon2id), httpx2 (ingestion HTTP) | Yes (`backend/`) | — |
 | Backend hosting | Render Free Web Service | — | Health-only (no `DATABASE_URL`; auto-deploy off) |
-| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (3 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, empty; no migrations applied) |
+| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (4 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, empty; no migrations applied) |
 | CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`: frontend, backend, e2e jobs; PR/push only; no scheduled jobs) | Running on GitHub |
 | End-to-end | Playwright (Chromium) | Yes (`frontend/e2e/`) | — |
 
@@ -102,6 +102,9 @@ Milestone 3.5 — Hosted Deployment Foundation. Provisioned only partially:
 - Vercel is not yet connected
 - no migrations applied to Neon
 - no owner created in Neon
+- Render still serves an older `main` build (Milestone 2 code); not redeployed since PR #6
+
+Done on `feature/hosted-deployment-foundation`: migration `92a17353e5a8` reconciles the missing `uq_ingestion_runs_one_running_per_source` on databases migrated with the pre-merge `726372d627b8` ([data-model.md](docs/data-model.md#running-run-index-reconciliation-92a17353e5a8)). The stale local database (`if_m3_dev`) was upgraded with `alembic upgrade head`; its row counts were unchanged and the index now exists.
 
 The deployment blockers in [docs/deployment.md](docs/deployment.md#blockers-before-any-hosted-deployment) still apply.
 
@@ -138,7 +141,7 @@ None known.
 
 ## Database State
 
-Selected: Neon PostgreSQL. Neon Free is provisioned but empty (no migrations applied). Schema head: migration `726372d627b8` (15 tables) on top of the immutable `7d7f4f8b9a3c` and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and repairs the graduation constraint if needed.
+Selected: Neon PostgreSQL. Neon Free is provisioned but empty (no migrations applied). Schema head: migration `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`, no new tables) on top of the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and `92a17353e5a8`, repairing the graduation constraint and the running-run index if needed.
 
 ## Current Scoring Version
 

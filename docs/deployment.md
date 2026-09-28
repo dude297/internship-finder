@@ -2,7 +2,7 @@
 
 **Deployment is not configured yet.**
 
-Hosting and database providers are **selected** ([ADR-004](decisions/ADR-004-technology-stack.md)) but **not provisioned**. No accounts, projects, databases, or production environment exist. Milestone 2 runs locally only.
+Hosting and database providers are **selected** ([ADR-004](decisions/ADR-004-technology-stack.md)). The Neon database is provisioned (empty, no schema applied) and a health-only Render service is running; the frontend host and a production environment are not. The app is usable locally only.
 
 ## Blockers Before Any Hosted Deployment
 
@@ -27,13 +27,13 @@ $0/month, and no payment method required. Before provisioning any service:
 | Part | Selected | Status | Notes |
 |---|---|---|---|
 | Frontend | Vercel Hobby | Not provisioned | Static Vite build only. No paid features, serverless functions, or Vercel storage. Portable to any static host. |
-| Backend | Render Free Web Service | Not provisioned | Sleeps when idle; cold starts accepted. Disk isn't durable, so no persistent state on it. Must tolerate restarts. |
+| Backend | Render Free Web Service | **Provisioned, health-only** 2026-09-27: Oregon, Python 3.12, from `main` but not redeployed since PR #6, so it runs Milestone 2 code (root `backend/`, `pip install .`, `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health check `/api/health`), auto-deploy off. `DATABASE_URL` is deliberately unset until the blockers above are resolved, so every database-backed endpoint returns 500 and no data is reachable. | Sleeps when idle; cold starts accepted. Disk isn't durable, so no persistent state on it. Must tolerate restarts. |
 
 ## Database
 
 | Selected | Status | Notes |
 |---|---|---|
-| Neon PostgreSQL Free | Not provisioned | Standard Postgres only (no Neon-specific features required). Schema via Alembic. |
+| Neon PostgreSQL Free | **Provisioned** 2026-09-27 (PostgreSQL 18, `aws-us-west-2` to match Render Oregon; database and role `internship_finder`). No migrations applied yet (head is `92a17353e5a8`). | Standard Postgres only (no Neon-specific features required). Schema via Alembic. The connection string stays in Neon and host secrets only (`neonctl connection-string`), never in the repository. |
 
 ## Scheduling
 
