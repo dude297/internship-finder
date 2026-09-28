@@ -7,7 +7,8 @@ from typing import Any
 
 import httpx2
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import Engine, event, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.enums import (
@@ -34,6 +35,7 @@ from app.models import (
     OpportunitySourceRecord,
     Profile,
 )
+from app.models.ingestion import RUNNING_RUN_INDEX
 from app.repositories import latest_evaluation
 from tests.ingestion_fixtures import (
     FEED_URL,
@@ -521,6 +523,93 @@ def test_same_url_twice_in_one_source_is_not_merged(
     assert run.status is IngestionRunStatus.SUCCESS
     assert counts(sync(db, feed_source, web)) == {"fetched": 2, "unchanged": 2}
 
+    # The second one keeps updating: its own unchanged URL isn't a conflict.
+    web.json(
+        FEED_URL,
+        feed(
+            feed_job("workday:a:/1", url=shared),
+            feed_job("workday:a:/2", url=shared, title="Synthetic Renamed Intern"),
+        ),
+    )
+    again = sync(db, feed_source, web)
+    assert again.status is IngestionRunStatus.SUCCESS
+    assert counts(again) == {"fetched": 2, "updated": 1, "unchanged": 1}
+    assert record(db, feed_source, "workday:a:/2").opportunity.title == "Synthetic Renamed Intern"
+
+
+def _state(db: Session) -> dict[str, Any]:
+    """Everything an ingested item can change, keyed so two snapshots compare exactly."""
+    db.expire_all()
+    return {
+        "opportunities": {
+            o.id: (o.title, o.application_url, o.last_seen_at)
+            for o in db.scalars(select(Opportunity))
+        },
+        "records": {
+            r.id: (r.opportunity_id, r.source_url, r.content_hash, r.is_active, r.last_seen_at)
+            for r in db.scalars(select(OpportunitySourceRecord))
+        },
+        "identifiers": {
+            (i.namespace, i.value): i.opportunity_id
+            for i in db.scalars(select(OpportunityIdentifier))
+        },
+    }
+
+
+def test_same_source_item_moving_onto_another_opportunitys_url_is_a_conflict(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    url_a = "https://careers.example.com/jobs/role-a"
+    url_b = "https://careers.example.com/jobs/role-b"
+    job_b = feed_job("workday:example:/job/B", url=url_b, title="Synthetic Data Intern")
+    web.json(FEED_URL, feed(feed_job("workday:example:/job/A", url=url_a), job_b))
+    sync(db, feed_source, web)
+    before = _state(db)
+
+    # A keeps its external ID but now claims B's URL: A's identity and B's at once.
+    web.json(FEED_URL, feed(feed_job("workday:example:/job/A", url=url_b), job_b))
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert counts(run) == {"fetched": 2, "unchanged": 1, "error": 1}
+    assert [(e.stage.value, e.code, e.external_id) for e in run.errors] == [
+        ("identify", "identity_conflict", "workday:example:/job/A")
+    ]
+    after = _state(db)
+    # B was seen again (last_seen_at moves); A, its record, and every identifier are untouched.
+    a = record(db, feed_source, "workday:example:/job/A")
+    b = record(db, feed_source, "workday:example:/job/B")
+    assert after["opportunities"][a.opportunity_id] == before["opportunities"][a.opportunity_id]
+    assert after["records"][a.id] == before["records"][a.id]
+    assert a.source_url == url_a
+    assert after["identifiers"] == before["identifiers"]
+    assert after["identifiers"][("url", url_b)] == b.opportunity_id
+    assert {k: len(v) for k, v in after.items()} == {k: len(v) for k, v in before.items()}
+    assert all(r.is_active for r in db.scalars(select(OpportunitySourceRecord)))
+
+
+def test_same_source_item_gaining_another_opportunitys_provider_id_is_a_conflict(
+    db: Session, feed_source: IngestionSource, lever_source: IngestionSource, web: FakeSource
+) -> None:
+    feed_id = f"lever:{LEVER_SITE}:{LEVER_POSTING_ID}"
+    # Off jobs.lever.co, so no Lever identity yet: two separate opportunities.
+    web.json(FEED_URL, feed(feed_job(feed_id, url="https://careers.example.com/jobs/lever-role")))
+    sync(db, feed_source, web)
+    web.json(LEVER_URL, [lever_posting()])
+    sync(db, lever_source, web)
+    assert count(db, Opportunity) == 2
+    before = _state(db)
+
+    # The feed item's URL moves onto jobs.lever.co: it now derives the Lever posting's identity.
+    lever_url = f"https://jobs.lever.co/{LEVER_SITE}/{LEVER_POSTING_ID}"
+    web.json(FEED_URL, feed(feed_job(feed_id, url=lever_url)))
+    run = sync(db, feed_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert counts(run) == {"fetched": 1, "error": 1}
+    assert [e.code for e in run.errors] == ["identity_conflict"]
+    assert _state(db) == before
+
 
 # --- Manual curation and evaluation -------------------------------------------------------------
 
@@ -600,6 +689,72 @@ def test_a_running_sync_blocks_a_second_one(
 
     with pytest.raises(SyncInProgress):
         sync(db, feed_source, web)
+
+
+def _running(source: IngestionSource) -> IngestionRun:
+    return IngestionRun(
+        source=source, status=IngestionRunStatus.RUNNING, started_at=datetime.now(UTC)
+    )
+
+
+def test_the_database_allows_one_running_run_per_source(
+    db: Session, feed_source: IngestionSource, gh_source: IngestionSource
+) -> None:
+    first = _running(feed_source)
+    db.add_all([first, _running(gh_source)])  # different sources may run at the same time
+    db.commit()
+
+    with pytest.raises(IntegrityError) as raised, db.begin_nested():
+        db.add(_running(feed_source))
+    assert raised.value.orig.diag.constraint_name == RUNNING_RUN_INDEX  # type: ignore[union-attr]
+
+    # Once the run finishes, whatever its outcome, the source can run again.
+    for status in (
+        IngestionRunStatus.SUCCESS,
+        IngestionRunStatus.PARTIAL,
+        IngestionRunStatus.FAILED,
+        IngestionRunStatus.NO_CHANGE,
+    ):
+        first.status = status
+        first.finished_at = datetime.now(UTC)
+        first = _running(feed_source)
+        db.add(first)
+        db.commit()
+    assert count(db, IngestionRun) == 6
+
+
+def test_a_start_that_loses_the_race_is_sync_in_progress(
+    db: Session, pg_engine: Engine, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    """Another session inserts its running run after this one's fast-path check found none;
+    the unique index, not the check, turns this start into SyncInProgress."""
+    web.json(FEED_URL, feed(JOB_A))
+    source_id = feed_source.id  # read now: the cleanup below mustn't depend on this session
+
+    def competitor_starts(_session: Session) -> None:
+        with Session(pg_engine) as other:
+            other.add(
+                IngestionRun(
+                    source_id=source_id,
+                    status=IngestionRunStatus.RUNNING,
+                    started_at=datetime.now(UTC),
+                )
+            )
+            other.commit()
+
+    event.listen(db, "before_commit", competitor_starts, once=True)
+    try:
+        with pytest.raises(SyncInProgress):
+            sync(db, feed_source, web)
+        assert count(db, Opportunity) == 0
+        running = db.scalars(
+            select(IngestionRun).where(IngestionRun.status == IngestionRunStatus.RUNNING)
+        ).all()
+        assert len(running) == 1  # only the competitor's
+    finally:
+        with Session(pg_engine) as other:  # committed outside the test transaction
+            other.query(IngestionRun).filter(IngestionRun.source_id == source_id).delete()
+            other.commit()
 
 
 def test_an_abandoned_run_is_marked_failed(
