@@ -1,3 +1,4 @@
+import hmac
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -12,6 +13,27 @@ public_router = APIRouter(prefix="/auth", tags=["auth"])
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 INVALID_CREDENTIALS = "Invalid username or password."
+PROXY_SECRET_HEADER = "X-IF-Proxy-Secret"
+DIRECT_CLIENT = "direct"
+
+
+def login_client_key(request: Request) -> str:
+    """The failed-login throttle key for this request (ADR-009 §6).
+
+    Only a request that proves it came through our Vercel proxy (the shared secret header) is
+    keyed by X-Forwarded-For, which Vercel overwrites with the browser's address. Everything
+    else, including direct calls to the Render URL, shares one key: their headers are ignored,
+    so forging X-Forwarded-For buys nothing."""
+    secret = get_settings().proxy_shared_secret
+    presented = request.headers.get(PROXY_SECRET_HEADER)
+    if (
+        secret is None
+        or presented is None
+        or not hmac.compare_digest(secret.get_secret_value().encode(), presented.encode())
+    ):
+        return DIRECT_CLIENT
+    forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    return f"proxy:{forwarded or 'unknown'}"
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -43,7 +65,7 @@ def login(
     body: LoginRequest, request: Request, response: Response, db: DbSession
 ) -> SessionResponse:
     limiter: auth.FailedLoginLimiter = request.app.state.login_limiter
-    client = request.client.host if request.client else "unknown"
+    client = login_client_key(request)
     if limiter.blocked(client):
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed login attempts. Try again later."
