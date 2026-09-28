@@ -10,10 +10,7 @@ from app.core.config import get_settings
 @lru_cache
 def get_engine() -> Engine:
     """Created lazily so the app starts (and /api/health works) without DATABASE_URL."""
-    url = get_settings().database_url
-    if not url:
-        raise RuntimeError("DATABASE_URL is not configured")
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(get_settings().database_url_for_driver(), pool_pre_ping=True)
 
 
 def get_session() -> Iterator[Session]:
