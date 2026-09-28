@@ -2,7 +2,7 @@
 
 ## Current
 
-Milestones 0–2 are merged. Milestone 3 (automated opportunity discovery and ingestion) is implemented on `feature/opportunity-ingestion`, awaiting review. The application runs **locally only**. Nothing is **provisioned** (no accounts, hosted databases, deployments, or schedulers).
+Milestones 0–3 are merged. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is on `feature/hosted-deployment-foundation`, awaiting review, and deployed from that branch for validation: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
 
 ```text
 Browser ── same origin ──► Vite dev server (localhost:5173)
@@ -97,7 +97,7 @@ FastAPI (Render)
 PostgreSQL (Neon)
 ```
 
-**Open constraint from ADR-007:** the hosted topology must keep the browser's API access same-origin (for example, the static host rewriting `/api/*` to the backend) or at least same-site. Two unrelated provider subdomains are not an accepted cookie architecture. This, `Secure` cookies, and login rate limiting must be reviewed before any hosted deployment ([deployment.md](deployment.md)).
+ADR-007's same-origin constraint is met by Vercel rewriting `/api/*` to Render before the SPA fallback, so the session cookie is host-only on the Vercel host. `Secure` cookies and proxy-aware login throttling are in [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md).
 
 ### Opportunity Flow
 

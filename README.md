@@ -4,11 +4,11 @@ A personal, single-user tool for finding internship and research opportunities, 
 
 **Intended user:** a single user (the repository owner). It's still being built to production standards.
 
-> ⚠️ **Status: automated opportunity discovery (Milestone 3, in review, local only).** Log in, keep a private profile, sync a broad internship feed and any Greenhouse or Lever company boards you add, browse and filter the imported postings with their source and freshness, review an imported posting's requirements, see eligibility evaluated automatically with plain-language explanations, and track applications. Sync runs only when you ask (Sources page or CLI); there's no scheduler. There is no résumé parsing, no AI, no automatic requirement extraction, no fit scoring, and no hosted deployment. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
+> ⚠️ **Status: hosted deployment foundation (Milestone 3.5, in review).** Milestone 3 is merged; a private hosted deployment (Vercel → Render → Neon, [docs/deployment.md](docs/deployment.md)) runs from the review branch. Log in, keep a private profile, sync a broad internship feed and any Greenhouse or Lever company boards you add, browse and filter the imported postings with their source and freshness, review an imported posting's requirements, see eligibility evaluated automatically with plain-language explanations, and track applications. Sync runs only when you ask (Sources page or CLI); there's no scheduler. There is no résumé parsing, no AI, no automatic requirement extraction, and no fit scoring. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
 
 ## Stack
 
-**Scaffolded locally, not provisioned or deployed** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)):
+**Implemented, and provisioned on free plans** ([ADR-004](docs/decisions/ADR-004-technology-stack.md), hosting in [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md)):
 
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, built as a static client-side app and hosted on Vercel Hobby
 - **Backend:** Python, FastAPI, Pydantic, hosted on a Render Free Web Service

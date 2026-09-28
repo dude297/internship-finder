@@ -3,9 +3,9 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-09-28
-Current Milestone: **Milestone 3.5 — Hosted Deployment Foundation** (partially provisioned; see In Progress). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
-Current Production Version: None (not deployed)
-Active Development Branch: None. Remote: https://github.com/dude297/internship-finder
+Current Milestone: **Milestone 3.5 — Hosted Deployment Foundation** (implemented; deployed from the review branch; owner-login hosted checks open; see In Progress). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Production Version: `feature/hosted-deployment-foundation` (unmerged, deployed for validation) on https://internship-finder-pi.vercel.app
+Active Development Branch: `feature/hosted-deployment-foundation`. Remote: https://github.com/dude297/internship-finder
 
 ## Repository Visibility
 
@@ -27,11 +27,11 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 
 | Area | Status |
 |---|---|
-| Technology stack | **Selected** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)). Runs locally. Partially provisioned (Neon empty; Render health-only). Not deployed for use. |
+| Technology stack | **Selected** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)); hosting per [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md). **Provisioned and deployed** (Vercel Hobby → Render Free → Neon Free) from the review branch. |
 | Source/profile strategy | **Selected** ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Opportunity ingestion implemented (ADR-008). No profile parsers. |
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
-| Authentication / private API | **Implemented, local only** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable). Not Internet-production-ready (see Known Technical Debt) |
-| Opportunity ingestion | **Implemented, local, manual sync only** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`) |
+| Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
+| Opportunity ingestion | **Implemented, manual sync only** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`) |
 | Eligibility | **Implemented** v1 (rules version `v1`), evaluated automatically (only when inputs change) |
 | Application tracking | **Implemented** |
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
@@ -44,10 +44,10 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Layer | Selection | Implemented locally? | Provisioned? |
 |---|---|---|---|
 | Frontend | React, TypeScript, Vite, Tailwind CSS, Zod, react-router | Yes (`frontend/`) | — |
-| Frontend hosting | Vercel Hobby | — | No |
+| Frontend hosting | Vercel Hobby | — | **Yes** (project `internship-finder`, `internship-finder-pi.vercel.app`) |
 | Backend | Python 3.12+, FastAPI, Pydantic, pwdlib (Argon2id), httpx2 (ingestion HTTP) | Yes (`backend/`) | — |
-| Backend hosting | Render Free Web Service | — | Health-only (no `DATABASE_URL`; auto-deploy off) |
-| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (4 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, empty; no migrations applied) |
+| Backend hosting | Render Free Web Service | — | **Yes** (`internship-finder-api`, Oregon, connected to Neon, auto-deploy off) |
+| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (4 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `92a17353e5a8`, owner created, catalog empty) |
 | CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`: frontend, backend, e2e jobs; PR/push only; no scheduled jobs) | Running on GitHub |
 | End-to-end | Playwright (Chromium) | Yes (`frontend/e2e/`) | — |
 
@@ -94,19 +94,25 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 3.5 — Hosted Deployment Foundation. Provisioned only partially:
+Milestone 3.5 — Hosted Deployment Foundation, on `feature/hosted-deployment-foundation` (PR open, not merged). Runbook and verification results: [docs/deployment.md](docs/deployment.md).
 
-- Neon Free project exists, empty
-- Render Free backend exists in health-only mode
-- `DATABASE_URL` is not configured
-- Vercel is not yet connected
-- no migrations applied to Neon
-- no owner created in Neon
-- Render still serves an older `main` build (Milestone 2 code); not redeployed since PR #6
+Done:
 
-Done on `feature/hosted-deployment-foundation`: migration `92a17353e5a8` reconciles the missing `uq_ingestion_runs_one_running_per_source` on databases migrated with the pre-merge `726372d627b8` ([data-model.md](docs/data-model.md#running-run-index-reconciliation-92a17353e5a8)). The stale local database (`if_m3_dev`) was upgraded with `alembic upgrade head`; its row counts were unchanged and the index now exists.
+- ADR-009; migration `92a17353e5a8` (running-run index reconciliation); proxy-aware login throttle (10 per client, 50 global per 15 min); Argon2 concurrency guard; `DATABASE_URL` normalization; `HOSTED` mode; `no-store` on `/api`; no slash redirects; cold-start UX; `frontend/vercel.json`
+- Neon migrated to `92a17353e5a8`; owner created by the owner with the CLI (`getpass`)
+- Render configured (`DATABASE_URL`, `SESSION_COOKIE_SECURE`, `SESSION_TTL_HOURS`, `PYTHON_VERSION`, `HOSTED`, `PROXY_SHARED_SECRET`) and deployed from the feature branch (branch switched temporarily; auto-deploy off)
+- Vercel production deployed by CLI from a clean checkout; `PROXY_SHARED_SECRET` is Production-only and Sensitive; Git deployments disabled; Standard Deployment Protection on non-production URLs
+- Hosted checks passed: health, same-origin `/api`, API 404s (not the SPA), no slash redirect, SPA deep links, docs hidden, `no-store`, direct-path shared throttle bucket (forged `X-Forwarded-For` ignored), proxy secret accepted, non-production URLs SSO-protected, cold start (~3 min wake; Vercel `502` meanwhile, which the UI shows as waking)
 
-The deployment blockers in [docs/deployment.md](docs/deployment.md#blockers-before-any-hosted-deployment) still apply.
+Open (need the owner's real login, which the owner deferred):
+
+- session cookie attributes on the Vercel host; CSRF `403` without the token and success with it; per-client `429` through Vercel
+- first hosted discovery sync (counts, time, Vercel timeout behavior) and a second sync; one Greenhouse/Lever board
+- profile re-evaluation timing over the imported catalog
+- invalid source links rejected over HTTP (validation is tested locally)
+- session survival across a Render redeploy
+
+After merge: switch Render's branch back to `main`, deploy `main`, and redeploy Vercel production from `main` ([deployment.md](docs/deployment.md#unmerged-branch-validation)).
 
 ## Known Bugs
 
@@ -114,9 +120,11 @@ None known.
 
 ## Known Technical Debt
 
-- **Production deployment is blocked until login rate limiting is reviewed.** The failed-login throttle is in memory, per process, per client IP, and resets on restart ([ADR-007 §8](docs/decisions/ADR-007-single-user-auth-and-private-api.md#8-login-throttling)). The same-origin hosting topology and `Secure` cookies also need review before deployment ([deployment.md](docs/deployment.md#blockers-before-any-hosted-deployment)).
-- Profile re-evaluation is synchronous and re-evaluates every opportunity (~4 s for ~1,100 opportunities locally). Needs batching or background work before hosted use or a much larger catalog ([operations.md](docs/operations.md)).
-- Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s). Fine locally; a hosted deployment with request timeouts would need a background job.
+- The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. The global cap lets a distributed attacker lock the owner out for up to 15 minutes (accepted).
+- Profile re-evaluation is synchronous and re-evaluates every opportunity (~4 s for ~1,100 opportunities locally; hosted timing not yet measured). Batching/background work is proposed for Milestone 4 ([operations.md](docs/operations.md)).
+- Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
+- Render Free cold starts take about 3 minutes; meanwhile Vercel returns `502` and the UI shows the waking state.
+- No database backups beyond Neon Free's short restore window.
 - Direct ATS boards import every published posting (not only internships); they're typed `other` unless a structured field says internship.
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
 - Deleting an imported opportunity deletes its source records, so the next sync re-imports it (no "hide" yet). There's no "revert to source" for curated opportunities.
@@ -141,7 +149,7 @@ None known.
 
 ## Database State
 
-Selected: Neon PostgreSQL. Neon Free is provisioned but empty (no migrations applied). Schema head: migration `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`, no new tables) on top of the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and `92a17353e5a8`, repairing the graduation constraint and the running-run index if needed.
+Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `92a17353e5a8` (`alembic check` clean), holds the owner account, and has an empty catalog (8.4 MB on 2026-09-28). Schema head: migration `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`, no new tables) on top of the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and `92a17353e5a8`, repairing the graduation constraint and the running-run index if needed.
 
 ## Current Scoring Version
 
@@ -162,22 +170,22 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Environment / Deployment Notes
 
-- Backend variables: `DATABASE_URL` (required except for `/api/health`), `SESSION_TTL_HOURS`, `SESSION_COOKIE_SECURE`, and the test-only `INGESTION_FIXTURE_FILE` (never set for real use). The frontend has none. See [docs/development.md](docs/development.md#environment-variables).
-- Hosting is selected (Vercel Hobby, Render Free, Neon Free). Neon Free is provisioned (empty, PostgreSQL 18, `aws-us-west-2`); Render Free runs a health-only backend (Oregon, no `DATABASE_URL`); Vercel is not provisioned. Deployment blockers are listed in [docs/deployment.md](docs/deployment.md#blockers-before-any-hosted-deployment).
+- Backend variables: `DATABASE_URL` (required except for `/api/health`), `SESSION_TTL_HOURS`, `SESSION_COOKIE_SECURE`, hosted-only `HOSTED` and `PROXY_SHARED_SECRET`, and the test-only `INGESTION_FIXTURE_FILE` (never set for real use). The frontend has no build-time variables; Vercel Production holds `PROXY_SHARED_SECRET` for the `/api` rewrite. See [docs/development.md](docs/development.md#environment-variables).
+- Hosting (ADR-009): Vercel Hobby `internship-finder` → Render Free `internship-finder-api` (Oregon) → Neon Free. Deploys are manual: migrate → Render → Vercel ([docs/deployment.md](docs/deployment.md)). The owner confirmed the Vercel plan (Hobby, no payment method) on 2026-09-28.
 - Each provisioning step must confirm that no payment method is required before creating the account or project.
 
 ## Deferred Work
 
-- Provisioning Vercel, applying migrations to Neon, connecting Render to Neon, and the same-origin hosted topology review.
 - Scheduled source sync (needs a hosted database) and deployment workflows.
 - Ashby and early-college/research-program sources (layer 3).
 
 ## Next Planned Task
 
-Start Milestone 3.5 — Hosted Deployment Foundation from clean `main`. Milestone 4 (proposed: profile enrichment and fit scoring) follows. Not started.
+Run the owner-login hosted checks ([In Progress](#in-progress)), then review and merge the Milestone 3.5 PR and restore Render to `main`. Milestone 4 (proposed: profile enrichment and fit scoring v1, with batched/background profile re-evaluation and an internships-only filter for Greenhouse/Lever) follows. Not started.
 
 ## Recent Important Decisions
 
+- 2026-09-28: ADR-009 accepted: Vercel same-origin `/api` rewrite → Render (one instance, one worker) → Neon direct endpoint; proxy-secret-keyed login throttle (10 per client, 50 global); Argon2 concurrency 2; `HOSTED` mode; manual migrations and deploys; Git deployments off on Vercel; `PROXY_SHARED_SECRET` Production-only; no scheduler or keep-alive. Migration `92a17353e5a8` reconciles the running-run index.
 - 2026-09-28: PR #6 review fixes: the same-source/external-ID update path is subject to the identity-conflict rule (the record's own unchanged URL is exempt for rule-4 false duplicates); one running ingestion run per source is enforced by the partial unique index `uq_ingestion_runs_one_running_per_source` (added to `726372d627b8` before merge). Milestone 3 merged via PR #6.
 - 2026-09-27: ADR-008 accepted: source registry with safe configuration only; adapters without database access; one shared pipeline with per-item savepoints and run history; closure only after complete successful snapshots; exact deterministic identifiers for cross-source dedup (no fuzzy matching; conflicts recorded, never merged); manual-curation protection; fingerprinted automatic evaluation; allowlisted HTTPS-only network access via `httpx2`; zshah101 feed consumed through its API only; SuryaHarikrishnan listing data excluded; no scheduler while the database is local.
 - 2026-09-27: Migration `726372d627b8` repairs the pre-merge `7d7f4f8b9a3c` graduation constraint automatically (asymmetric downgrade). The manual-patch instruction was removed from the docs.

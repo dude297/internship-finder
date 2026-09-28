@@ -1,71 +1,151 @@
 # Deployment
 
-**Deployment is not configured yet.**
+Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md). This file is the runbook. It never contains secrets: no `DATABASE_URL`, proxy secret, password, hash, session or CSRF token.
 
-Hosting and database providers are **selected** ([ADR-004](decisions/ADR-004-technology-stack.md)). The Neon database is provisioned (empty, no schema applied) and a health-only Render service is running; the frontend host and a production environment are not. The app is usable locally only.
+## Status (2026-09-28)
 
-## Blockers Before Any Hosted Deployment
+| Part | State |
+|---|---|
+| Neon | **Provisioned.** Migrated to `92a17353e5a8`. Owner created (CLI, `getpass`). Catalog empty until the first hosted sync. |
+| Render | **Deployed** from `feature/hosted-deployment-foundation` for hosted validation (branch switched temporarily, see [Unmerged branch validation](#unmerged-branch-validation)). Auto-deploy off. |
+| Vercel | **Deployed** (production, manual CLI deploy from a clean checkout of the same branch). |
+| Hosted acceptance | Partially verified. Checks that need the owner's real login are still open (see [Production verification](#production-verification)). |
 
-The authentication design ([ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md)) is **not** claimed to be Internet-production-ready. Production deployment is blocked until each item below is reviewed and resolved:
+## Topology
 
-1. **Same-origin topology.** The browser must reach the API on the frontend's origin (e.g. the static host rewrites `/api/*` to the backend) or at least the same site. A frontend on one provider's random subdomain calling a backend on another provider's random subdomain is not accepted: `SameSite=Lax` cookies wouldn't be sent, and `SameSite=None` would weaken the CSRF defenses.
-2. **Secure cookies.** `SESSION_COOKIE_SECURE` must be `true` (the default) and the site served only over HTTPS.
-3. **Login rate limiting.** The current limiter is in memory, per process, keyed by client IP, and reset on restart. Behind a proxy it may see one IP for everyone. **Production deployment is blocked until login rate limiting is reviewed** with the real topology (trusted forwarded headers, process count, persistent or shared counters).
-4. **Hosted configuration.** `DATABASE_URL` as a host secret (never in the repository or workflow YAML), migrations applied before the new code serves traffic, and the owner created with the CLI against the hosted database from a trusted machine.
-5. **Owner bootstrap.** Decide how `python -m app.cli create-owner` is run against the hosted database without exposing the password (interactive `getpass` from a trusted shell).
+```text
+Browser ──HTTPS──► https://internship-finder-pi.vercel.app   (Vercel Hobby, project "internship-finder")
+                     ├─ static Vite build (SPA fallback to index.html)
+                     └─ /api, /api/* ──► https://internship-finder-api-eld4.onrender.com/api/*
+                                          adds X-IF-Proxy-Secret (Production env only)
+                                          (Render Free "internship-finder-api", Oregon, 1 instance, 1 worker)
+                                               └─► Neon Free project sweet-dew-33937746, aws-us-west-2,
+                                                   PostgreSQL 18, database internship_finder, direct endpoint
+```
+
+The only public app URL is the Vercel production alias. The browser never calls `onrender.com`. The Render URL answers directly, but only public endpoints work without a session, and direct login attempts share one throttle bucket.
 
 ## Cost Constraint
 
-$0/month, and no payment method required. Before provisioning any service:
+$0/month, no payment method, no automatic billing or upgrade ([ADR-009 §2](decisions/ADR-009-hosted-deployment-architecture.md#2-zero-cost-rule-permanent)). All three services are on free plans with no card: Vercel Hobby (owner-confirmed 2026-09-28), Render Free, Neon Free. If any platform asks for payment information, stop that path and write a new ADR.
 
-- confirm it can be created and used without a credit card or payment information
-- confirm that exceeding free limits pauses, throttles, or fails rather than bills
-- if either check fails, stop and propose a new ADR. Don't add a payment method.
+## Configuration
 
-## Hosting
+### Render (`internship-finder-api`)
 
-| Part | Selected | Status | Notes |
-|---|---|---|---|
-| Frontend | Vercel Hobby | Not provisioned | Static Vite build only. No paid features, serverless functions, or Vercel storage. Portable to any static host. |
-| Backend | Render Free Web Service | **Provisioned, health-only** 2026-09-27: Oregon, Python 3.12, from `main` but not redeployed since PR #6, so it runs Milestone 2 code (root `backend/`, `pip install .`, `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health check `/api/health`), auto-deploy off. `DATABASE_URL` is deliberately unset until the blockers above are resolved, so every database-backed endpoint returns 500 and no data is reachable. | Sleeps when idle; cold starts accepted. Disk isn't durable, so no persistent state on it. Must tolerate restarts. |
+| Setting | Value |
+|---|---|
+| Plan / region / instances | Free / Oregon / 1 |
+| Root directory | `backend` |
+| Build | `pip install .` |
+| Start | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` (one worker; don't add `--workers`) |
+| Health check | `/api/health` |
+| Auto-deploy / PR previews | Off / off |
 
-## Database
+Environment variables (names only; values live in Render):
 
-| Selected | Status | Notes |
-|---|---|---|
-| Neon PostgreSQL Free | **Provisioned** 2026-09-27 (PostgreSQL 18, `aws-us-west-2` to match Render Oregon; database and role `internship_finder`). No migrations applied yet (head is `92a17353e5a8`). | Standard Postgres only (no Neon-specific features required). Schema via Alembic. The connection string stays in Neon and host secrets only (`neonctl connection-string`), never in the repository. |
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Secret. Neon **direct** connection string (`neonctl connection-string`), as Neon prints it (`postgresql://…?sslmode=require…`); the app switches the driver |
+| `SESSION_COOKIE_SECURE` | `true` |
+| `SESSION_TTL_HOURS` | `24` |
+| `PYTHON_VERSION` | `3.12` |
+| `HOSTED` | `true` |
+| `PROXY_SHARED_SECRET` | Secret. Random, ≥ 32 characters, identical to Vercel's |
 
-## Scheduling
+Never set `INGESTION_FIXTURE_FILE`.
 
-GitHub Actions scheduled workflows (selected, not configured). Workflows call Python commands from the backend package. Scheduled jobs can connect to the database directly, so they don't depend on the Render service being awake.
+### Vercel (`internship-finder`, team `dude297s-projects`)
 
-Source sync exists as `python -m app.cli sync-sources` (Milestone 3) but runs only by hand today: the database is local, and a GitHub-hosted runner can't (and mustn't) reach it. Considerations for a future scheduled sync, once a hosted database exists:
+| Setting | Value |
+|---|---|
+| Plan | Hobby |
+| Root directory / framework | `frontend` / Vite |
+| Install / build / output | `npm ci` / `npm run build` / `dist` (also in `frontend/vercel.json`) |
+| Node | 24.x |
+| Git deployments | Disabled by `frontend/vercel.json` (`git.deploymentEnabled: false`); the project is connected to GitHub, but pushes and pull requests create no deployments |
+| Deployment Protection | Standard (Vercel Authentication on everything except the production alias) |
+| Production alias | `internship-finder-pi.vercel.app` |
 
-- `DATABASE_URL` comes from a repository/environment secret, never workflow YAML, and the workflow must not run for forked pull requests.
-- Keep the cadence courteous (the discovery feed updates about every 30 minutes; conditional requests make an unchanged sync nearly free). Hosted-runner minutes and Neon compute are free-tier limits: fail visibly rather than escalate ([ADR-004](decisions/ADR-004-technology-stack.md)).
-- Outbound access is only to the allowlisted source hosts ([ADR-008 §10](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#10-external-network-safety)). `INGESTION_FIXTURE_FILE` is test-only and must never be set in a hosted environment.
-- Profile re-evaluation is synchronous (about 4 s per ~1,100 opportunities locally); a hosted instance with a request timeout may need it moved to background work first.
+Environment variables: **only** `PROXY_SHARED_SECRET`, type Sensitive, **Production** only. Nothing `VITE_*`, no API base URL, no database credentials. The `/api` route in `vercel.json` sends it as `X-IF-Proxy-Secret`, sets `Cache-Control: no-store`, and runs before the SPA fallback.
 
-## Environment Variables
+### Proxy secret
 
-None are provisioned anywhere yet. Local variables are listed in [development.md](development.md#environment-variables). For production: `DATABASE_URL` (server-only secret), `SESSION_COOKIE_SECURE=true`, and optionally `SESSION_TTL_HOURS`. The frontend needs no build-time variables because it calls relative `/api` URLs; the hosting layer must route `/api` to the backend (see the blockers above). When adding more:
+- Generate: `python -c "import secrets; print(secrets.token_urlsafe(48), end='')" > <file outside the repo>`.
+- Set it from that file without displaying it: Render (API or dashboard) and `vercel env add PROXY_SHARED_SECRET production --sensitive --yes < <file>`. Delete the file afterwards.
+- Rotate: set the new value in both places, redeploy Render, then redeploy Vercel production. Between the two steps (or with a mismatch) proxied logins fall back to the shared `direct` throttle bucket; nothing else breaks.
 
-- list every variable in [`.env.example`](../.env.example) with placeholder values
-- note here which are server-only (e.g. database URL: backend and GitHub Actions secrets only) and which may be exposed to the frontend (e.g. the public API base URL)
-- never expose database credentials or secret keys to the browser. Anything in the Vite client bundle is public.
+## Deploy Order
 
-## Migration Process
+Always **migrate → Render → Vercel**, from a trusted local shell.
 
-Not defined yet. It must state how Alembic migrations are applied to production, in what order relative to code deploys, and who reviews them.
+1. **Migrate** (only when the release adds migrations). In `backend/` with the venv active, set `DATABASE_URL` in this shell only and never echo it:
+   ```powershell
+   $env:DATABASE_URL = (neonctl connection-string --project-id sweet-dew-33937746 --database-name internship_finder --role-name internship_finder)
+   alembic upgrade head
+   alembic current     # expect the new head
+   alembic check
+   Remove-Item Env:DATABASE_URL
+   ```
+   Never run `alembic downgrade` against Neon. Offline `--sql` mode can't render `92a17353e5a8`; migrate online.
+2. **Render:** push the reviewed commit to `main`, then **Manual Deploy → Deploy latest commit** (or `POST /v1/services/<id>/deploys`). Wait for `live`, then check `/api/health`.
+3. **Vercel:** from a clean checkout of the same commit (`git worktree add --detach <dir> <sha>`), in the repository root: `npx vercel link --yes --project internship-finder --scope dude297s-projects`, then `npx vercel deploy --prod --yes`. Delete any `.env.local` the CLI creates. Verify the new deployment is aliased to `internship-finder-pi.vercel.app`.
 
-## Rollback Procedure
+### Owner bootstrap (done once)
 
-Not defined yet. It must cover rolling back code, handling migrations that can't be reversed, and restoring data.
+With `DATABASE_URL` set as in step 1: `python -m app.cli create-owner --username <name>`. The password goes into `getpass` only. Password rotation: `set-password` (revokes all sessions).
+
+### Unmerged branch validation
+
+Milestone 3.5 was validated before merge by switching the Render service's branch to `feature/hosted-deployment-foundation` (auto-deploy stayed off) and deploying manually; Vercel production was deployed from a clean checkout of that branch. After the PR is merged: switch Render's branch back to `main`, deploy `main` on Render, and redeploy Vercel production from `main`. Until then, the hosted app runs the reviewed-but-unmerged branch.
+
+## Rollback
+
+- **Code (Render):** Render dashboard → Deploys → **Rollback** to an earlier deploy, or deploy an earlier commit. Health check afterwards.
+- **Frontend (Vercel):** `npx vercel rollback` (or promote an earlier production deployment in the dashboard). Hobby supports rolling back to the previous production deployment.
+- **Schema:** forward only: write a new migration. Don't downgrade Neon.
+- **Data:** Neon Free keeps a short restore history (point-in-time restore / branch from a past point within the free window). For anything older there's no backup yet (see [operations.md](operations.md#database-backup-considerations-planned)).
+- **Secrets:** rotate `PROXY_SHARED_SECRET` as above; rotate the Neon role password in Neon, then update Render's `DATABASE_URL` and redeploy.
 
 ## Production Verification
 
-Not defined yet. It must list post-deploy checks (health, key pages/routes, a test ingestion run, logs clean).
+Run after every deploy. Results of the first hosted validation (2026-09-28) are recorded.
+
+| Check | How | Result 2026-09-28 |
+|---|---|---|
+| Health through Vercel | `GET https://internship-finder-pi.vercel.app/api/health` | `200 {"status":"ok"}` |
+| Database reachable from Render | A synthetic wrong login → `401` (not `500`) | `401` |
+| Unknown API path | `GET /api/nope`, `GET /api` | FastAPI JSON `404`, not `index.html` |
+| No slash redirect | `GET /api/health/` | `404`, no `Location` header |
+| SPA deep links | `GET /login`, `/sources`, `/opportunities/123` | `200` `index.html` |
+| API docs hidden | `/docs`, `/redoc`, `/openapi.json` on Render; `/api/docs` via Vercel | `404` on Render; via Vercel `/docs` etc. are the SPA shell, not API docs |
+| API caching | `Cache-Control` on `/api/*` | `no-store` (also on `401`/`404`) |
+| Static assets | `Cache-Control` on `/assets/*.js` | Vercel default (`public, max-age=0, must-revalidate`, edge-cached, revalidated by ETag) |
+| Security headers | All responses | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` |
+| Direct Render throttle | 11 wrong logins to the Render URL, each with a different forged `X-Forwarded-For` and a wrong `X-IF-Proxy-Secret` | `401` ×10, then `429`: one shared `direct` bucket |
+| Proxy secret matches | While the direct bucket is full, one wrong login through Vercel | `401` (not `429`): Vercel's requests are keyed per browser, so Render accepted the secret |
+| Non-production URLs | Deployment URLs and `internship-finder-dude297s-projects.vercel.app` | `302` to Vercel SSO |
+| Git pushes don't deploy | Push of the feature branch | No Vercel deployment created |
+| Cold start | First request after idle | See [Cold starts](#cold-starts) |
+| **Open (needs the owner's login):** session cookie `HttpOnly; Secure; SameSite=Lax; Path=/`, host-only on the Vercel host; unsafe request without `X-CSRF-Token` → `403`, with it → success; per-client `429` through Vercel; first discovery sync counts and time; second sync `no_change`; profile re-evaluation time; invalid source links rejected over HTTP; session survives a Render redeploy | | Not yet run |
+
+Global failed-login cap (50 per 15 minutes) is covered by unit tests only: a hosted test needs five distinct client addresses, since a blocked key stops adding failures.
+
+## Cold Starts
+
+Render Free sleeps after about 15 minutes without traffic. Observed 2026-09-28: the first proxied request arrived about 07:25 UTC, Render started the process at 07:27:46, and uvicorn was ready at 07:28:10, so the wake took **about 3 minutes**. Meanwhile Vercel answered `502` (`text/plain`, `ROUTER_EXTERNAL_TARGET_ERROR`). The frontend treats any non-`401` failure of the session check (network error, 5xx, non-JSON) as "server waking up", retries automatically (backoff over about a minute, each attempt also waiting on Vercel's upstream timeout), then offers **Retry**. It never treats it as a logout. No keep-alive pings, by design.
+
+## Scheduling
+
+None. Source sync stays manual (Sources page, API, or CLI with `DATABASE_URL` set as in [Deploy Order](#deploy-order)). No GitHub, Render, or Vercel cron, and no keep-alive or uptime pings. A future scheduled sync must keep `DATABASE_URL` in a repository/environment secret and never run for forked pull requests.
+
+## Free-Tier Behavior
+
+- **Render Free:** sleeps when idle (cold starts above); monthly instance hours are capped. Exhaustion suspends the service, never bills.
+- **Neon Free:** compute auto-suspends when idle (the first query after that is slower; `pool_pre_ping` reconnects); storage is capped (the empty schema is 8.4 MB). Exhaustion suspends compute or blocks writes, never bills.
+- **Vercel Hobby:** usage limits pause or limit the project, never bill.
+- Long requests: the first discovery sync (~22 s locally) and profile re-evaluation over the whole catalog run inside one proxied request. If Vercel's external-rewrite timeout cuts one off, the backend may still finish and commit. Refresh before retrying (a second sync of the same source reports "already syncing" until the first ends).
 
 ## Maintenance
 
-Update this file whenever the production process changes, and mark each part **Provisioned** only once it actually exists.
+Update this file whenever the production process changes. Never add secret values.

@@ -118,13 +118,15 @@ The original scenario (`e2e/workflow.spec.ts`): a wrong password is rejected; lo
 | `DATABASE_URL` | backend | Server-only, secret in real deployments | For the private API, the owner CLI, and Alembic (not for `/api/health`) | SQLAlchemy URL (`postgresql+psycopg://…`). `backend/.env.example` points at the Compose database |
 | `SESSION_TTL_HOURS` | backend | Server-only | No (default `24`, 1–720) | Absolute session lifetime |
 | `SESSION_COOKIE_SECURE` | backend | Server-only | No (default `true`) | `Secure` cookie attribute. Only set `false` for plain-HTTP development on a non-localhost host |
+| `HOSTED` | backend | Server-only | No (default `false`) | Hosted mode (Render): hides `/docs`, `/redoc`, `/openapi.json`; refuses to start unless `SESSION_COOKIE_SECURE=true` ([ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) |
+| `PROXY_SHARED_SECRET` | backend (and Vercel Production) | **Secret**, server-only | No (hosted only) | ≥ 32 random characters. Requests carrying it in `X-IF-Proxy-Secret` get a per-browser login-throttle key from `X-Forwarded-For`; everything else shares one `direct` key. Unset locally |
 | `TEST_DATABASE_URL` | backend tests | Local/CI only | For PostgreSQL tests | Disposable test database |
 | `E2E_DATABASE_URL` | Playwright | Local/CI only | For `npm run test:e2e` | Disposable E2E database |
 | `E2E_OWNER_USERNAME`, `E2E_OWNER_PASSWORD` | Playwright | Local/CI only, synthetic | No (synthetic defaults) | The throwaway owner the E2E test logs in as |
 | `E2E_PYTHON` | Playwright | Local only | No | Backend Python executable |
 | `INGESTION_FIXTURE_FILE` | backend | **Test-only** | No (unset = real network) | JSON file `{url: body}` that source sync reads instead of the network. Set only by the E2E config for its disposable database; the backend logs a warning while it's active. Never set it for real use |
 
-The frontend has **no** environment variables: it calls relative `/api` URLs. (`VITE_API_BASE_URL` and the backend's `FRONTEND_ORIGIN` were removed in Milestone 2.) There's no cookie-signing secret because sessions are opaque database rows.
+The frontend has **no** build-time environment variables: it calls relative `/api` URLs. (Vercel's Production environment holds `PROXY_SHARED_SECRET` for the `/api` rewrite only; it never reaches the bundle.) (`VITE_API_BASE_URL` and the backend's `FRONTEND_ORIGIN` were removed in Milestone 2.) There's no cookie-signing secret because sessions are opaque database rows.
 
 The example is `backend/.env.example`. Never commit `.env` files.
 
