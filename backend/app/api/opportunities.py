@@ -51,8 +51,10 @@ def list_opportunities(
     eligibility: discovery.EligibilityFilter | None = None,
     application_status: discovery.ApplicationFilter | None = None,
     remote_mode: RemoteMode | None = None,
+    sort: discovery.Sort = "newest",
 ) -> OpportunityPage:
-    """One page of opportunities (freshest first) with server-side search and filters."""
+    """One page of opportunities with server-side search and filters. `sort=recommended` orders
+    by eligibility status, then fit score; `newest` (default) by posted date."""
     filters = discovery.Filters(
         q=q or None,
         availability=availability,
@@ -61,7 +63,7 @@ def list_opportunities(
         application_status=application_status,
         remote_mode=remote_mode,
     )
-    items, total = discovery.list_page(db, filters, limit, offset)
+    items, total = discovery.list_page(db, filters, limit, offset, sort)
     return OpportunityPage(items=items, total=total, limit=limit, offset=offset)
 
 

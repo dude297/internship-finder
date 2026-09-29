@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sqlalchemy import Select, and_, exists, func, or_, select
+from sqlalchemy import Select, and_, case, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, defer, selectinload
 
@@ -16,6 +16,7 @@ from app.models import Application, Opportunity, OpportunityEvaluation, Opportun
 from app.repositories import get_profile
 from app.schemas.opportunity import (
     Availability,
+    FitComponentSummary,
     OpportunitySummary,
     Origin,
     SourceRecordResponse,
@@ -24,6 +25,11 @@ from app.schemas.opportunity import (
 AvailabilityFilter = Literal["open", "closed", "all"]
 EligibilityFilter = EligibilityStatus | Literal["not_evaluated"]
 ApplicationFilter = ApplicationStatus | Literal["tracked", "untracked"]
+# recommended: eligibility bucket, then fit (ADR-001, ADR-010 §1). newest: posted date.
+Sort = Literal["recommended", "newest"]
+# Opportunity + the current evaluation's status, evaluated_at, fit_score, scoring_version, breakdown
+# (subquery columns, so SQLAlchemy types them as Any).
+Listing = Select[Opportunity, Any, Any, Any, Any, Any]
 
 
 @dataclass(frozen=True)
@@ -51,8 +57,7 @@ def _like(term: str) -> str:
     return f"%{escaped}%"
 
 
-# The eligibility columns come from a subquery, so SQLAlchemy types them as Any.
-def _filtered(db: Session, filters: Filters) -> Select[Opportunity, Any, Any]:
+def _filtered(db: Session, filters: Filters) -> Listing:
     profile = get_profile(db)
     # The current profile's latest evaluation per opportunity (same order as latest_evaluation).
     latest = (
@@ -60,6 +65,9 @@ def _filtered(db: Session, filters: Filters) -> Select[Opportunity, Any, Any]:
             OpportunityEvaluation.opportunity_id,
             OpportunityEvaluation.eligibility_status,
             OpportunityEvaluation.evaluated_at,
+            OpportunityEvaluation.fit_score,
+            OpportunityEvaluation.scoring_version,
+            OpportunityEvaluation.score_breakdown,
         )
         .where(OpportunityEvaluation.profile_id == (profile.id if profile else None))
         .ext(distinct_on(OpportunityEvaluation.opportunity_id))
@@ -71,7 +79,14 @@ def _filtered(db: Session, filters: Filters) -> Select[Opportunity, Any, Any]:
         .subquery()
     )
     stmt = (
-        select(Opportunity, latest.c.eligibility_status, latest.c.evaluated_at)
+        select(
+            Opportunity,
+            latest.c.eligibility_status,
+            latest.c.evaluated_at,
+            latest.c.fit_score,
+            latest.c.scoring_version,
+            latest.c.score_breakdown,
+        )
         .outerjoin(latest, latest.c.opportunity_id == Opportunity.id)
         .outerjoin(Application, Application.opportunity_id == Opportunity.id)
     )
@@ -150,29 +165,60 @@ def records_response(records: list[OpportunitySourceRecord]) -> list[SourceRecor
     ]
 
 
+_ELIGIBILITY_RANK = {
+    EligibilityStatus.ELIGIBLE.value: 0,
+    EligibilityStatus.NEEDS_VERIFICATION.value: 1,
+    EligibilityStatus.INELIGIBLE.value: 2,
+}
+
+
+def _order(stmt: Listing, sort: Sort) -> Listing:
+    """recommended: eligible, needs verification, ineligible, then not evaluated; inside a
+    bucket, fit score (highest first, none last). Fit never moves an opportunity to another
+    bucket (ADR-001). Both sorts end with posted date (unknown last), first seen, and ID, so the
+    order is total and stable."""
+    freshest = (
+        Opportunity.posted_at.desc().nulls_last(),
+        Opportunity.first_seen_at.desc(),
+        Opportunity.id,
+    )
+    if sort == "newest":
+        return stmt.order_by(*freshest)
+    columns = stmt.selected_columns
+    bucket = case(_ELIGIBILITY_RANK, value=columns.eligibility_status, else_=len(_ELIGIBILITY_RANK))
+    return stmt.order_by(bucket, columns.fit_score.desc().nulls_last(), *freshest)
+
+
+def _components(breakdown: dict[str, Any] | None) -> dict[str, FitComponentSummary] | None:
+    if breakdown is None:
+        return None
+    return {
+        key: FitComponentSummary(
+            score=value["score"], weight=value["weight"], missing=value["missing"]
+        )
+        for key, value in breakdown["components"].items()
+    }
+
+
 def list_page(
-    db: Session, filters: Filters, limit: int, offset: int
+    db: Session, filters: Filters, limit: int, offset: int, sort: Sort = "newest"
 ) -> tuple[list[OpportunitySummary], int]:
-    """One page, freshest first: posted date (unknown last), then first seen, then ID."""
+    """One page in the requested order (see _order)."""
     stmt = _filtered(db, filters)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.execute(
-        stmt.options(
+        _order(stmt, sort)
+        .options(
             selectinload(Opportunity.application),
             selectinload(Opportunity.source_records)
             .options(defer(_record.raw_payload))
             .selectinload(_record.ingestion_source),
         )
-        .order_by(
-            Opportunity.posted_at.desc().nulls_last(),
-            Opportunity.first_seen_at.desc(),
-            Opportunity.id,
-        )
         .limit(limit)
         .offset(offset)
     ).all()
     items: list[OpportunitySummary] = []
-    for opportunity, eligibility, evaluated_at in rows:
+    for opportunity, eligibility, evaluated_at, fit_score, scoring_version, breakdown in rows:
         origin, availability = provenance(opportunity.source_records)
         items.append(
             OpportunitySummary(
@@ -189,6 +235,10 @@ def list_page(
                 requirements_assessment_status=opportunity.requirements_assessment_status,
                 eligibility_status=eligibility,
                 evaluated_at=evaluated_at,
+                fit_score=fit_score,
+                scoring_version=scoring_version,
+                fit_coverage=breakdown["coverage"] if breakdown else None,
+                fit_components=_components(breakdown),
                 application_status=(
                     opportunity.application.status if opportunity.application else None
                 ),

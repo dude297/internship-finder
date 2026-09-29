@@ -10,9 +10,9 @@ from app.opportunities.scoring import (
     FitOpportunityInput,
     FitProfileInput,
     NamedItem,
+    config,
     score_fit,
 )
-from app.opportunities.scoring import config
 from app.opportunities.scoring.engine import percent
 from app.opportunities.scoring.text import Corpus, tokens
 

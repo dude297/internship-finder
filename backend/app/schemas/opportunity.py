@@ -16,6 +16,7 @@ from app.enums import (
     RequirementType,
 )
 from app.opportunities.eligibility.schemas import REQUIREMENT_VALUE_SCHEMAS
+from app.opportunities.scoring import ScoreBreakdown
 from app.schemas.application import ApplicationResponse
 from app.schemas.common import BlankToNone, CountryCode
 
@@ -124,6 +125,10 @@ class EvaluationResponse(BaseModel):
     depends_on_projected_status: bool
     evaluated_at: datetime
     rule_results: list[RuleResultResponse]
+    # Fit (ADR-010). Null on evaluations from before scoring v1.
+    fit_score: int | None = None
+    scoring_version: str | None = None
+    score_breakdown: ScoreBreakdown | None = None
 
 
 # imported: at least one automated source record; manual: manual provenance only.
@@ -131,6 +136,12 @@ Origin = Literal["imported", "manual"]
 # open: an automated record is active; closed: automated records exist, none active;
 # manual: managed by hand (no automated records).
 Availability = Literal["open", "closed", "manual"]
+
+
+class FitComponentSummary(BaseModel):
+    score: int
+    weight: int
+    missing: bool
 
 
 class OpportunitySummary(BaseModel):
@@ -147,6 +158,11 @@ class OpportunitySummary(BaseModel):
     requirements_assessment_status: RequirementsAssessmentStatus
     eligibility_status: EligibilityStatus | None
     evaluated_at: datetime | None
+    # From the current evaluation; null when it has no fit (no profile, or before scoring v1).
+    fit_score: int | None = None
+    scoring_version: str | None = None
+    fit_coverage: int | None = None
+    fit_components: dict[str, FitComponentSummary] | None = None
     application_status: ApplicationStatus | None
     origin: Origin
     availability: Availability
