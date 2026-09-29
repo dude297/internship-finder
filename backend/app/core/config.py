@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     # True on the hosted deployment (ADR-009): no public /docs, /redoc, /openapi.json, and
     # Secure cookies are mandatory.
     hosted: bool = False
-    # Shared with Vercel's /api route, which sends it as X-IF-Proxy-Secret. Only requests that
-    # carry it get a per-browser login-throttle key from X-Forwarded-For (ADR-009 §6).
+    # Shared with Vercel's /api route, which sends it as X-IF-Proxy-Secret. Requests that carry
+    # it share the `proxy` login-throttle bucket; all others share `direct` (ADR-009 §6).
     proxy_shared_secret: SecretStr | None = Field(default=None, min_length=32)
     # Test-only (E2E): serve ingestion responses from this JSON file ({url: body}) instead of
     # the network. Never set it outside disposable test environments.

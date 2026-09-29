@@ -252,13 +252,14 @@ def via_proxy(client: TestClient, address: str, password: str = OWNER_PASSWORD):
 
 
 @pytest.mark.usefixtures("proxied")
-def test_proxied_clients_are_throttled_separately(anon_client: TestClient, owner: AuthUser) -> None:
-    for _ in range(10):
-        assert via_proxy(anon_client, "198.51.100.1", "wrong-synthetic").status_code == 401
+def test_forged_addresses_through_the_proxy_share_one_bucket(
+    anon_client: TestClient, owner: AuthUser
+) -> None:
+    for i in range(10):
+        assert via_proxy(anon_client, f"198.51.100.{i}", "wrong-synthetic").status_code == 401
 
-    assert via_proxy(anon_client, "198.51.100.1").status_code == 429
-    assert via_proxy(anon_client, "198.51.100.2", "wrong-synthetic").status_code == 401
-    assert via_proxy(anon_client, "198.51.100.2").status_code == 200
+    assert via_proxy(anon_client, "198.51.100.200").status_code == 429
+    assert login(anon_client).status_code == 200  # the direct bucket is separate
 
 
 @pytest.mark.usefixtures("proxied")

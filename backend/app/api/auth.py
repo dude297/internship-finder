@@ -15,15 +15,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 INVALID_CREDENTIALS = "Invalid username or password."
 PROXY_SECRET_HEADER = "X-IF-Proxy-Secret"
 DIRECT_CLIENT = "direct"
+PROXY_CLIENT = "proxy"
 
 
 def login_client_key(request: Request) -> str:
     """The failed-login throttle key for this request (ADR-009 §6).
 
-    Only a request that proves it came through our Vercel proxy (the shared secret header) is
-    keyed by X-Forwarded-For, which Vercel overwrites with the browser's address. Everything
-    else, including direct calls to the Render URL, shares one key: their headers are ignored,
-    so forging X-Forwarded-For buys nothing."""
+    Two buckets, no per-browser key: requests that prove they came through our Vercel proxy
+    (the shared secret header) share `proxy`; everything else, including direct calls to the
+    Render URL, shares `direct`. Forwarding headers are never read: Vercel's external rewrite
+    sometimes passes a client-supplied X-Forwarded-For (and X-Vercel-Forwarded-For) through,
+    so no address header identifies a browser (measured 2026-09-29)."""
     secret = get_settings().proxy_shared_secret
     presented = request.headers.get(PROXY_SECRET_HEADER)
     if (
@@ -32,8 +34,7 @@ def login_client_key(request: Request) -> str:
         or not hmac.compare_digest(secret.get_secret_value().encode(), presented.encode())
     ):
         return DIRECT_CLIENT
-    forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-    return f"proxy:{forwarded or 'unknown'}"
+    return PROXY_CLIENT
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
