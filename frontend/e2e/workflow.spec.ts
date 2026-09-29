@@ -69,7 +69,7 @@ test('owner workflow: profile, opportunity, eligibility, re-evaluation, tracking
   const opportunityUrl = page.url()
 
   // A profile change that affects eligibility re-evaluates stored opportunities.
-  await page.getByRole('link', { name: 'Profile' }).click()
+  await page.getByRole('link', { name: 'Profile', exact: true }).click()
   await page.getByLabel('Date of birth (optional)').fill('2026-01-01')
   await page.getByRole('button', { name: 'Save profile' }).click()
   await expect(page.getByRole('status')).toHaveText(
@@ -108,6 +108,6 @@ test('owner workflow: profile, opportunity, eligibility, re-evaluation, tracking
   await expect(page.getByLabel('Status')).toHaveValue('applied')
   await expect(page.getByLabel('Private notes')).toHaveValue('Synthetic E2E note.')
   await expect(eligibility.getByText('Ineligible', { exact: true }).first()).toBeVisible()
-  await page.getByRole('link', { name: 'Profile' }).click()
+  await page.getByRole('link', { name: 'Profile', exact: true }).click()
   await expect(page.getByLabel('Date of birth (optional)')).toHaveValue('2026-01-01')
 })

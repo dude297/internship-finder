@@ -10,6 +10,7 @@ const board = `examplerobotics${run}`
 const boardUrl = `https://boards-api.greenhouse.io/v1/boards/${board}/jobs?content=true`
 const titleA = `Synthetic Robotics Intern ${run}`
 const titleB = `Synthetic Controls Intern ${run}`
+const staffTitle = `Synthetic Staff Engineer ${run}`
 // Unique per run: a reused E2E database keeps the sources of earlier runs.
 const organization = `Example Robotics ${run}`
 
@@ -64,7 +65,7 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   await expect(page).not.toHaveURL(/\/login$/)
 
   // A profile, so imported opportunities are evaluated.
-  await page.getByRole('link', { name: 'Profile' }).click()
+  await page.getByRole('link', { name: 'Profile', exact: true }).click()
   await page.getByLabel('Current level').selectOption('high_school')
   await page.getByLabel('Status as of').fill('2040-09-01')
   await page.getByLabel('Expected graduation').fill('2041-06-10')
@@ -84,10 +85,16 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   await page.getByRole('button', { name: 'Add source' }).click()
   await expect(page.getByText(`Added ${organization}.`, { exact: false })).toBeVisible()
 
-  // First sync imports two postings; the identical second sync changes nothing.
-  publish(job(1, titleA), job(2, titleB))
+  // First sync imports the two internships; the board's default "Internships only" scope
+  // filters the full-time posting. The identical second sync changes nothing.
+  await expect(
+    page.getByRole('listitem').filter({ hasText: board }).getByLabel('Import'),
+  ).toHaveValue('internships_only')
+  publish(job(1, titleA), job(2, titleB), job(3, staffTitle))
   let card = await syncBoard(page)
   await expect(card).toContainText('Succeeded')
+  await expect(card).toContainText('Fetched: 3')
+  await expect(card).toContainText('Filtered: 1')
   await expect(card).toContainText('Created: 2')
   card = await syncBoard(page)
   await expect(card).toContainText('Unchanged: 2')
@@ -133,7 +140,7 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   await expect(page.getByText('Application tracking saved.')).toBeVisible()
 
   // Upstream renames A and removes B. The review survives; B closes instead of disappearing.
-  publish(job(1, `Upstream Renamed ${run}`))
+  publish(job(1, `Upstream Renamed Intern ${run}`))
   card = await syncBoard(page)
   await expect(card).toContainText('Updated: 1')
   await expect(card).toContainText('Closed: 1')
@@ -154,4 +161,59 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   await expect(page.getByLabel('Private notes')).toHaveValue(
     'Synthetic E2E ingestion note.',
   )
+})
+
+test('board scope: switching to all postings imports the full-time posting, and back closes it', async ({
+  page,
+}) => {
+  const scopeBoard = `examplescope${run}`
+  const scopeUrl = `https://boards-api.greenhouse.io/v1/boards/${scopeBoard}/jobs?content=true`
+  const name = `Example Scope ${run}`
+  const post = (id: number, title: string) => ({
+    ...job(id, title),
+    absolute_url: `https://job-boards.greenhouse.io/${scopeBoard}/jobs/${id}`,
+  })
+  writeFileSync(
+    ingestionFixtureFile,
+    JSON.stringify({
+      [scopeUrl]: {
+        jobs: [post(11, `Synthetic Scope Intern ${run}`), post(12, staffTitle)],
+        meta: { total: 2 },
+      },
+    }),
+    'utf-8',
+  )
+
+  await page.goto('/login')
+  await page.getByLabel('Username').fill(owner.username)
+  await page.getByLabel('Password').fill(owner.password)
+  await page.getByRole('button', { name: 'Log in' }).click()
+  await expect(page).not.toHaveURL(/\/login$/)
+  await page.getByRole('link', { name: 'Sources', exact: true }).click()
+  await page.getByLabel('Organization name').fill(name)
+  await page.getByLabel('Job board link or name').fill(scopeBoard)
+  await page.getByRole('button', { name: 'Add source' }).click()
+  await expect(page.getByText(`Added ${name}.`, { exact: false })).toBeVisible()
+  const card = page.getByRole('listitem').filter({ hasText: scopeBoard })
+
+  const syncNow = async () => {
+    await page.getByRole('button', { name: `Sync ${name} now` }).click()
+    await expect(page.getByText(`${name}: sync finished.`)).toBeVisible()
+  }
+  await syncNow()
+  await expect(card).toContainText('Filtered: 1')
+  await expect(card).toContainText('Created: 1')
+
+  await card.getByLabel('Import').selectOption('all')
+  await expect(
+    page.getByText(`${name}: All postings. The next sync applies it.`),
+  ).toBeVisible()
+  await syncNow()
+  await expect(card).toContainText('Filtered: 0')
+  await expect(card).toContainText('Created: 1')
+
+  await card.getByLabel('Import').selectOption('internships_only')
+  await syncNow()
+  await expect(card).toContainText('Filtered: 1')
+  await expect(card).toContainText('Closed: 1')
 })
