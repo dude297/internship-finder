@@ -6,6 +6,7 @@ import {
   type Profile,
   type ProfileInput,
 } from '../api/schemas'
+import { ProfileTabs } from '../components/ProfileTabs'
 import { ErrorMessage, Field, SuccessMessage } from '../components/ui'
 import { describedBy, issueFor, orNull, parseCountries } from '../lib/forms'
 import { educationLevelLabels } from '../lib/labels'
@@ -152,6 +153,7 @@ export function ProfilePage() {
   const formIssues = issues.filter((issue) => issue.field === null)
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+      <ProfileTabs />
       <h1 className="text-2xl font-semibold">Your profile</h1>
       <p className="text-slate-600">
         Eligibility is checked against your expected status on each opportunity's dates,

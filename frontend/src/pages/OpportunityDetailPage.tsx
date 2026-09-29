@@ -5,6 +5,7 @@ import type { OpportunityDetail } from '../api/schemas'
 import { ApplicationTracker } from '../components/ApplicationTracker'
 import { EligibilityPanel } from '../components/EligibilityPanel'
 import { SourceProvenance } from '../components/SourceProvenance'
+import { WhyThisMatch } from '../components/WhyThisMatch'
 import { ErrorMessage } from '../components/ui'
 import {
   appliesAtLabels,
@@ -136,6 +137,8 @@ export function OpportunityDetailPage() {
       </header>
 
       <EligibilityPanel opportunity={o} />
+
+      <WhyThisMatch breakdown={o.latest_evaluation?.score_breakdown ?? null} />
 
       <section aria-labelledby="details-heading" className="space-y-2">
         <h2 id="details-heading" className="text-lg font-semibold">

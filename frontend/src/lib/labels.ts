@@ -5,11 +5,14 @@ import type {
   Availability,
   EducationLevel,
   EligibilityStatus,
+  FitComponentKey,
   OpportunityType,
   RemoteMode,
+  RemotePreference,
   RequirementType,
   RunStatus,
   SourceKind,
+  SourceScope,
 } from '../api/schemas'
 
 export const educationLevelLabels: Record<EducationLevel, string> = {
@@ -87,6 +90,28 @@ export const sourceKindLabels: Record<SourceKind, string> = {
   community_feed: 'Discovery feed (built in)',
   greenhouse: 'Greenhouse',
   lever: 'Lever',
+}
+
+export const sourceScopeLabels: Record<SourceScope, string> = {
+  internships_only: 'Internships only',
+  all: 'All postings',
+}
+
+export const remotePreferenceLabels: Record<RemotePreference, string> = {
+  no_preference: 'No preference',
+  remote_preferred: 'Prefer remote',
+  hybrid_preferred: 'Prefer hybrid',
+  onsite_preferred: 'Prefer on-site',
+  remote_only: 'Remote only',
+}
+
+export const fitComponentLabels: Record<FitComponentKey, string> = {
+  technical: 'Technical skills',
+  academic: 'Coursework',
+  projects: 'Projects and research',
+  interests: 'Interests',
+  location_schedule: 'Location and schedule',
+  quality: 'Posting quality',
 }
 
 export const runStatusLabels: Record<RunStatus, string> = {

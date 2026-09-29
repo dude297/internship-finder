@@ -10,6 +10,7 @@ const greenhouse = source({
   key: 'greenhouse:examplerobotics',
   identifier: 'examplerobotics',
   display_name: 'Example Robotics',
+  scope: 'internships_only',
   builtin: false,
 })
 
@@ -147,6 +148,7 @@ describe('sources page', () => {
       display_name: 'Example Robotics',
       board: 'https://job-boards.greenhouse.io/examplerobotics',
       region: null,
+      scope: 'internships_only',
     })
     expect(screen.queryByLabelText(/API key/i)).not.toBeInTheDocument()
   })

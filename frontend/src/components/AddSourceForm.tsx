@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { api, ApiError, type FieldIssue } from '../api/client'
-import type { Region, Source } from '../api/schemas'
+import type { Region, Source, SourceScope } from '../api/schemas'
 import { describedBy, issueFor } from '../lib/forms'
 import { buttonClass, fieldsetClass, inputClass, legendClass } from '../lib/styles'
 import { ErrorMessage, Field } from './ui'
@@ -12,6 +12,9 @@ const boardHints: Record<Provider, string> = {
   lever: 'For example https://jobs.lever.co/examplesite',
 }
 
+export const SCOPE_HINT =
+  'Internships only keeps postings whose title says intern, internship, co-op, or apprentice. All postings imports full-time jobs too.'
+
 /** Adds a Greenhouse board or Lever job site. The backend extracts the provider's board name
  * from the link and never requests the link itself. No API key is needed or accepted. */
 export function AddSourceForm({ onAdded }: { onAdded: (source: Source) => void }) {
@@ -19,6 +22,7 @@ export function AddSourceForm({ onAdded }: { onAdded: (source: Source) => void }
   const [name, setName] = useState('')
   const [board, setBoard] = useState('')
   const [region, setRegion] = useState<Region>('global')
+  const [scope, setScope] = useState<SourceScope>('internships_only')
   const [issues, setIssues] = useState<FieldIssue[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -34,6 +38,7 @@ export function AddSourceForm({ onAdded }: { onAdded: (source: Source) => void }
         display_name: name.trim(),
         board: board.trim(),
         region: provider === 'lever' && !board.includes('lever.co') ? region : null,
+        scope,
       })
       setName('')
       setBoard('')
@@ -111,6 +116,18 @@ export function AddSourceForm({ onAdded }: { onAdded: (source: Source) => void }
             </select>
           </Field>
         )}
+        <Field id="source-scope" label="Import" hint={SCOPE_HINT}>
+          <select
+            id="source-scope"
+            value={scope}
+            onChange={(e) => setScope(e.target.value as SourceScope)}
+            aria-describedby="source-scope-hint"
+            className={inputClass}
+          >
+            <option value="internships_only">Internships only</option>
+            <option value="all">All postings</option>
+          </select>
+        </Field>
         <button
           type="submit"
           className={buttonClass}
