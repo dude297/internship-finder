@@ -59,6 +59,16 @@ export const runStatuses = [
   'failed',
   'no_change',
 ] as const
+export const sourceScopes = ['internships_only', 'all'] as const
+export const remotePreferences = [
+  'no_preference',
+  'remote_preferred',
+  'hybrid_preferred',
+  'onsite_preferred',
+  'remote_only',
+] as const
+export type SourceScope = (typeof sourceScopes)[number]
+export type RemotePreference = (typeof remotePreferences)[number]
 export type Origin = (typeof origins)[number]
 export type Availability = (typeof availabilities)[number]
 export type SourceKind = (typeof sourceKinds)[number]
@@ -129,6 +139,37 @@ export const ruleResultSchema = z.object({
 })
 export type RuleResult = z.infer<typeof ruleResultSchema>
 
+// Fit v1 (ADR-010). The backend computes every score; the UI only displays them.
+export const fitComponentKeys = [
+  'technical',
+  'academic',
+  'projects',
+  'interests',
+  'location_schedule',
+  'quality',
+] as const
+export type FitComponentKey = (typeof fitComponentKeys)[number]
+
+export const fitComponentSchema = z.object({
+  score: z.number().int(),
+  weight: z.number().int(),
+  missing: z.boolean(),
+  missing_input: z.enum(['profile', 'opportunity']).nullable(),
+  reason: z.string(),
+  matched: z.array(z.string()),
+  unmatched: z.array(z.string()),
+  details: z.record(z.string(), z.unknown()).nullable(),
+})
+export type FitComponent = z.infer<typeof fitComponentSchema>
+
+export const scoreBreakdownSchema = z.object({
+  scoring_version: z.string(),
+  score: z.number().int(),
+  coverage: z.number().int(),
+  components: z.record(z.string(), fitComponentSchema),
+})
+export type ScoreBreakdown = z.infer<typeof scoreBreakdownSchema>
+
 export const evaluationSchema = z.object({
   id: z.string(),
   eligibility_status: z.enum(eligibilityStatuses),
@@ -136,6 +177,9 @@ export const evaluationSchema = z.object({
   depends_on_projected_status: z.boolean(),
   evaluated_at: z.string(),
   rule_results: z.array(ruleResultSchema),
+  fit_score: z.number().int().nullable(),
+  scoring_version: z.string().nullable(),
+  score_breakdown: scoreBreakdownSchema.nullable(),
 })
 export type Evaluation = z.infer<typeof evaluationSchema>
 
@@ -153,6 +197,19 @@ export const opportunitySummarySchema = z.object({
   requirements_assessment_status: z.enum(assessmentStatuses),
   eligibility_status: z.enum(eligibilityStatuses).nullable(),
   evaluated_at: z.string().nullable(),
+  fit_score: z.number().int().nullable(),
+  scoring_version: z.string().nullable(),
+  fit_coverage: z.number().int().nullable(),
+  fit_components: z
+    .record(
+      z.string(),
+      z.object({
+        score: z.number().int(),
+        weight: z.number().int(),
+        missing: z.boolean(),
+      }),
+    )
+    .nullable(),
   application_status: z.enum(applicationStatuses).nullable(),
   origin: z.enum(origins),
   availability: z.enum(availabilities),
@@ -249,6 +306,7 @@ export const runSchema = z.object({
   finished_at: z.string().nullable(),
   source_generated_at: z.string().nullable(),
   fetched_count: z.number().int(),
+  filtered_count: z.number().int(),
   normalized_count: z.number().int(),
   created_count: z.number().int(),
   updated_count: z.number().int(),
@@ -271,6 +329,7 @@ export const sourceSchema = z.object({
   region: z.enum(regions).nullable(),
   display_name: z.string(),
   enabled: z.boolean(),
+  scope: z.enum(sourceScopes),
   builtin: z.boolean(),
   last_attempted_at: z.string().nullable(),
   last_success_at: z.string().nullable(),
@@ -283,7 +342,35 @@ export interface SourceInput {
   display_name: string
   board: string
   region: Region | null
+  scope: SourceScope
 }
+
+export const matchItemSchema = z.object({
+  name: z.string(),
+  description: z.string().nullable(),
+})
+export type MatchItem = z.infer<typeof matchItemSchema>
+
+export const matchProfileSchema = z.object({
+  skills: z.array(z.string()),
+  courses: z.array(z.string()),
+  projects: z.array(matchItemSchema),
+  research: z.array(matchItemSchema),
+  activities: z.array(matchItemSchema),
+  experience: z.array(matchItemSchema),
+  interests: z.array(z.string()),
+  preferred_locations: z.array(z.string()),
+  remote_preference: z.enum(remotePreferences).nullable(),
+  availability_start: nullableDate,
+  availability_end: nullableDate,
+})
+export type MatchProfile = z.infer<typeof matchProfileSchema>
+
+export const matchProfileSaveSchema = z.object({
+  match_profile: matchProfileSchema,
+  evaluated_opportunities: z.number().int(),
+  unchanged_opportunities: z.number().int(),
+})
 
 /** Server-side list query (GET /api/opportunities). Empty values are omitted. */
 export interface OpportunityQuery {
@@ -295,4 +382,5 @@ export interface OpportunityQuery {
   eligibility?: string
   application_status?: string
   remote_mode?: string
+  sort?: 'recommended' | 'newest'
 }

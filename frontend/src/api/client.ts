@@ -2,6 +2,8 @@ import { z } from 'zod'
 import {
   applicationSchema,
   evaluationSchema,
+  matchProfileSaveSchema,
+  matchProfileSchema,
   opportunityDetailSchema,
   opportunityPageSchema,
   profileSaveSchema,
@@ -10,10 +12,12 @@ import {
   sessionSchema,
   sourceSchema,
   type ApplicationInput,
+  type MatchProfile,
   type OpportunityInput,
   type OpportunityQuery,
   type ProfileInput,
   type SourceInput,
+  type SourceScope,
 } from './schemas'
 
 // The only place that talks to the backend. Requests are same-origin (/api, proxied by Vite in
@@ -125,6 +129,10 @@ export const api = {
     }),
   saveProfile: (profile: ProfileInput) =>
     request('PUT', '/profile', profileSaveSchema, profile),
+  getMatchProfile: () => request('GET', '/profile/match', matchProfileSchema),
+  /** Saves everything at once; the backend rescores the catalog in the same request. */
+  saveMatchProfile: (body: MatchProfile) =>
+    request('PUT', '/profile/match', matchProfileSaveSchema, body),
 
   listOpportunities: (query: OpportunityQuery) => {
     const params = new URLSearchParams()
@@ -168,8 +176,10 @@ export const api = {
 
   listSources: () => request('GET', '/sources', z.array(sourceSchema)),
   createSource: (body: SourceInput) => request('POST', '/sources', sourceSchema, body),
-  updateSource: (id: string, body: { display_name: string; enabled: boolean }) =>
-    request('PUT', `/sources/${encodeURIComponent(id)}`, sourceSchema, body),
+  updateSource: (
+    id: string,
+    body: { display_name: string; enabled: boolean; scope?: SourceScope },
+  ) => request('PUT', `/sources/${encodeURIComponent(id)}`, sourceSchema, body),
   syncSource: (id: string) =>
     request('POST', `/sources/${encodeURIComponent(id)}/sync`, runSchema),
   syncAllSources: () => request('POST', '/sources/sync', z.array(runSchema)),

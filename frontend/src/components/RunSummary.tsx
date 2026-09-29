@@ -19,6 +19,7 @@ function seconds(run: Run): string | null {
 export function RunSummary({ run }: { run: Run }) {
   const counts: [string, number][] = [
     ['Fetched', run.fetched_count],
+    ['Filtered', run.filtered_count],
     ['Created', run.created_count],
     ['Updated', run.updated_count],
     ['Merged with another source', run.deduplicated_count],

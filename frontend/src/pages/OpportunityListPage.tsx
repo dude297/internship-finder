@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import type { OpportunityPage, OpportunitySummary, Source } from '../api/schemas'
 import { EligibilityBadge } from '../components/EligibilityBadge'
+import { FitBadge } from '../components/FitBadge'
 import { OpportunityFilters, type FilterName } from '../components/OpportunityFilters'
 import { ErrorMessage } from '../components/ui'
 import {
@@ -22,6 +23,7 @@ const FILTERS: FilterName[] = [
   'eligibility',
   'application_status',
   'remote_mode',
+  'sort',
 ]
 
 function where(o: OpportunitySummary): string {
@@ -65,6 +67,8 @@ export function OpportunityListPage() {
     FILTERS.map((name) => [name, params.get(name) ?? '']),
   ) as Record<FilterName, string>
   values.availability ||= 'open'
+  // Eligibility first, then fit; without evaluations this is the same as newest.
+  values.sort ||= 'recommended'
   const offset = Math.max(0, Number(params.get('offset')) || 0)
   const query = JSON.stringify({ ...values, offset })
   const page = result?.page ?? null
@@ -85,13 +89,14 @@ export function OpportunityListPage() {
     // Ignore responses that arrive after unmount or a newer query, so a slow response can't
     // overwrite the page the user is now looking at.
     let active = true
-    const { availability, ...rest } = JSON.parse(query) as typeof values & {
+    const { availability, sort, ...rest } = JSON.parse(query) as typeof values & {
       offset: number
     }
     api
       .listOpportunities({
         ...rest,
         availability: availability as 'open' | 'closed' | 'all',
+        sort: sort as 'recommended' | 'newest',
         limit: PAGE_SIZE,
       })
       .then((p) => active && setResult({ query, page: p, error: null }))
@@ -119,7 +124,9 @@ export function OpportunityListPage() {
     setParams(next)
   }
 
-  const filtered = FILTERS.some((name) => name !== 'availability' && values[name])
+  const filtered = FILTERS.some(
+    (name) => name !== 'availability' && name !== 'sort' && values[name],
+  )
   const items = page?.items
 
   return (
@@ -167,7 +174,10 @@ export function OpportunityListPage() {
                     </p>
                     <Provenance o={o} />
                   </div>
-                  <EligibilityBadge status={o.eligibility_status} />
+                  <div className="flex flex-col items-end gap-1">
+                    <FitBadge score={o.fit_score} coverage={o.fit_coverage} />
+                    <EligibilityBadge status={o.eligibility_status} />
+                  </div>
                 </div>
                 <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
                   <div>

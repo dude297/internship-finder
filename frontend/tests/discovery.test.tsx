@@ -127,6 +127,7 @@ describe('discovery list', () => {
         eligibility: 'needs_verification',
         application_status: 'tracked',
         remote_mode: 'remote',
+        sort: 'recommended',
       }),
     )
     expect(screen.getByText('No opportunities match these filters.')).toBeInTheDocument()

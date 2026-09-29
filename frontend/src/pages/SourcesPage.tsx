@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { Run, Source } from '../api/schemas'
+import { sourceScopes, type Run, type Source, type SourceScope } from '../api/schemas'
 import { AddSourceForm } from '../components/AddSourceForm'
 import { RunSummary } from '../components/RunSummary'
 import { ErrorMessage, SuccessMessage } from '../components/ui'
-import { formatDateTime, sourceKindLabels } from '../lib/labels'
+import { formatDateTime, sourceKindLabels, sourceScopeLabels } from '../lib/labels'
 import { buttonClass, secondaryButtonClass } from '../lib/styles'
 
 function message(caught: unknown, fallback: string): string {
@@ -72,6 +72,25 @@ export function SourcesPage() {
       'The sync request failed.',
     )
 
+  const changeScope = (source: Source, scope: SourceScope) =>
+    act(
+      source.id,
+      async () => {
+        const updated = await api.updateSource(source.id, {
+          display_name: source.display_name,
+          enabled: source.enabled,
+          scope,
+        })
+        setSources(
+          (current) => current?.map((s) => (s.id === updated.id ? updated : s)) ?? null,
+        )
+        setNotice(
+          `${source.display_name}: ${sourceScopeLabels[scope]}. The next sync applies it.`,
+        )
+      },
+      'Could not update the source.',
+    )
+
   const toggle = (source: Source) =>
     act(
       source.id,
@@ -121,6 +140,26 @@ export function SourcesPage() {
                   {source.region === 'eu' && ' (EU)'}
                   {!source.enabled && ' · Disabled'}
                 </p>
+                {!source.builtin && (
+                  <p className="mt-1 flex items-center gap-2 text-sm">
+                    <label htmlFor={`scope-${source.id}`} className="text-slate-600">
+                      Import
+                    </label>
+                    <select
+                      id={`scope-${source.id}`}
+                      value={source.scope}
+                      disabled={busy !== null}
+                      onChange={(e) => changeScope(source, e.target.value as SourceScope)}
+                      className="rounded border border-slate-300 px-1 py-0.5"
+                    >
+                      {sourceScopes.map((scope) => (
+                        <option key={scope} value={scope}>
+                          {sourceScopeLabels[scope]}
+                        </option>
+                      ))}
+                    </select>
+                  </p>
+                )}
                 <p className="text-xs text-slate-500">
                   Last attempted:{' '}
                   {source.last_attempted_at
@@ -167,8 +206,11 @@ export function SourcesPage() {
         }}
       />
       <p className="text-xs text-slate-500">
-        Imported postings start with unreviewed requirements. Source details such as
-        sponsorship or skill tags are kept for reference but never decide eligibility.
+        Company boards import internship titles only unless you choose All postings;
+        changing it makes the next sync fetch everything again and close or reopen
+        postings to match. Imported postings start with unreviewed requirements. Source
+        details such as sponsorship or skill tags are kept for reference but never decide
+        eligibility.
       </p>
     </section>
   )

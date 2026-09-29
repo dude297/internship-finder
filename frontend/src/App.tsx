@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppShell } from './components/AppShell'
 import { LoginPage } from './pages/LoginPage'
+import { MatchProfilePage } from './pages/MatchProfilePage'
 import { OpportunityDetailPage } from './pages/OpportunityDetailPage'
 import { OpportunityFormPage } from './pages/OpportunityFormPage'
 import { OpportunityListPage } from './pages/OpportunityListPage'
@@ -17,6 +18,7 @@ export default function App() {
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile/match" element={<MatchProfilePage />} />
             <Route path="/opportunities" element={<OpportunityListPage />} />
             <Route path="/opportunities/new" element={<OpportunityFormPage />} />
             <Route path="/opportunities/:id" element={<OpportunityDetailPage />} />

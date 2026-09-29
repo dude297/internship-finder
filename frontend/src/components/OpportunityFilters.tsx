@@ -13,7 +13,13 @@ import {
 import { inputClass, secondaryButtonClass } from '../lib/styles'
 
 export type FilterName =
-  'q' | 'availability' | 'source' | 'eligibility' | 'application_status' | 'remote_mode'
+  | 'q'
+  | 'availability'
+  | 'source'
+  | 'eligibility'
+  | 'application_status'
+  | 'remote_mode'
+  | 'sort'
 
 interface Props {
   values: Record<FilterName, string>
@@ -84,7 +90,17 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
           Search
         </button>
       </form>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <Select
+          id="filter-sort"
+          label="Sort"
+          value={values.sort}
+          onChange={(v) => onChange('sort', v)}
+          options={[
+            ['recommended', 'Recommended'],
+            ['newest', 'Newest'],
+          ]}
+        />
         <Select
           id="filter-availability"
           label="Show"
