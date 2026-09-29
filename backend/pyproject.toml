@@ -48,7 +48,7 @@ known-first-party = ["app"]
 known-third-party = ["alembic"]
 
 [tool.pyright]
-include = ["app", "tests", "alembic"]
+include = ["app", "tests", "alembic", "scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 venvPath = "."
