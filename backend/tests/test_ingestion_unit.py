@@ -476,6 +476,11 @@ def test_greenhouse_board_reference(value: str, token: str) -> None:
         "bad token!",
         "",
         "https://boards-api.greenhouse.io/v1/boards/x/jobs",
+        "https://user:pw@boards.greenhouse.io/examplerobotics",
+        "https://user@job-boards.greenhouse.io/examplerobotics",
+        "https://boards.greenhouse.io:8443/examplerobotics",
+        "https://boards.greenhouse.io:443/examplerobotics",
+        "https://boards.greenhouse.io:bad/examplerobotics",
     ],
 )
 def test_greenhouse_board_reference_rejects(value: str) -> None:
@@ -545,6 +550,9 @@ def test_lever_site_reference(
         ("https://api.lever.co/v0/postings/x", None),
         ("https://evil.example/exampleinstitute", None),
         ("x y", None),
+        ("https://user:pw@jobs.lever.co/exampleinstitute", None),
+        ("https://jobs.lever.co:8443/exampleinstitute", None),
+        ("https://jobs.eu.lever.co:443/exampleinstitute", None),
     ],
 )
 def test_lever_site_reference_rejects(value: str, region: SourceRegion | None) -> None:
