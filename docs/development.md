@@ -119,7 +119,7 @@ The original scenario (`e2e/workflow.spec.ts`): a wrong password is rejected; lo
 | `SESSION_TTL_HOURS` | backend | Server-only | No (default `24`, 1–720) | Absolute session lifetime |
 | `SESSION_COOKIE_SECURE` | backend | Server-only | No (default `true`) | `Secure` cookie attribute. Only set `false` for plain-HTTP development on a non-localhost host |
 | `HOSTED` | backend | Server-only | No (default `false`) | Hosted mode (Render): hides `/docs`, `/redoc`, `/openapi.json`; refuses to start unless `SESSION_COOKIE_SECURE=true` ([ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) |
-| `PROXY_SHARED_SECRET` | backend (and Vercel Production) | **Secret**, server-only | No (hosted only) | ≥ 32 random characters. Requests carrying it in `X-IF-Proxy-Secret` get a per-browser login-throttle key from `X-Forwarded-For`; everything else shares one `direct` key. Unset locally |
+| `PROXY_SHARED_SECRET` | backend (and Vercel Production) | **Secret**, server-only | No (hosted only) | ≥ 32 random characters. Requests carrying it in `X-IF-Proxy-Secret` share the `proxy` login-throttle bucket; everything else shares `direct`. Forwarding headers are never read. Unset locally |
 | `TEST_DATABASE_URL` | backend tests | Local/CI only | For PostgreSQL tests | Disposable test database |
 | `E2E_DATABASE_URL` | Playwright | Local/CI only | For `npm run test:e2e` | Disposable E2E database |
 | `E2E_OWNER_USERNAME`, `E2E_OWNER_PASSWORD` | Playwright | Local/CI only, synthetic | No (synthetic defaults) | The throwaway owner the E2E test logs in as |

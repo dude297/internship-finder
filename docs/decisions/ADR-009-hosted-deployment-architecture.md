@@ -61,18 +61,21 @@ The existing custom username/password + opaque server-side session + CSRF design
 
 `request.client.host` on Render is Render's own proxy, and uvicorn may be configured to trust arbitrary `X-Forwarded-For`, so neither can identify a browser. The limiter now uses:
 
-- **Per-client:** 10 failed logins per sliding 15 minutes per client key.
+- **Per-bucket:** 10 failed logins per sliding 15 minutes per client key (bucket).
 - **Global:** 50 failed logins per sliding 15 minutes across all clients.
 - A blocked request gets `429` **before** any password work. Successful logins aren't counted and don't reset anyone's counter.
 
-Client key:
+Client key (amended 2026-09-29, see below):
 
-- **Through Vercel:** Vercel's `/api` route adds `X-IF-Proxy-Secret`, whose value comes from a Vercel **Production-only, sensitive** environment variable (`PROXY_SHARED_SECRET`) via a `request.headers` transform, never from Git. When the backend's `PROXY_SHARED_SECRET` matches (constant-time compare), the key is the first `X-Forwarded-For` address. Vercel overwrites `X-Forwarded-For` with the real client address, so a browser can't forge it.
-- **Anything else** (direct calls to the Render URL, a missing/wrong secret, local development): one shared key, `direct`. Headers from such callers are never trusted, so spoofing `X-Forwarded-For` gains nothing: all direct traffic shares one 10-failure bucket.
+- **Through Vercel:** Vercel's `/api` route adds `X-IF-Proxy-Secret`, whose value comes from a Vercel **Production-only, sensitive** environment variable (`PROXY_SHARED_SECRET`) via a `request.headers` transform, never from Git. When the backend's `PROXY_SHARED_SECRET` matches (constant-time compare), the key is `proxy`: **all** logins through the site share one bucket.
+- **Anything else** (direct calls to the Render URL, a missing/wrong secret, local development): one shared key, `direct`.
+- Forwarding headers (`X-Forwarded-For`, `X-Vercel-Forwarded-For`, `X-Real-IP`) are never read.
+
+**Amendment (2026-09-29).** This section originally keyed proxied requests by the first `X-Forwarded-For` address, assuming Vercel overwrites it. A hosted diagnostic showed that Vercel's external rewrite *sometimes* passes a client-supplied `X-Forwarded-For`, and also `X-Vercel-Forwarded-For`, through to Render unchanged, so forged addresses got fresh buckets. No header Vercel forwards reliably identifies the browser, so per-browser keying was replaced by the shared `proxy` bucket. The effect: total guessing is at most 10 through the site plus 10 direct per 15 minutes. The cost is that anyone's 10 failed attempts through the site block new logins for everyone, the owner included, for up to 15 minutes (existing sessions keep working). The owner accepted that trade-off.
 
 State is in memory in the single process, on purpose: one instance and one worker (§8) means one counter, and Render Free sleeps only after 15 minutes without traffic, which is the same length as the window, so a sleep-restart loses no meaningful count. A deploy restart does reset it (accepted). No database table or Redis is added.
 
-Accepted trade-off: the global limit means an attacker with enough distinct client addresses can lock the owner out for up to 15 minutes at a time. For a single-user app, bounding total guessing and Argon2 work matters more than availability under attack.
+Accepted trade-off: an attacker can block new logins (including the owner's) for up to 15 minutes at a time with 10 failed attempts through the site; existing sessions are unaffected. For a single-user app, bounding total guessing and Argon2 work matters more than availability under attack.
 
 ### 7. Argon2 concurrency guard
 
@@ -129,6 +132,6 @@ This ADR supersedes only hosted-deployment assumptions; earlier ADRs are not rew
 - **Keep-alive pings.** Would burn Render's free instance hours and Neon compute to hide cold starts, and need another service. Rejected; the UI handles waking.
 - **Automatic paid scaling / overage.** Violates the zero-cost rule. Rejected permanently.
 - **Public preview deployments connected to the production backend.** Would put unreviewed frontend code on public URLs, same-origin with the real session cookie's API. Rejected: Git deployments are off, previews are protected, and the proxy secret is Production-only.
-- **Trusting `X-Forwarded-For` (or uvicorn `--forwarded-allow-ips='*'`) for the limiter.** Direct callers could rotate forged addresses to get unlimited per-client buckets. Rejected in favor of the proxy-secret check.
+- **Trusting `X-Forwarded-For` (or uvicorn `--forwarded-allow-ips='*'`) for the limiter.** Direct callers could rotate forged addresses to get unlimited per-client buckets. Rejected in favor of the proxy-secret check. Trusting it even behind the secret was tried and rejected on 2026-09-29 (see the §6 amendment).
 - **Database- or Redis-backed limiter.** More moving parts than one process needs; a restart-reset is acceptable given sleep timing. Revisit if the backend ever runs more than one worker or instance.
 - **Neon Auth / third-party auth.** See §5.

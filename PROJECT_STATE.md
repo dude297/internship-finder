@@ -3,7 +3,7 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-09-28
-Current Milestone: **Milestone 3.5 — Hosted Deployment Foundation** (implemented; deployed from the review branch; hosted checks mostly done; one open security bug in the login throttle key; see In Progress and Known Bugs). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Milestone: **Milestone 3.5 — Hosted Deployment Foundation** (implemented and hosted-verified from the review branch; awaiting PR review; see In Progress). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
 Current Production Version: `feature/hosted-deployment-foundation` (unmerged, deployed for validation) on https://internship-finder-pi.vercel.app
 Active Development Branch: `feature/hosted-deployment-foundation`. Remote: https://github.com/dude297/internship-finder
 
@@ -98,7 +98,7 @@ Milestone 3.5 — Hosted Deployment Foundation, on `feature/hosted-deployment-fo
 
 Done:
 
-- ADR-009; migration `92a17353e5a8` (running-run index reconciliation); proxy-aware login throttle (10 per client, 50 global per 15 min); Argon2 concurrency guard; `DATABASE_URL` normalization; `HOSTED` mode; `no-store` on `/api`; no slash redirects; cold-start UX; `frontend/vercel.json`
+- ADR-009; migration `92a17353e5a8` (running-run index reconciliation); proxy-aware login throttle (shared `proxy` and `direct` buckets of 10, 50 global per 15 min); Argon2 concurrency guard; `DATABASE_URL` normalization; `HOSTED` mode; `no-store` on `/api`; no slash redirects; cold-start UX; `frontend/vercel.json`
 - Neon migrated to `92a17353e5a8`; owner created by the owner with the CLI (`getpass`)
 - Render configured (`DATABASE_URL`, `SESSION_COOKIE_SECURE`, `SESSION_TTL_HOURS`, `PYTHON_VERSION`, `HOSTED`, `PROXY_SHARED_SECRET`) and deployed from the feature branch (branch switched temporarily; auto-deploy off)
 - Vercel production deployed by CLI from a clean checkout; `PROXY_SHARED_SECRET` is Production-only and Sensitive; Git deployments disabled; Standard Deployment Protection on non-production URLs
@@ -106,10 +106,10 @@ Done:
 
 Verified with the owner's login (2026-09-29): cookie attributes (host-only, `HttpOnly; Secure; SameSite=lax; Path=/`), CSRF (`403` without/with a wrong token, `200` with the valid one), first hosted sync (`success`, 1,055 created, 30.8 s) and second sync (`no_change`, 0.8 s), profile re-evaluation over 1,055 opportunities (9–10 s, synthetic profile), invalid source links rejected.
 
+Also verified: session survives Render redeploys and a cold start; the proxied throttle returns `429` on the 11th forged-address failure (after `36b9896`).
+
 Open:
 
-- the per-client throttle key bug ([Known Bugs](#known-bugs)): needs a diagnostic deploy and a fix
-- deploy `65964c6` (board-link fix) to Render; session survival across that redeploy
 - one Greenhouse/Lever board (optional; none chosen)
 - the hosted profile is **synthetic** (location "SYNTHETIC TEST PROFILE - replace"): replace it with the real one when ready (its 2,110 evaluation rows stay as history)
 
@@ -117,12 +117,14 @@ After merge: switch Render's branch back to `main`, deploy `main`, and redeploy 
 
 ## Known Bugs
 
-- **Per-client login-throttle key is forgeable through Vercel** (found 2026-09-29, open). Vercel doesn't consistently overwrite a client-supplied `X-Forwarded-For` on the external rewrite, so the leftmost entry is sometimes attacker-controlled. The global 50-per-15-minutes cap and the direct-path shared bucket still bound guessing. Details and fix options: [deployment.md](docs/deployment.md#production-verification).
-- Board links with credentials or a port were accepted (reduced to the board name, never fetched). Fixed in `65964c6`; not yet deployed to Render.
+None open. Fixed during hosted validation (2026-09-29):
+
+- **Per-client login-throttle key was forgeable through Vercel** (fixed in `36b9896`, deployed and verified). Vercel doesn't consistently overwrite a client-supplied `X-Forwarded-For` on the external rewrite, so the leftmost entry is sometimes attacker-controlled. Proxied logins now share one bucket ([ADR-009 §6 amendment](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy), [deployment.md](docs/deployment.md#production-verification)).
+- Board links with credentials or a port were accepted (reduced to the board name, never fetched). Fixed in `65964c6`, deployed.
 
 ## Known Technical Debt
 
-- The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. The global cap lets a distributed attacker lock the owner out for up to 15 minutes (accepted).
+- The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. All logins through the site share one bucket, so anyone's 10 failed attempts block new logins for up to 15 minutes (accepted; no trustworthy per-browser address exists behind Vercel's rewrite).
 - Profile re-evaluation is synchronous and re-evaluates every opportunity (~4 s for ~1,100 opportunities locally; ~10 s for 1,055 opportunities hosted). Batching/background work is proposed for Milestone 4 ([operations.md](docs/operations.md)).
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
 - Render Free cold starts take about 1–3 minutes (measured 73 s and ~3 min); Vercel either holds the request or returns `502`, which the UI shows as the waking state. Sessions survive the restart.
@@ -183,11 +185,11 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Fix the forgeable per-client throttle key and deploy `65964c6` ([Known Bugs](#known-bugs)), finish the open hosted checks ([In Progress](#in-progress)), then review and merge the Milestone 3.5 PR and restore Render to `main`. Milestone 4 (proposed: profile enrichment and fit scoring v1, with batched/background profile re-evaluation and an internships-only filter for Greenhouse/Lever) follows. Not started.
+Review and merge the Milestone 3.5 PR and restore Render to `main`. Milestone 4 (proposed: profile enrichment and fit scoring v1, with batched/background profile re-evaluation and an internships-only filter for Greenhouse/Lever) follows. Not started.
 
 ## Recent Important Decisions
 
-- 2026-09-28: ADR-009 accepted: Vercel same-origin `/api` rewrite → Render (one instance, one worker) → Neon direct endpoint; proxy-secret-keyed login throttle (10 per client, 50 global); Argon2 concurrency 2; `HOSTED` mode; manual migrations and deploys; Git deployments off on Vercel; `PROXY_SHARED_SECRET` Production-only; no scheduler or keep-alive. Migration `92a17353e5a8` reconciles the running-run index.
+- 2026-09-28: ADR-009 accepted: Vercel same-origin `/api` rewrite → Render (one instance, one worker) → Neon direct endpoint; proxy-secret-gated login throttle (amended 2026-09-29 to shared `proxy`/`direct` buckets of 10 after Vercel was found to pass forged forwarding headers; 50 global); Argon2 concurrency 2; `HOSTED` mode; manual migrations and deploys; Git deployments off on Vercel; `PROXY_SHARED_SECRET` Production-only; no scheduler or keep-alive. Migration `92a17353e5a8` reconciles the running-run index.
 - 2026-09-28: PR #6 review fixes: the same-source/external-ID update path is subject to the identity-conflict rule (the record's own unchanged URL is exempt for rule-4 false duplicates); one running ingestion run per source is enforced by the partial unique index `uq_ingestion_runs_one_running_per_source` (added to `726372d627b8` before merge). Milestone 3 merged via PR #6.
 - 2026-09-27: ADR-008 accepted: source registry with safe configuration only; adapters without database access; one shared pipeline with per-item savepoints and run history; closure only after complete successful snapshots; exact deterministic identifiers for cross-source dedup (no fuzzy matching; conflicts recorded, never merged); manual-curation protection; fingerprinted automatic evaluation; allowlisted HTTPS-only network access via `httpx2`; zshah101 feed consumed through its API only; SuryaHarikrishnan listing data excluded; no scheduler while the database is local.
 - 2026-09-27: Migration `726372d627b8` repairs the pre-merge `7d7f4f8b9a3c` graduation constraint automatically (asymmetric downgrade). The manual-patch instruction was removed from the docs.
