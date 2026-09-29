@@ -8,8 +8,8 @@ Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.
 |---|---|
 | Neon | **Provisioned.** Migrated to `92a17353e5a8`. Owner created (CLI, `getpass`). Catalog empty until the first hosted sync. |
 | Render | **Deployed** from `feature/hosted-deployment-foundation` for hosted validation (branch switched temporarily, see [Unmerged branch validation](#unmerged-branch-validation)). Auto-deploy off. |
-| Vercel | **Deployed** (production, manual CLI deploy from a clean checkout of the same branch). |
-| Hosted acceptance | Verified with the owner's login on 2026-09-29, except the items marked open in [Production verification](#production-verification). One security bug is open (below). |
+| Vercel | **Deployed** (production, manual CLI deploy from a clean checkout of the same branch at `af6b6f1`; nothing under `frontend/` has changed since). |
+| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)). Render runs `36b9896` from the feature branch. |
 
 ## Topology
 
@@ -123,7 +123,7 @@ Run after every deploy. Results of the first hosted validation (2026-09-28) are 
 | Static assets | `Cache-Control` on `/assets/*.js` | Vercel default (`public, max-age=0, must-revalidate`, edge-cached, revalidated by ETag) |
 | Security headers | All responses | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` |
 | Direct Render throttle | 11 wrong logins to the Render URL, each with a different forged `X-Forwarded-For` and a wrong `X-IF-Proxy-Secret` | `401` ×10, then `429`: one shared `direct` bucket |
-| Proxy secret matches | While the direct bucket is full, one wrong login through Vercel | `401` (not `429`): Vercel's requests are keyed per browser, so Render accepted the secret |
+| Proxy secret matches | While the direct bucket is full, one wrong login through Vercel | `401` (not `429`): proxied requests use their own bucket, so Render accepted the secret |
 | Non-production URLs | Deployment URLs and `internship-finder-dude297s-projects.vercel.app` | `302` to Vercel SSO |
 | Git pushes don't deploy | Push of the feature branch | No Vercel deployment created |
 | Cold start | First request after idle | See [Cold starts](#cold-starts) |
@@ -133,13 +133,15 @@ Run after every deploy. Results of the first hosted validation (2026-09-28) are 
 | Second sync | Same | `no_change` (HTTP 304) in 0.8 s |
 | Profile re-evaluation (synthetic profile, 1,055 opportunities) | Save profile / change date of birth / save unchanged | 9.7 s / 9.0 s / 0.35 s (1,055 / 1,055 / 0 re-evaluated) |
 | Invalid source links | `localhost`, `127.0.0.1`, `169.254.169.254`, `file://`, unknown host | `422` before any fetch |
-| Credential-bearing / custom-port board links | `https://user:pw@boards.greenhouse.io/x`, `https://jobs.lever.co:8443/x` | Accepted (`201`) by `3ab655f`; only the board name was kept and nothing was fetched from them. Fixed in `65964c6` (now `422`), **not yet deployed**. The two probe sources were deleted |
-| Per-client `429` through Vercel | 11 wrong logins, each with a different forged `X-Forwarded-For` | **Failed:** all `401`. See the known bug below |
+| Credential-bearing / custom-port board links | `https://user:pw@boards.greenhouse.io/x`, `https://jobs.lever.co:8443/x` | Accepted (`201`) by `3ab655f`; only the board name was kept and nothing was fetched from them. Fixed in `65964c6` (now `422`, deployed). The two probe sources were deleted |
+| Proxied throttle through Vercel | 11 wrong logins, each with different forged `X-Forwarded-For` and `X-Vercel-Forwarded-For` | Before `36b9896`: all `401` (forgeable key, see below). After: `401` ×10, then `429`; the direct bucket stays separate; existing sessions unaffected |
 | Database after the first sync | Aggregate queries only | 13 MB; 1,055 opportunities, 1,055 source records, 2,110 evaluations, 2 runs |
 | Session after a cold start | Idle > 15 min, then a session check through Vercel | Render restarted; `200` after 73 s; still authenticated as the owner |
-| **Open:** session survives a Render redeploy; one Greenhouse/Lever board | | Not yet run (needs deploy approval / a board chosen by the owner) |
+| Session survives a Render redeploy | Session check after deploying `3563021` and `36b9896` | Still authenticated as the owner; catalog intact (1,055) |
+| Board-link fix live | The credential and port links above, after deploying `3563021` | `422` |
+| **Not run:** one Greenhouse/Lever board | | Optional; no board chosen (adding one imports all its postings, and sources can't be deleted) |
 
-**Known bug (open): the per-client login-throttle key can be forged through Vercel.** On 2026-09-29, 11 wrong logins through Vercel, each with a different client-supplied `X-Forwarded-For`, all got `401` (no `429`). Render's logs show that for some requests the leftmost `X-Forwarded-For` entry was the forged value and for others the real client address: Vercel doesn't consistently overwrite the header on external rewrites, contrary to ADR-009 §6's assumption. The global cap (50 failures per 15 minutes) and the direct-path shared bucket still hold, so total password guessing stays bounded. Fixing it needs the exact header chain Render receives, which means a short diagnostic deploy, and then either keying on a Vercel-controlled position or header, or one shared bucket for all proxied logins.
+**Fixed: forgeable per-client throttle key.** On 2026-09-29, 11 wrong logins through Vercel with different forged `X-Forwarded-For` values all got `401`. A temporary diagnostic build (logging only, from a throwaway branch, removed right after) showed what Render receives: `X-Forwarded-For` is `<client>, <Vercel egress>, <Cloudflare>, <Render internal>`, and `X-Vercel-Forwarded-For` is `<client>`, but in some requests the `<client>` value in either header was the one the caller sent. No forwarded header is trustworthy, so all proxied logins now share one `proxy` bucket (`36b9896`, [ADR-009 §6 amendment](decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)). Trade-off: 10 failed attempts by anyone through the site block new logins for 15 minutes; existing sessions keep working.
 
 Global failed-login cap (50 per 15 minutes) is covered by unit tests only: a hosted test needs five distinct client addresses, since a blocked key stops adding failures.
 

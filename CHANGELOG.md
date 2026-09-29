@@ -9,7 +9,7 @@ All notable changes to this project are documented here.
 - Milestone 3.5: hosted deployment foundation ([ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md), runbook in [docs/deployment.md](docs/deployment.md)).
   - Migration `92a17353e5a8`: creates `uq_ingestion_runs_one_running_per_source` on databases migrated with the pre-merge `726372d627b8`; no-op on fresh databases; refuses (with a clear error) if duplicate `running` rows exist; the downgrade keeps the index.
   - Topology: Vercel Hobby (static build, same-origin `/api` rewrite) → Render Free (FastAPI, one instance, one worker) → Neon Free (PostgreSQL 18, direct endpoint). Manual migrations and deploys; no scheduler or keep-alive.
-  - Login throttling: 10 failures per client key and 50 in total per sliding 15 minutes, checked before password work. Only requests carrying the Vercel proxy secret (`X-IF-Proxy-Secret`, from `PROXY_SHARED_SECRET`) are keyed by `X-Forwarded-For`; direct callers share one bucket.
+  - Login throttling: 10 failures per bucket and 50 in total per sliding 15 minutes, checked before password work. Requests carrying the Vercel proxy secret (`X-IF-Proxy-Secret`, from `PROXY_SHARED_SECRET`) share the `proxy` bucket, direct callers share `direct`; forwarding headers are never read (Vercel sometimes passes forged ones through).
   - Argon2 hash/verify limited to 2 concurrent operations (parameters and dummy verification unchanged).
   - `HOSTED=true`: no `/docs`, `/redoc`, `/openapi.json`; requires `SESSION_COOKIE_SECURE=true`.
   - `Cache-Control: no-store` on `/api`; `redirect_slashes=False`.
