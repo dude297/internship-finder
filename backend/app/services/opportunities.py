@@ -10,7 +10,6 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session, defer, selectinload
 
 from app.enums import ExtractionMethod, OpportunitySourceType
@@ -22,7 +21,15 @@ from app.models import (
     OpportunitySourceRecord,
     Profile,
 )
-from app.repositories import evaluate_and_save, evaluate_if_changed, get_profile, latest_evaluation
+from app.repositories import (
+    CatalogEvaluation,
+    evaluate_and_save,
+    evaluate_catalog,
+    evaluate_if_changed,
+    evaluation_context,
+    get_profile,
+    latest_evaluation,
+)
 from app.schemas.application import ApplicationBody
 from app.schemas.opportunity import OpportunityBody, RequirementBody
 
@@ -65,15 +72,12 @@ def evaluate_automatically(db: Session, opportunity: Opportunity) -> None:
         evaluate_if_changed(db, profile, opportunity)
 
 
-def evaluate_all(db: Session, profile: Profile) -> int:
-    """Re-evaluate every opportunity for the profile (synchronous: fine at manual, single-user
-    scale; a large catalog would need batching or a background job)."""
-    opportunities = db.scalars(
-        select(Opportunity).options(selectinload(Opportunity.requirements))
-    ).all()
-    for opportunity in opportunities:
-        evaluate_and_save(db, profile, opportunity)
-    return len(opportunities)
+def evaluate_all(db: Session, profile: Profile) -> CatalogEvaluation:
+    """Evaluate every opportunity for the profile where eligibility or fit inputs changed: one
+    synchronous catalog pass in the caller's transaction (ADR-010 §9)."""
+    context = evaluation_context(db, profile)
+    assert context is not None
+    return evaluate_catalog(db, context)
 
 
 def create_opportunity(db: Session, body: OpportunityBody) -> Opportunity:

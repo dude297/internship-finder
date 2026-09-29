@@ -352,24 +352,39 @@ def test_imported_detail_shows_provenance_and_can_be_reviewed(
     assert closed["application"]["status"] == "applied"
 
 
-def test_manual_title_edit_does_not_append_an_evaluation(client: TestClient, db: Session) -> None:
+def test_edit_appends_an_evaluation_only_when_an_input_changed(
+    client: TestClient, db: Session
+) -> None:
     put_profile(client)
     created = create(client, requirements=[AGE_16])
 
+    # The type is neither an eligibility nor a fit input.
     client.put(
         f"/api/opportunities/{created['id']}",
-        json=opportunity(title="Renamed", requirements=[AGE_16]),
+        json=opportunity(opportunity_type="fellowship", requirements=[AGE_16]),
     )
     assert db.scalar(select(func.count()).select_from(OpportunityEvaluation)) == 1
 
+    # The title is a fit input (ADR-010 §8).
     client.put(
         f"/api/opportunities/{created['id']}",
-        json=opportunity(title="Renamed", requirements=[AGE_16], start_date="2041-07-01"),
+        json=opportunity(title="Renamed", opportunity_type="fellowship", requirements=[AGE_16]),
     )
     assert db.scalar(select(func.count()).select_from(OpportunityEvaluation)) == 2
+
+    client.put(
+        f"/api/opportunities/{created['id']}",
+        json=opportunity(
+            title="Renamed",
+            opportunity_type="fellowship",
+            requirements=[AGE_16],
+            start_date="2041-07-01",
+        ),
+    )
+    assert db.scalar(select(func.count()).select_from(OpportunityEvaluation)) == 3
     # The explicit evaluate action still always appends.
     client.post(f"/api/opportunities/{created['id']}/evaluate")
-    assert db.scalar(select(func.count()).select_from(OpportunityEvaluation)) == 3
+    assert db.scalar(select(func.count()).select_from(OpportunityEvaluation)) == 4
 
 
 def test_manual_opportunity_is_curated_from_creation(client: TestClient) -> None:

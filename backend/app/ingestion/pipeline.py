@@ -34,10 +34,14 @@ from app.models import (
     Opportunity,
     OpportunityIdentifier,
     OpportunitySourceRecord,
-    Profile,
 )
 from app.models.ingestion import RUNNING_RUN_INDEX
-from app.repositories import evaluate_and_save, evaluate_if_changed, get_profile
+from app.repositories import (
+    EvaluationContext,
+    evaluate_and_save,
+    evaluate_if_changed,
+    evaluation_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +223,7 @@ def _apply(
     item: NormalizedOpportunity,
     content_hash: str,
     now: datetime,
-    profile: Profile | None,
+    context: EvaluationContext | None,
 ) -> _Outcome:
     outcome = _Outcome()
     claimed = _claimed(db, item)
@@ -246,8 +250,8 @@ def _apply(
         if outcome.updated and opportunity.manually_curated_at is None:
             _write_canonical(opportunity, item)
             db.flush()
-            if profile is not None:
-                evaluate_if_changed(db, profile, opportunity)
+            if context is not None:
+                evaluate_if_changed(db, context.profile, opportunity, context)
         db.flush()
         return outcome
 
@@ -289,8 +293,9 @@ def _apply(
     db.add(new_record)
     _register_identifiers(db, opportunity, item, claimed)
     db.flush()
-    if outcome.created and profile is not None:
-        evaluate_and_save(db, profile, opportunity)  # a new opportunity has no evaluation yet
+    if outcome.created and context is not None:
+        # A new opportunity has no evaluation yet.
+        evaluate_and_save(db, context.profile, opportunity, context)
     return outcome
 
 
@@ -309,7 +314,7 @@ def _process(
             .options(defer(OpportunitySourceRecord.raw_payload))
         )
     }
-    profile = get_profile(db)
+    context = evaluation_context(db)  # the profile's inputs, read once per run
     seen: set[str] = set()
     unchanged: list[uuid.UUID] = []
 
@@ -341,7 +346,7 @@ def _process(
             # begin_nested() flushes the run's counters/errors first, so rolling back this
             # savepoint undoes only this item.
             with db.begin_nested():
-                outcome = _apply(db, source, record, item, content_hash, now, profile)
+                outcome = _apply(db, source, record, item, content_hash, now, context)
         except IdentityConflict as error:
             run.error_count += 1
             _add_error(
