@@ -12,12 +12,26 @@ from sqlalchemy import (
     text,
     true,
 )
+from sqlalchemy.engine.default import DefaultExecutionContext
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampMixin, str_enum
-from app.enums import IngestionRunStatus, IngestionSourceKind, IngestionStage, SourceRegion
+from app.enums import (
+    IngestionRunStatus,
+    IngestionSourceKind,
+    IngestionStage,
+    SourceRegion,
+    SourceScope,
+)
 
 RUNNING_RUN_INDEX = "uq_ingestion_runs_one_running_per_source"
+
+
+def _default_scope(context: DefaultExecutionContext) -> str:
+    """ATS boards admit internships only unless the owner chooses otherwise (ADR-010 §10)."""
+    kind = context.get_current_parameters()["kind"]
+    builtin = kind == IngestionSourceKind.COMMUNITY_FEED.value
+    return (SourceScope.ALL if builtin else SourceScope.INTERNSHIPS_ONLY).value
 
 
 class IngestionSource(IdMixin, TimestampMixin, Base):
@@ -28,6 +42,7 @@ class IngestionSource(IdMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("kind", "identifier", "region", postgresql_nulls_not_distinct=True),
         CheckConstraint("(kind = 'lever') = (region IS NOT NULL)", name="region_iff_lever"),
+        CheckConstraint("kind <> 'community_feed' OR scope = 'all'", name="builtin_scope_all"),
     )
 
     kind: Mapped[IngestionSourceKind] = mapped_column(
@@ -38,6 +53,9 @@ class IngestionSource(IdMixin, TimestampMixin, Base):
     region: Mapped[SourceRegion | None] = mapped_column(str_enum(SourceRegion, "source_region"))
     display_name: Mapped[str] = mapped_column(String(200))
     enabled: Mapped[bool] = mapped_column(default=True, server_default=true())
+    scope: Mapped[SourceScope] = mapped_column(
+        str_enum(SourceScope, "source_scope"), default=_default_scope
+    )
     last_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # HTTP validators for conditional requests.
@@ -82,6 +100,8 @@ class IngestionRun(IdMixin, Base):
     # The source's own snapshot time, when it states one (e.g. the feed's generated_at).
     source_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fetched_count: Mapped[int] = mapped_column(default=0, server_default="0")
+    # Provider items excluded by the source's scope (ADR-010 §10); never processed.
+    filtered_count: Mapped[int] = mapped_column(default=0, server_default="0")
     normalized_count: Mapped[int] = mapped_column(default=0, server_default="0")
     created_count: Mapped[int] = mapped_column(default=0, server_default="0")
     updated_count: Mapped[int] = mapped_column(default=0, server_default="0")
