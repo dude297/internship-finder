@@ -9,7 +9,7 @@ Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.
 | Neon | **Provisioned.** Migrated to `92a17353e5a8`. Owner created (CLI, `getpass`). Catalog empty until the first hosted sync. |
 | Render | **Deployed** from `feature/hosted-deployment-foundation` for hosted validation (branch switched temporarily, see [Unmerged branch validation](#unmerged-branch-validation)). Auto-deploy off. |
 | Vercel | **Deployed** (production, manual CLI deploy from a clean checkout of the same branch). |
-| Hosted acceptance | Partially verified. Checks that need the owner's real login are still open (see [Production verification](#production-verification)). |
+| Hosted acceptance | Verified with the owner's login on 2026-09-29, except the items marked open in [Production verification](#production-verification). One security bug is open (below). |
 
 ## Topology
 
@@ -127,7 +127,18 @@ Run after every deploy. Results of the first hosted validation (2026-09-28) are 
 | Non-production URLs | Deployment URLs and `internship-finder-dude297s-projects.vercel.app` | `302` to Vercel SSO |
 | Git pushes don't deploy | Push of the feature branch | No Vercel deployment created |
 | Cold start | First request after idle | See [Cold starts](#cold-starts) |
-| **Open (needs the owner's login):** session cookie `HttpOnly; Secure; SameSite=Lax; Path=/`, host-only on the Vercel host; unsafe request without `X-CSRF-Token` → `403`, with it → success; per-client `429` through Vercel; first discovery sync counts and time; second sync `no_change`; profile re-evaluation time; invalid source links rejected over HTTP; session survives a Render redeploy | | Not yet run |
+| Session cookie (login through Vercel) | `Set-Cookie` attributes | `if_session`: `HttpOnly; Secure; SameSite=lax; Path=/; Max-Age=86400`, no `Domain` (host-only on the Vercel host) |
+| CSRF | Unsafe private request without / with a wrong / with the valid `X-CSRF-Token` | `403` / `403` / `200` |
+| First discovery sync (through Vercel) | Sources → Sync now | `success` in 30.8 s: 1,055 fetched, 1,055 created; 0 updated, deduplicated, unchanged, closed, invalid, errors. Finished inside the proxy window |
+| Second sync | Same | `no_change` (HTTP 304) in 0.8 s |
+| Profile re-evaluation (synthetic profile, 1,055 opportunities) | Save profile / change date of birth / save unchanged | 9.7 s / 9.0 s / 0.35 s (1,055 / 1,055 / 0 re-evaluated) |
+| Invalid source links | `localhost`, `127.0.0.1`, `169.254.169.254`, `file://`, unknown host | `422` before any fetch |
+| Credential-bearing / custom-port board links | `https://user:pw@boards.greenhouse.io/x`, `https://jobs.lever.co:8443/x` | Accepted (`201`) by `3ab655f`; only the board name was kept and nothing was fetched from them. Fixed in `65964c6` (now `422`), **not yet deployed**. The two probe sources were deleted |
+| Per-client `429` through Vercel | 11 wrong logins, each with a different forged `X-Forwarded-For` | **Failed:** all `401`. See the known bug below |
+| Database after the first sync | Aggregate queries only | 13 MB; 1,055 opportunities, 1,055 source records, 2,110 evaluations, 2 runs |
+| **Open:** session survives a Render redeploy; session returns after a cold start; one Greenhouse/Lever board | | Not yet run (needs a production deploy approval / idle time / a board chosen by the owner) |
+
+**Known bug (open): the per-client login-throttle key can be forged through Vercel.** On 2026-09-29, 11 wrong logins through Vercel, each with a different client-supplied `X-Forwarded-For`, all got `401` (no `429`). Render's logs show that for some requests the leftmost `X-Forwarded-For` entry was the forged value and for others the real client address: Vercel doesn't consistently overwrite the header on external rewrites, contrary to ADR-009 §6's assumption. The global cap (50 failures per 15 minutes) and the direct-path shared bucket still hold, so total password guessing stays bounded. Fixing it needs the exact header chain Render receives, which means a short diagnostic deploy, and then either keying on a Vercel-controlled position or header, or one shared bucket for all proxied logins.
 
 Global failed-login cap (50 per 15 minutes) is covered by unit tests only: a hosted test needs five distinct client addresses, since a blocked key stops adding failures.
 
@@ -144,7 +155,7 @@ None. Source sync stays manual (Sources page, API, or CLI with `DATABASE_URL` se
 - **Render Free:** sleeps when idle (cold starts above); monthly instance hours are capped. Exhaustion suspends the service, never bills.
 - **Neon Free:** compute auto-suspends when idle (the first query after that is slower; `pool_pre_ping` reconnects); storage is capped (the empty schema is 8.4 MB). Exhaustion suspends compute or blocks writes, never bills.
 - **Vercel Hobby:** usage limits pause or limit the project, never bill.
-- Long requests: the first discovery sync (~22 s locally) and profile re-evaluation over the whole catalog run inside one proxied request. If Vercel's external-rewrite timeout cuts one off, the backend may still finish and commit. Refresh before retrying (a second sync of the same source reports "already syncing" until the first ends).
+- Long requests: the first discovery sync (30.8 s hosted) and profile re-evaluation over the whole catalog (~10 s for 1,055 opportunities hosted) run inside one proxied request. Neither hit Vercel's external-rewrite timeout on 2026-09-29. If one ever is cut off, the backend may still finish and commit: refresh before retrying (a second sync of the same source reports "already syncing" until the first ends).
 
 ## Maintenance
 
