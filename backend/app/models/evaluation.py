@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, str_enum
@@ -10,9 +10,9 @@ from app.enums import EligibilityStatus
 
 
 class OpportunityEvaluation(IdMixin, Base):
-    """One eligibility evaluation of an opportunity for a profile. Rows are history: a
-    re-evaluation adds a row rather than overwriting. Fit scoring columns are added with
-    scoring v1 (ADR-006)."""
+    """One evaluation of an opportunity for a profile: eligibility and, since scoring v1, fit
+    (ADR-010). Rows are history: a re-evaluation adds a row rather than overwriting. Rows from
+    before scoring v1 have NULL fit columns."""
 
     __tablename__ = "opportunity_evaluations"
     __table_args__ = (
@@ -21,6 +21,17 @@ class OpportunityEvaluation(IdMixin, Base):
             "profile_id",
             "opportunity_id",
             "evaluated_at",
+        ),
+        CheckConstraint("fit_score IS NULL OR fit_score BETWEEN 0 AND 100", name="fit_score_range"),
+        CheckConstraint(
+            "fit_input_fingerprint IS NULL OR length(fit_input_fingerprint) = 64",
+            name="fit_input_fingerprint_length",
+        ),
+        CheckConstraint(
+            "(fit_score IS NULL) = (scoring_version IS NULL)"
+            " AND (fit_score IS NULL) = (score_breakdown IS NULL)"
+            " AND (fit_score IS NULL) = (fit_input_fingerprint IS NULL)",
+            name="fit_fields_together",
         ),
     )
 
@@ -39,6 +50,11 @@ class OpportunityEvaluation(IdMixin, Base):
     # SHA-256 of the canonical eligibility inputs (ADR-008 §9). Automatic evaluation skips when
     # the latest evaluation has the same fingerprint. NULL for evaluations before Milestone 3.
     input_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    # Fit (ADR-010). Shape of score_breakdown: app.opportunities.scoring.schemas.ScoreBreakdown.
+    fit_score: Mapped[int | None]
+    score_breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSON(none_as_null=True))
+    scoring_version: Mapped[str | None] = mapped_column(String(20))
+    fit_input_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
     rule_results: Mapped[list["EligibilityRuleResult"]] = relationship(
         back_populates="evaluation",

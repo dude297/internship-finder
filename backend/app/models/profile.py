@@ -15,7 +15,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampMixin, str_enum
-from app.enums import EducationLevel, ExtractionMethod, FactCategory, ProfileSourceKind
+from app.enums import (
+    EducationLevel,
+    ExtractionMethod,
+    FactCategory,
+    ProfileSourceKind,
+    RemotePreference,
+)
 
 
 class Profile(IdMixin, TimestampMixin, Base):
@@ -40,6 +46,11 @@ class Profile(IdMixin, TimestampMixin, Base):
             " OR expected_graduation_date > education_status_as_of",
             name="graduation_after_status_as_of",
         ),
+        CheckConstraint(
+            "availability_start IS NULL OR availability_end IS NULL"
+            " OR availability_end >= availability_start",
+            name="availability_end_not_before_start",
+        ),
     )
 
     # Time-aware education status (ADR-005). See app.profile.education for the projection.
@@ -59,6 +70,15 @@ class Profile(IdMixin, TimestampMixin, Base):
     citizenships: Mapped[list[str] | None] = mapped_column(JSON)
     work_authorizations: Mapped[list[str] | None] = mapped_column(JSON)
     location: Mapped[str | None] = mapped_column(String(200))
+
+    # Fit preferences (ADR-010 §5). Never read by eligibility.
+    interests: Mapped[list[str] | None] = mapped_column(JSON)
+    preferred_locations: Mapped[list[str] | None] = mapped_column(JSON)
+    remote_preference: Mapped[RemotePreference | None] = mapped_column(
+        str_enum(RemotePreference, "remote_preference")
+    )
+    availability_start: Mapped[date | None]
+    availability_end: Mapped[date | None]
 
     sources: Mapped[list["ProfileSource"]] = relationship(
         back_populates="profile", cascade="all, delete-orphan", passive_deletes=True

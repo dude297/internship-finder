@@ -110,6 +110,16 @@ class EligibilityStatus(StrEnum):
     INELIGIBLE = "ineligible"
 
 
+class RemotePreference(StrEnum):
+    """The owner's work-mode preference. A fit input only (ADR-010), never eligibility."""
+
+    NO_PREFERENCE = "no_preference"
+    REMOTE_PREFERRED = "remote_preferred"
+    HYBRID_PREFERRED = "hybrid_preferred"
+    ONSITE_PREFERRED = "onsite_preferred"
+    REMOTE_ONLY = "remote_only"
+
+
 class ApplicationStatus(StrEnum):
     """The owner's application state for one opportunity. Any status may follow any other:
     real processes skip steps and reopen, so no transition rules are enforced."""
@@ -137,6 +147,13 @@ class SourceRegion(StrEnum):
 
     GLOBAL = "global"
     EU = "eu"
+
+
+class SourceScope(StrEnum):
+    """Which provider items a source admits (ADR-010 §10). The built-in feed is always `all`."""
+
+    ALL = "all"
+    INTERNSHIPS_ONLY = "internships_only"  # title-based internship filter
 
 
 class IngestionRunStatus(StrEnum):
