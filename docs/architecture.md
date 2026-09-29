@@ -2,7 +2,7 @@
 
 ## Current
 
-Milestones 0–3 are merged. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is on `feature/hosted-deployment-foundation`, awaiting review, and deployed from that branch for validation: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
+Milestones 0–3.5 are merged. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is deployed from `main`: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
 
 ```text
 Browser ── same origin ──► Vite dev server (localhost:5173)
