@@ -13,7 +13,7 @@ def save_profile(db: Session, body: ProfileBody) -> tuple[Profile, int]:
     """Create or replace the profile. If an eligibility input changed (the fields of
     ProfileInput), re-evaluate every opportunity in the same transaction; returns the count.
 
-    Re-evaluation appends history rows. Runs synchronously (see evaluate_all)."""
+    Only opportunities whose inputs changed get a new evaluation row (see evaluate_all)."""
     profile = get_profile(db)
     before = ProfileInput.model_validate(profile) if profile else None
     if profile is None:
@@ -24,4 +24,4 @@ def save_profile(db: Session, body: ProfileBody) -> tuple[Profile, int]:
     db.flush()
     if ProfileInput.model_validate(profile) == before:
         return profile, 0
-    return profile, evaluate_all(db, profile)
+    return profile, evaluate_all(db, profile).evaluated

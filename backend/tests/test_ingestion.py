@@ -652,18 +652,27 @@ def test_curated_opportunity_keeps_owner_content_but_provenance_updates(
     assert count(db, OpportunityEvaluation) == evaluations
 
 
-def test_unchanged_eligibility_inputs_append_no_evaluation(
+def test_only_changed_eligibility_or_fit_inputs_append_an_evaluation(
     db: Session, feed_source: IngestionSource, web: FakeSource, profile: Profile
 ) -> None:
     web.json(FEED_URL, feed(JOB_A))
     sync(db, feed_source, web)
     assert count(db, OpportunityEvaluation) == 1
 
-    # The title changes (canonical update) but nothing eligibility reads does.
+    # Discovery metadata changes (the record updates) but no evaluation input does.
+    web.json(FEED_URL, feed(JOB_A | {"salary": "$25/hr", "h1b_approvals": 99}))
+    run = sync(db, feed_source, web)
+    assert counts(run) == {"fetched": 1, "updated": 1}
+    assert count(db, OpportunityEvaluation) == 1
+
+    # The title is a fit input (ADR-010 §8): one new evaluation.
     web.json(FEED_URL, feed(JOB_A | {"title": "Renamed"}))
     sync(db, feed_source, web)
+    assert count(db, OpportunityEvaluation) == 2
 
-    assert count(db, OpportunityEvaluation) == 1
+    # Re-syncing the same snapshot changes nothing.
+    sync(db, feed_source, web)
+    assert count(db, OpportunityEvaluation) == 2
 
 
 def test_no_profile_means_no_evaluations(
