@@ -2,7 +2,7 @@
 
 ## Current Database State
 
-The schema is created by three Alembic migrations in `backend/alembic/versions/`:
+The schema is created by five Alembic migrations in `backend/alembic/versions/`:
 
 | Revision | Milestone | Tables |
 |---|---|---|
@@ -10,8 +10,9 @@ The schema is created by three Alembic migrations in `backend/alembic/versions/`
 | `7d7f4f8b9a3c` (auth sessions and application tracking) | 2 (merged) | `auth_users`, `auth_sessions`, `applications`; adds `ck_profiles_graduation_after_status_as_of` to `profiles` |
 | `726372d627b8` (opportunity ingestion and deduplication) | 3 | `ingestion_sources` (seeds the built-in discovery feed), `ingestion_runs`, `ingestion_run_errors`, `opportunity_identifiers`; new columns on `opportunities`, `opportunity_source_records`, `opportunity_evaluations`; reconciles `ck_profiles_graduation_after_status_as_of` (below) |
 | `92a17353e5a8` (reconcile the one-running-ingestion-run index) | 3.5 | No new tables or columns; ensures `uq_ingestion_runs_one_running_per_source` exists (below) |
+| `b41e7c9d2f60` (fit scoring v1, Match Profile preferences, and ATS source scope) | 4 | No new tables. `profiles`: fit preferences; `opportunity_evaluations`: fit columns; `ingestion_sources.scope`; `ingestion_runs.filtered_count` (below) |
 
-The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), and [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). No hosted database is provisioned (Neon is selected, [ADR-004](decisions/ADR-004-technology-stack.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
+The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), and [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `92a17353e5a8` until the Milestone 4 release migrates it ([deployment.md](deployment.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
 ORM models are in `backend/app/models/`. Shared enums are in `backend/app/enums.py`.
 
@@ -26,6 +27,10 @@ The reconciliation is intentionally **asymmetric**: downgrading `726372d627b8` l
 `uq_ingestion_runs_one_running_per_source` (partial UNIQUE on `ingestion_runs(source_id)` WHERE `status = 'running'`) was added to `726372d627b8` during PR #6 review, before it merged. A development database upgraded with the earlier local version of `726372d627b8` reports that revision but lacks the index. `92a17353e5a8` looks the index up in the PostgreSQL catalog on upgrade and creates it only if it's missing; on a fresh database it's a no-op. Before creating it, the upgrade checks for sources with more than one `running` run and, if any exist, fails with a message naming them rather than choosing one or deleting history: mark the stale runs `failed` (with `finished_at`), then upgrade again. One running run per source is fine.
 
 Like the graduation-constraint repair, it's **asymmetric**: downgrading `92a17353e5a8` leaves the index in place, because it belongs to `726372d627b8`'s intended final schema; downgrading `726372d627b8` itself drops it. `tests/test_migrations.py` covers the stale path (upgrade to `726372d627b8`, drop the index, upgrade to head), the duplicate-running refusal, and the fresh path.
+
+### Milestone 4 migration (`b41e7c9d2f60`)
+
+Adds nullable columns only (plus `ingestion_sources.scope`, backfilled with `all` for every existing source so an upgrade never starts filtering, then made NOT NULL, and `ingestion_runs.filtered_count` with default 0). Existing evaluations keep NULL fit fields and stay valid. Downgrading to `92a17353e5a8` drops the new columns and constraints (fit results, fit preferences, and scopes are lost; eligibility history is kept). `tests/test_migrations.py` covers the round trip, the `all` backfill for a pre-existing board, and each new constraint.
 
 All tables contain **private runtime data**. Nothing from them is ever committed ([ENGINEERING_GUIDELINES.md §16](../ENGINEERING_GUIDELINES.md#16-public-repository-security-and-privacy)).
 
@@ -56,7 +61,13 @@ The canonical profile: user-entered or user-confirmed values. It's the only inpu
 | `citizenships` | json list of ISO 3166-1 alpha-2 codes, null | NULL = not provided. The API accepts only the 249 officially assigned codes (e.g. `GB`, not `UK`) |
 | `work_authorizations` | json list of country codes, null | Stored; no v1 rule uses it |
 | `location` | varchar(200), null | |
+| `interests` | json list of strings, null | Fit input only (Milestone 4). NULL or empty = none |
+| `preferred_locations` | json list of strings, null | Fit input only |
+| `remote_preference` | enum `no_preference` / `remote_preferred` / `hybrid_preferred` / `onsite_preferred` / `remote_only`, null | Fit input only |
+| `availability_start`, `availability_end` | date, null | Fit input only. CHECK `ck_profiles_availability_end_not_before_start` |
 | `created_at`, `updated_at` | timestamptz | |
+
+The Milestone 4 columns are Match Profile preferences ([ADR-010 §5](decisions/ADR-010-fit-scoring-v1.md#5-profile-inputs-match-profile)): eligibility never reads them, and `PUT /api/profile` doesn't change them.
 
 Constraints: `ck_profiles_education_level_has_as_of` (level and as-of date are both set or both NULL), `ck_profiles_enrollment_not_before_graduation`, and `ck_profiles_graduation_after_status_as_of` (Milestone 2, migration `7d7f4f8b9a3c`).
 
@@ -93,6 +104,8 @@ Structured facts with provenance. Never read by hard eligibility (ADR-006 §1).
 | `confidence` | float, null | CHECK: 0–1 |
 | `verified_by_user` | boolean, default false | |
 | `created_at`, `updated_at` | timestamptz | |
+
+**Match Profile facts** (Milestone 4) are rows with `source_kind = manual`, `extraction_method = manual`, `verified_by_user = true`, no `profile_source_id`, `fact_key = match_profile.NNN` (position), and category `skill` or `course` (`value` = `{"name": str}`) or `project`, `research`, `activity`, `experience` (`value` = `{"name": str, "description": str | null}`). `PUT /api/profile/match` replaces only these rows; any other fact is left alone. Fit v1 reads `skill`, `course`, `project`, and `research` facts that are manual or `verified_by_user`; a fact whose value doesn't have that shape is skipped (and logged), never coerced.
 
 ### `opportunities`
 
@@ -160,6 +173,7 @@ The source registry. Safe configuration only: no URLs, no credentials. Milestone
 | `region` | enum `global` / `eu`, null | CHECK: set exactly when `kind = 'lever'` |
 | `display_name` | varchar(200) | Shown in the UI; the organization of opportunities imported from an ATS source |
 | `enabled` | boolean, default true | Disabled sources are skipped by "sync all" and can't be synced individually |
+| `scope` | enum `all` / `internships_only` | Milestone 4. New Greenhouse/Lever boards default to `internships_only` (title filter); CHECK `ck_ingestion_sources_builtin_scope_all`: the built-in feed is always `all`. Changing it clears `etag`/`last_modified` |
 | `last_attempted_at`, `last_success_at` | timestamptz, null | `no_change` counts as a success |
 | `etag`, `last_modified` | varchar, null | HTTP validators, stored only after a complete successful run |
 | `created_at`, `updated_at` | timestamptz | |
@@ -176,6 +190,7 @@ One sync of one source. Milestone 3.
 | `status` | enum `running` / `success` / `partial` / `failed` / `no_change` | A run still `running` after 15 minutes is marked `failed` by the next sync of that source |
 | `started_at`, `finished_at` | timestamptz | |
 | `source_generated_at` | timestamptz, null | The source's own snapshot time (the feed's `generated_at`) |
+| `filtered_count` | int, default 0 | Milestone 4: provider items excluded by the source's scope. `fetched` = provider items, `filtered` = excluded, `normalized` = admitted to the pipeline |
 | `fetched_count`, `normalized_count`, `created_count`, `updated_count`, `deduplicated_count`, `unchanged_count`, `closed_count`, `reactivated_count`, `invalid_count`, `error_count` | int, default 0 | |
 | `error_summary` | varchar(500), null | Safe one-line reason for a failed run |
 
@@ -218,7 +233,7 @@ Structured hard requirements.
 
 ### `opportunity_evaluations`
 
-One eligibility evaluation of an opportunity for a profile. Rows are **history**: re-evaluating adds a row. The latest `evaluated_at` is current (`app.repositories.latest_evaluation`; equal timestamps are broken by `id`, which is stable but not chronological).
+One evaluation (eligibility and, since Milestone 4, fit) of an opportunity for a profile. Rows are **history**: re-evaluating adds a row. The latest `evaluated_at` is current (`app.repositories.latest_evaluation`; equal timestamps are broken by `id`, which is stable but not chronological).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -230,7 +245,12 @@ One eligibility evaluation of an opportunity for a profile. Rows are **history**
 | `evaluated_at` | timestamptz | |
 | `input_fingerprint` | varchar(64), null | SHA-256 of the canonical eligibility inputs ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion)). Automatic evaluation skips when the latest evaluation has the same fingerprint. NULL for evaluations made before Milestone 3 (Milestone 3) |
 
-Index: `ix_opportunity_evaluations_pair_evaluated_at` (`profile_id`, `opportunity_id`, `evaluated_at`). Fit columns (`fit_score`, `score_breakdown`, `scoring_version`) will be added by the scoring v1 migration.
+| `fit_score` | int, null | 0–100 (CHECK). Milestone 4 |
+| `score_breakdown` | json, null | Components, reasons, evidence, coverage ([scoring.md](scoring.md#coverage-and-breakdown)); plain data, no HTML |
+| `scoring_version` | varchar(20), null | e.g. `v1` |
+| `fit_input_fingerprint` | varchar(64), null | SHA-256 of the fit inputs (CHECK length 64). Automatic evaluation appends a row only when this or `input_fingerprint` changed |
+
+Index: `ix_opportunity_evaluations_pair_evaluated_at` (`profile_id`, `opportunity_id`, `evaluated_at`). CHECK `ck_opportunity_evaluations_fit_fields_together`: the four fit columns are all NULL (evaluations from before Milestone 4) or all set.
 
 ### `eligibility_rule_results`
 
@@ -288,8 +308,7 @@ The owner's application tracking. Private runtime data; never read by eligibilit
 
 ## Not Yet Modeled
 
-- Fit-scoring columns (with scoring v1)
-- Profile preferences, remote preference, availability windows (fit inputs, with scoring)
+- Résumé/transcript uploads and parsed facts (the tables exist; nothing writes them yet)
 
 ## Provenance Rules
 
@@ -304,12 +323,14 @@ Design rules from [ENGINEERING_GUIDELINES.md §6](../ENGINEERING_GUIDELINES.md#6
 - The API keeps exactly one `profiles` row (created by the first `PUT /api/profile`).
 - A manually created opportunity always gets one `opportunity_source_records` row: `source_type = manual`, `source_name = manual`, no `external_id`, no raw payload. It's curated from creation (`manually_curated_at`).
 - Requirement rows written by the API have `extraction_method = manual`. An opportunity update replaces the complete requirement set: old rows are deleted, and past `eligibility_rule_results` keep their text with `requirement_id` set to NULL. Any update (including of an imported opportunity) sets `manually_curated_at`.
-- Opportunity create/update appends an `opportunity_evaluations` row when a profile exists **and** the eligibility inputs changed (fingerprint). Every eligibility-relevant profile change re-evaluates every opportunity, and `POST /api/opportunities/{id}/evaluate` always appends. Nothing is overwritten.
+- Opportunity create/update appends an `opportunity_evaluations` row when a profile exists **and** the eligibility or fit inputs changed (fingerprints). An eligibility-relevant profile change or any Match Profile save runs one catalog pass that appends rows only for opportunities whose inputs changed, and `POST /api/opportunities/{id}/evaluate` always appends. Nothing is overwritten.
+- `PUT /api/profile/match` creates the profile row if needed, sets the fit preference columns, and replaces the Match Profile facts (unchanged facts aren't rewritten), all in one transaction with the catalog pass.
 
 ## How Ingestion Writes
 
 Only `app/ingestion/pipeline.py` writes imported data ([ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md)):
 
+- Items a source's `internships_only` scope excludes are counted in `filtered_count` and never processed (so a complete run closes records they created earlier).
 - A new item creates an `opportunities` row (`unassessed`, no requirements), one automated `opportunity_source_records` row, its unclaimed `opportunity_identifiers`, and (with a profile) one evaluation.
 - An item matching another source's opportunity by identifier adds only a source record (and any unclaimed identifiers).
 - A changed item updates its source record, and the canonical fields only when the opportunity isn't curated. An unchanged item only moves `last_seen_at`/`fetched_at` (one bulk statement per run).

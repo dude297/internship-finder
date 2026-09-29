@@ -2,7 +2,7 @@
 
 ## Current
 
-Milestones 0–3.5 are merged. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is deployed from `main`: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
+Milestones 0–3.5 are merged; Milestone 4 (Match Profile, fit scoring v1, eligibility-first ranking, internships-only board scope, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)) is on its feature branch awaiting review. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is deployed from `main`: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
 
 ```text
 Browser ── same origin ──► Vite dev server (localhost:5173)
@@ -27,10 +27,10 @@ Browser ── same origin ──► Vite dev server (localhost:5173)
 | Route handlers | `api/` (`auth.py`, `profile.py`, `opportunities.py`, `sources.py`, `health.py`) | Thin: parse the request, call a service, commit once, shape the response (sync endpoints delegate their commits to the pipeline) |
 | Authorization boundary | `api/deps.py` (`require_owner`) | Session cookie → `401`; unsafe method without a valid CSRF header → `403`. Mounted once on the parent router of every private route (`main.py`) |
 | API schemas | `schemas/` | Pydantic request/response models (the HTTP contract), ISO country validation. Response models don't reuse request validators, so any stored row can be read back |
-| Services | `services/` (`auth.py`, `profile.py`, `opportunities.py`, `sources.py`, `discovery.py`) | Domain workflows: sessions, profile save + re-evaluation, opportunity/requirement/provenance writes, evaluation, tracking, the source registry, and the paginated/filtered discovery query. They flush but never commit |
-| Ingestion | `ingestion/` (`http.py`, `adapters/`, `normalize.py`, `pipeline.py`) | [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md): the only network client (allowlisted HTTPS hosts, size/time/retry limits), adapters that build URLs from hard-coded hosts and normalize items (no database access), and the shared pipeline that dedupes, persists, evaluates, closes, and records runs |
-| Persistence helpers | `repositories.py` | Load the profile/opportunity, evaluate and save (forced or only when the input fingerprint changed), latest evaluation |
-| Domain | `profile/education.py`, `opportunities/eligibility/` | Pure: temporal education resolver and eligibility rules v1 (unchanged since Milestone 1) |
+| Services | `services/` (`auth.py`, `profile.py`, `match_profile.py`, `opportunities.py`, `sources.py`, `discovery.py`) | Domain workflows: sessions, profile save + re-evaluation, the Match Profile (manual facts + fit preferences, one atomic save), opportunity/requirement/provenance writes, evaluation, tracking, the source registry (including board scope), and the paginated/filtered discovery query with the recommended (eligibility-first) order. They flush but never commit |
+| Ingestion | `ingestion/` (`http.py`, `adapters/`, `normalize.py`, `pipeline.py`) | [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md): the only network client (allowlisted HTTPS hosts, size/time/retry limits), adapters that build URLs from hard-coded hosts and normalize items (no database access), and the shared pipeline that applies the source's scope, dedupes, persists, evaluates, closes, and records runs |
+| Persistence helpers | `repositories.py` | Load the profile/opportunity, build the evaluation context (eligibility inputs + fit profile input from manual/verified facts), evaluate eligibility and fit together and save (forced, only when a fingerprint changed, or as one batched catalog pass), latest evaluation |
+| Domain | `profile/education.py`, `opportunities/eligibility/`, `opportunities/scoring/` | Pure: temporal education resolver, eligibility rules v1 (unchanged since Milestone 1), and fit scoring v1 (`config.py` holds every weight/threshold/alias; `text.py` the lexical matcher; `engine.py` the six components). Scoring never reads eligibility, and adapters never score |
 | ORM | `models/` | Tables ([data-model.md](data-model.md)) |
 | CLI | `cli.py` | `create-owner`, `set-password` (the only way to create or change credentials); `sync-sources`, `sync-source` (the same pipeline as the API) |
 
@@ -40,17 +40,17 @@ Browser ── same origin ──► Vite dev server (localhost:5173)
 
 **Errors.** FastAPI's standard shape: `{"detail": "message"}` or, for `422`, `{"detail": [{"loc", "msg", "type"}]}` without the echoed input. Integrity conflicts → `409`; anything unexpected → `500 {"detail": "Internal server error."}` (logged server-side). Details: [ADR-007 §9](decisions/ADR-007-single-user-auth-and-private-api.md#9-api-error-model).
 
-**Automatic evaluation.** Creating or updating an opportunity (by hand or by a sync) appends an evaluation when a profile exists and the eligibility inputs changed, compared by a SHA-256 input fingerprint, so repeated syncs don't grow the history ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion)). Without a profile, the opportunity is saved and reported as not evaluated. Saving the profile re-evaluates every opportunity, synchronously and in the same transaction, when a field that eligibility reads changed (the fields of `ProfileInput`: education timeline, date of birth, citizenships). `POST /api/opportunities/{id}/evaluate` appends one on demand. Application tracking never triggers evaluation.
+**Automatic evaluation.** Every evaluation row carries eligibility and fit. Creating or updating an opportunity (by hand or by a sync) appends one when a profile exists and the eligibility or fit inputs changed, compared by two SHA-256 fingerprints, so repeated syncs don't grow the history ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion), [ADR-010 §8](decisions/ADR-010-fit-scoring-v1.md#8-persistence-and-fingerprints)). Without a profile, the opportunity is saved and reported as not evaluated. Saving the profile with a changed eligibility field (the fields of `ProfileInput`: education timeline, date of birth, citizenships), or saving the Match Profile, runs one synchronous catalog pass in the same transaction: latest fingerprints in one query, opportunities in keyset batches of 200, unchanged pairs skipped ([operations.md](operations.md#evaluation-history-and-re-evaluation-implemented-not-scheduled) has timings). `POST /api/opportunities/{id}/evaluate` appends one on demand. Application tracking never triggers evaluation.
 
 ### Frontend (`frontend/src/`)
 
 | Area | Location |
 |---|---|
-| Routing | `App.tsx` (react-router): `/login`, `/profile`, `/opportunities` (paginated; filters in the URL query), `/opportunities/new`, `/opportunities/:id`, `/opportunities/:id/edit` (also the requirement review for imported opportunities), `/sources` |
+| Routing | `App.tsx` (react-router): `/login`, `/profile` (Eligibility Profile), `/profile/match` (Match Profile), `/opportunities` (paginated; filters and sort in the URL query, recommended by default), `/opportunities/new`, `/opportunities/:id`, `/opportunities/:id/edit` (also the requirement review for imported opportunities), `/sources` |
 | Auth state | `auth/` context from `GET /api/auth/session`. `RequireAuth` redirects to `/login` (a UX convenience; the API enforces access). An auth generation counter drops a session check that resolves after a newer login/logout/session loss. Logout clears local state only once the server confirms it (`204`, or `401` = already invalid); otherwise the user stays signed in and sees an error ([ADR-007 §3](decisions/ADR-007-single-user-auth-and-private-api.md#3-opaque-server-side-sessions)) |
 | API client | `api/client.ts` (the only `fetch` caller): relative `/api` URLs, same-origin credentials, Zod validation (`api/schemas.ts`), central `401` handling, `X-CSRF-Token` on mutations, CSRF token in memory only |
 | Pages / components | `pages/`, `components/` (presentation only) |
-| Wording | `lib/labels.ts`, `lib/eligibility.ts` rephrase stored rule results in plain language. They never re-evaluate |
+| Wording | `lib/labels.ts`, `lib/eligibility.ts` rephrase stored rule results in plain language. They never re-evaluate. `components/WhyThisMatch.tsx` shows the stored fit breakdown; the frontend never computes a score |
 
 Nothing is stored in `localStorage`, `sessionStorage`, or IndexedDB.
 
@@ -64,7 +64,13 @@ opportunities + requirements ──► evaluate_eligibility ──► opportunit
 profile_sources ─► profile_facts    │ (facts are not read by eligibility)
 opportunity_source_records          ▼
                            resolve_education_status
+
+profiles (fit preferences) + manual/verified profile_facts ─┐
+opportunities ──────────────────────────────────────────────┴► score_fit ──► same evaluation row
+                                                                              (fit_score, score_breakdown)
 ```
+
+Ranking (`sort=recommended`): eligibility bucket, then `fit_score` (none last), then posted date, first seen, and ID.
 
 ### Public/private boundary
 

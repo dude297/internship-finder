@@ -99,6 +99,8 @@ With `DATABASE_URL` set as in step 1: `python -m app.cli create-owner --username
 
 Milestone 3.5 was validated before merge by switching the Render service's branch to `feature/hosted-deployment-foundation` (auto-deploy stayed off) and deploying manually; Vercel production was deployed from a clean checkout of that branch. After the PR is merged: switch Render's branch back to `main`, deploy `main` on Render, and redeploy Vercel production from `main`. Done on 2026-09-29 for `d78b93d` (PR #7). The rebase merge rewrote the branch SHAs cited on this page: `36b9896` → `03e86c7`, `65964c6` → `17e5877`, `3563021` → `680c2b7`, `3ab655f` → `6eaaed6`.
 
+Milestone 4 is **not** validated this way: it stays off production until its PR is reviewed. Its release closeout, after approval: migrate Neon to `b41e7c9d2f60` (additive; existing boards get scope `all`, existing evaluations keep NULL fit), deploy `main` on Render and Vercel, then run the hosted smoke. Existing evaluations get fit scores on the first Match Profile save (one catalog pass; ~1–2 s locally for ~1,100 opportunities); until then the recommended order is eligibility, then newest.
+
 The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `.gitignore` and writes an `.env.local` (a short-lived OIDC token), so the deployment reports `gitDirty`. Both stay out of the build; delete `.env.local` and the checkout afterwards.
 
 ## Rollback

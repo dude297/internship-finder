@@ -4,7 +4,7 @@ A personal, single-user tool for finding internship and research opportunities, 
 
 **Intended user:** a single user (the repository owner). It's still being built to production standards.
 
-> ⚠️ **Status: hosted deployment foundation (Milestone 3.5, in review).** Milestone 3 is merged; a private hosted deployment (Vercel → Render → Neon, [docs/deployment.md](docs/deployment.md)) runs from the review branch. Log in, keep a private profile, sync a broad internship feed and any Greenhouse or Lever company boards you add, browse and filter the imported postings with their source and freshness, review an imported posting's requirements, see eligibility evaluated automatically with plain-language explanations, and track applications. Sync runs only when you ask (Sources page or CLI); there's no scheduler. There is no résumé parsing, no AI, no automatic requirement extraction, and no fit scoring. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
+> ⚠️ **Status: profile intelligence and fit ranking v1 (Milestone 4, in review).** Milestone 3.5 is merged and deployed (Vercel → Render → Neon, [docs/deployment.md](docs/deployment.md)). Log in, keep a private eligibility profile and a Match Profile (skills, courses, projects, interests, location and schedule preferences), sync a broad internship feed and any Greenhouse or Lever company boards you add (internship postings only by default), and browse opportunities in recommended order: eligibility first, then a deterministic fit score with a "Why this match?" breakdown. Review an imported posting's requirements, see eligibility evaluated automatically with plain-language explanations, and track applications. Sync runs only when you ask; there's no scheduler. There is no résumé upload or parsing, no AI, and no automatic requirement extraction. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
 
 ## Stack
 
@@ -70,7 +70,7 @@ The backend's example file is [`backend/.env.example`](backend/.env.example) (it
 | [docs/deployment.md](docs/deployment.md) | Deployment process |
 | [docs/data-model.md](docs/data-model.md) | Database entities |
 | [docs/eligibility.md](docs/eligibility.md) | Eligibility rules |
-| [docs/scoring.md](docs/scoring.md) | Fit scoring model |
+| [docs/scoring.md](docs/scoring.md) | Fit scoring v1: components, weights, coverage, ranking |
 | [docs/sources.md](docs/sources.md) | Opportunity source registry |
 | [docs/operations.md](docs/operations.md) | Runtime operations and monitoring |
 | [docs/decisions/](docs/decisions/) | Architecture decision records |
