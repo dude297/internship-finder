@@ -110,7 +110,6 @@ Open:
 
 - the per-client throttle key bug ([Known Bugs](#known-bugs)): needs a diagnostic deploy and a fix
 - deploy `65964c6` (board-link fix) to Render; session survival across that redeploy
-- session return after a cold start
 - one Greenhouse/Lever board (optional; none chosen)
 - the hosted profile is **synthetic** (location "SYNTHETIC TEST PROFILE - replace"): replace it with the real one when ready (its 2,110 evaluation rows stay as history)
 
@@ -126,7 +125,7 @@ After merge: switch Render's branch back to `main`, deploy `main`, and redeploy 
 - The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. The global cap lets a distributed attacker lock the owner out for up to 15 minutes (accepted).
 - Profile re-evaluation is synchronous and re-evaluates every opportunity (~4 s for ~1,100 opportunities locally; ~10 s for 1,055 opportunities hosted). Batching/background work is proposed for Milestone 4 ([operations.md](docs/operations.md)).
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
-- Render Free cold starts take about 3 minutes; meanwhile Vercel returns `502` and the UI shows the waking state.
+- Render Free cold starts take about 1–3 minutes (measured 73 s and ~3 min); Vercel either holds the request or returns `502`, which the UI shows as the waking state. Sessions survive the restart.
 - No database backups beyond Neon Free's short restore window.
 - Direct ATS boards import every published posting (not only internships); they're typed `other` unless a structured field says internship.
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
