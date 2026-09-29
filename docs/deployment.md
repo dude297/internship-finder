@@ -136,7 +136,8 @@ Run after every deploy. Results of the first hosted validation (2026-09-28) are 
 | Credential-bearing / custom-port board links | `https://user:pw@boards.greenhouse.io/x`, `https://jobs.lever.co:8443/x` | Accepted (`201`) by `3ab655f`; only the board name was kept and nothing was fetched from them. Fixed in `65964c6` (now `422`), **not yet deployed**. The two probe sources were deleted |
 | Per-client `429` through Vercel | 11 wrong logins, each with a different forged `X-Forwarded-For` | **Failed:** all `401`. See the known bug below |
 | Database after the first sync | Aggregate queries only | 13 MB; 1,055 opportunities, 1,055 source records, 2,110 evaluations, 2 runs |
-| **Open:** session survives a Render redeploy; session returns after a cold start; one Greenhouse/Lever board | | Not yet run (needs a production deploy approval / idle time / a board chosen by the owner) |
+| Session after a cold start | Idle > 15 min, then a session check through Vercel | Render restarted; `200` after 73 s; still authenticated as the owner |
+| **Open:** session survives a Render redeploy; one Greenhouse/Lever board | | Not yet run (needs deploy approval / a board chosen by the owner) |
 
 **Known bug (open): the per-client login-throttle key can be forged through Vercel.** On 2026-09-29, 11 wrong logins through Vercel, each with a different client-supplied `X-Forwarded-For`, all got `401` (no `429`). Render's logs show that for some requests the leftmost `X-Forwarded-For` entry was the forged value and for others the real client address: Vercel doesn't consistently overwrite the header on external rewrites, contrary to ADR-009 §6's assumption. The global cap (50 failures per 15 minutes) and the direct-path shared bucket still hold, so total password guessing stays bounded. Fixing it needs the exact header chain Render receives, which means a short diagnostic deploy, and then either keying on a Vercel-controlled position or header, or one shared bucket for all proxied logins.
 
@@ -144,7 +145,7 @@ Global failed-login cap (50 per 15 minutes) is covered by unit tests only: a hos
 
 ## Cold Starts
 
-Render Free sleeps after about 15 minutes without traffic. Observed 2026-09-28: the first proxied request arrived about 07:25 UTC, Render started the process at 07:27:46, and uvicorn was ready at 07:28:10, so the wake took **about 3 minutes**. Meanwhile Vercel answered `502` (`text/plain`, `ROUTER_EXTERNAL_TARGET_ERROR`). The frontend treats any non-`401` failure of the session check (network error, 5xx, non-JSON) as "server waking up", retries automatically (backoff over about a minute, each attempt also waiting on Vercel's upstream timeout), then offers **Retry**. It never treats it as a logout. No keep-alive pings, by design.
+Render Free sleeps after about 15 minutes without traffic. Observed 2026-09-28: the first proxied request arrived about 07:25 UTC, Render started the process at 07:27:46, and uvicorn was ready at 07:28:10, so the wake took **about 3 minutes**. Meanwhile Vercel answered `502` (`text/plain`, `ROUTER_EXTERNAL_TARGET_ERROR`). A second test on 2026-09-29 (Render slept at 00:53:48 UTC, request at about 01:09:33): the process started at 01:10:28 and was ready at 01:10:44. Vercel held that first request and returned `200` after **73 s**, and the existing session was still authenticated (sessions are database rows, so they survive restarts). Wake time varies from about 1 to 3 minutes. The frontend treats any non-`401` failure of the session check (network error, 5xx, non-JSON) as "server waking up", retries automatically (backoff over about a minute, each attempt also waiting on Vercel's upstream timeout), then offers **Retry**. It never treats it as a logout. No keep-alive pings, by design.
 
 ## Scheduling
 
