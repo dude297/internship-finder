@@ -47,7 +47,8 @@ Last reviewed: 2026-09-27.
 - **Source name / key:** `greenhouse:<board token>`; added on the Sources page from a board link (`https://boards.greenhouse.io/<board>` or `https://job-boards.greenhouse.io/<board>`) or a bare token
 - **Stable ID:** the job `id`; identity `greenhouse:<board>:<id>` plus the canonical `absolute_url`
 - **Mapped:** `title`, the configured organization name, `content` (entity-escaped HTML → plain text), `location.name`, `absolute_url`, `first_published` → posted date. `updated_at` is stored as the source update time and is never used as a posting date. Departments, offices, metadata, and the rest stay in the raw payload
-- **Type:** `other`. The API has no reliable internship flag, so a board imports all its published postings
+- **Type:** `other`. The API has no reliable internship flag
+- **Scope:** **Internships only** by default (title filter, below); **All postings** imports every published posting
 - **Completeness check:** `meta.total` must equal the number of jobs
 
 ### Lever sites
@@ -55,6 +56,16 @@ Last reviewed: 2026-09-27.
 - **Source name / key:** `lever:<global|eu>:<site>`; added from `https://jobs.lever.co/<site>` (global), `https://jobs.eu.lever.co/<site>` (EU), or a site name plus region
 - **Stable ID:** the posting `id`; identity `lever:<region>:<site>:<id>` plus the canonical `hostedUrl`
 - **Mapped:** `text` → title, the configured organization name, `description` + `lists` + `additional` (HTML → plain text), `categories.allLocations`/`location`, `hostedUrl`, `workplaceType` (`onsite`/`remote`/`hybrid`; anything else → unknown), `createdAt` → posted date, and `categories.commitment` containing "intern" → internship (otherwise other)
+- **Scope:** **Internships only** by default (title filter, below); **All postings** imports every published posting
+
+### Board scope: internships only (Greenhouse and Lever)
+
+Adding a company board shouldn't flood the catalog with full-time jobs ([ADR-010 §10](decisions/ADR-010-fit-scoring-v1.md#10-ats-scope-internships-only-by-default)). Each Greenhouse/Lever source has a scope, chosen when it's added and changeable on the Sources page:
+
+- **Internships only** (default): a posting is kept only when its **title** contains, as a whole word (case- and Unicode-normalized), `intern`, `interns`, `internship(s)`, `co-op(s)`, `co op`, `coop(s)`, `apprentice(s)`, or `apprenticeship(s)`. Descriptions are never searched, because full-time postings often mention internship programs. `student`, `new grad`, `junior`, and `entry level` don't count. Limitations: an internship titled without those words is filtered, and a title such as "Internship Program Manager" is kept; choose **All postings** for boards where that matters.
+- **All postings:** everything the board publishes.
+
+Excluded postings count as **Filtered** in the run (`fetched` = provider items, `filtered` = excluded by scope, `normalized` = admitted to the pipeline) and are never processed. Changing the scope clears the source's `ETag`/`Last-Modified`, so the next sync fetches the full board instead of accepting a `304`: switching to internships-only closes previously imported postings that are now filtered (through the normal closure rule; nothing is deleted), and switching back reopens them. Items that fail validation have no trustworthy title, so they stay invalid (making the run partial) rather than filtered. Boards added before Milestone 4 were migrated to **All postings**, so the upgrade itself never closes anything. The built-in discovery feed is internship-focused already and is always **All postings**.
 
 ### Manual entry
 
@@ -65,6 +76,7 @@ Opportunities added through the app keep a `manual` source record without an ext
 - **Network safety:** HTTPS to the four allowlisted API hosts only, public addresses only, 5 s connect / 20 s read timeouts, ≤ 3 redirects (each re-checked), ≤ 20 MB responses, ≤ 3 attempts (429/5xx/timeouts; `Retry-After` honored up to 30 s), a descriptive `User-Agent`. User-entered links are parsed into identifiers and never requested.
 - **Deduplication:** same source + external ID first, then exact identifiers; no fuzzy matching. Conflicting identities are recorded as errors and nothing is merged ([ADR-008 §7](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#7-deduplication-order)).
 - **Failure behavior:** fetch, format, and completeness failures fail the run without changing data. One bad item makes the run `partial` and is recorded; other items still import. Only a complete successful snapshot closes postings it no longer contains. Closed postings reopen if they return.
+- **Fit:** adapters never score. Imported postings are scored by the shared evaluation step like any other opportunity ([scoring.md](scoring.md)); feed hints such as sponsorship, H-1B counts, or skill tags stay discovery metadata in the raw payload and affect neither eligibility nor fit.
 - **Requirements:** imported opportunities start `unassessed` (so at least `needs_verification`) until the owner reviews them. Nothing in a source becomes a hard requirement automatically.
 - **Descriptions:** stored and displayed as plain text only. The original posting link is always kept.
 

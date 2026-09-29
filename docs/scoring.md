@@ -1,36 +1,111 @@
 # Fit Scoring
 
-Scoring is **versioned behavior**. Status: **Planned v1, not implemented.**
+Scoring is **versioned behavior**. Status: **v1 implemented** (Milestone 4, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)).
 
 ## Principles
 
-- Eligibility is evaluated **before** fit ranking ([ADR-001](decisions/ADR-001-separate-eligibility-and-fit.md)).
-- Ineligible opportunities must never outrank eligible ones because of fit score. Rank by eligibility status first, then by fit.
-- Weights should eventually live in **one** configurable location, not scattered through code.
-- Every evaluation record stores the `scoring_version` that produced it.
-- v1 scoring is deterministic and works without AI or any paid API: rules, structured profile data, and keyword/semantic logic that needs no paid service ([ADR-003](decisions/ADR-003-ai-as-enrichment.md), [ADR-004](decisions/ADR-004-technology-stack.md)). AI or local-model signals may be added later as optional inputs.
-- Profile facts carry provenance ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Scoring should distinguish user-stated or user-verified facts from unverified AI-inferred ones, for example by weighting unverified facts lower. The exact treatment is decided when components are defined.
+- **Fit is not eligibility** ([ADR-001](decisions/ADR-001-separate-eligibility-and-fit.md)). Eligibility asks "may I apply?"; fit asks "how well does this posting match me?". Fit never reads or changes an eligibility result, and eligibility never reads fit.
+- **Eligibility first.** The recommended order is eligibility bucket first (`eligible`, `needs_verification`, `ineligible`, then not evaluated) and fit only inside a bucket. An ineligible posting with fit 100 ranks below an eligible posting with fit 1.
+- **One canonical location.** `backend/app/opportunities/scoring/config.py` holds `SCORING_VERSION`, the weights, the alias dictionary, stop words, and every threshold. The backend is authoritative; the frontend only displays stored results.
+- **Deterministic.** No AI, embeddings, randomness, network, or paid service ([ADR-003](decisions/ADR-003-ai-as-enrichment.md), [ADR-004](decisions/ADR-004-technology-stack.md)). Same inputs, same score.
+- **Unknown is never a match.** A component without evidence scores 0 and is marked missing; coverage shows how much of the score could be measured.
+- **Provenance.** v1 reads only facts the owner entered or verified. Unverified inferred facts (none exist yet) are ignored until a later version decides how to weight them ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
 
-## Planned v1 Weights
+## Inputs
 
-| Component | Weight |
-|---|---|
-| Technical match | 35% |
-| Academic match | 20% |
-| Project/research match | 15% |
-| Interest match | 10% |
-| Location/schedule match | 10% |
-| Opportunity quality | 10% |
-| **Total** | **100%** |
+**Match Profile** (`GET`/`PUT /api/profile/match`, the Profile → Match Profile page):
 
-The exact definition of each component score (inputs, 0–1 or 0–100 scale, handling of missing data) is TBD during implementation and must be documented here when decided.
+| Input | Stored as | Scores in |
+|---|---|---|
+| Skills | `profile_facts` (`skill`, manual, verified) | Technical |
+| Courses | `profile_facts` (`course`) | Academic |
+| Projects, research | `profile_facts` (`project`, `research`) | Projects / research |
+| Activities, experience | `profile_facts` (`activity`, `experience`) | Shown only (not scored in v1) |
+| Interests | `profiles.interests` | Interests |
+| Preferred locations, remote preference, availability | `profiles` columns | Location / schedule |
+
+**Posting:** title, organization, description, location, remote mode, application deadline, start and end dates, posted date, application URL, requirements-assessment status.
+
+## v1 Components
+
+Each component scores an integer 0–100. `fit = round_half_up(Σ score × weight / 100)`, computed in integers; every ratio also rounds half up (never Python's banker's rounding).
+
+| Component | Weight | Rule | Missing when |
+|---|---:|---|---|
+| Technical | 35 | `100 × matched / usable` skills; a skill matches when its words (or an alias) appear contiguously in title + description | no skills |
+| Academic | 20 | per course: title (or alias) appears = 2 points; every informative word of the title appears = 1 point; `100 × points / (2 × courses)` | no courses |
+| Projects / research | 15 | strongest item's shared informative keywords with title + description, `100 × min(shared, 5) / 5` | no projects or research |
+| Interests | 10 | `100 × matched / usable` over title + organization + description | no interests |
+| Location / schedule | 10 | mean of the known *place* and *schedule* sub-scores (below) | no preference, locations, or availability (profile); neither sub-score known (posting) |
+| Opportunity quality | 10 | description ≥ 200 characters 25, application URL 20, deadline 20, start date 15, posted date 10, requirements reviewed (`partial`/`complete`) 10 | never |
+
+**Place** = the lower of the known values of:
+
+- work mode (preference × posting mode):
+
+  | Preference | remote | hybrid | onsite |
+  |---|---:|---:|---:|
+  | Remote only | 100 | 50 | 0 |
+  | Prefer remote | 100 | 75 | 50 |
+  | Prefer hybrid | 75 | 100 | 75 |
+  | Prefer on-site | 50 | 75 | 100 |
+  | No preference | 100 | 100 | 100 |
+
+- location (not for remote postings): 100 if a preferred location's first comma-separated part or whole text appears as a phrase in the posting location, else 0. No geocoding.
+
+**Schedule** (needs availability and the posting's start date): wholly inside availability 100, partial overlap 50, no overlap 0; start date only: 50 if it falls inside availability, else 0. No start date → unknown.
+
+### Text matching
+
+Unicode NFKC, case folding, and a tokenizer that keeps `c++`, `c#`, `.net`, and `node.js` while treating hyphens, slashes, and other punctuation as word breaks. Phrases match contiguously and never across fields. Aliases (one small table): `js`/`javascript`, `ts`/`typescript`, `ml`/`machine learning`, `ai`/`artificial intelligence`, `postgres`/`postgresql`, `k8s`/`kubernetes`, `nlp`/`natural language processing`, `aws`/`amazon web services`, `react`/`reactjs`/`react.js`, `node.js`/`nodejs`, `.net`/`dotnet`, `golang`/`go lang`. Informative words drop English stop words, generic job words (projects), and course filler such as `intro`, `advanced`, `ap`, and roman numerals (courses).
+
+## Coverage and Breakdown
+
+`coverage` = the sum of the weights of evaluated components (at least 10, since quality needs no profile). A 30 with coverage 100 is a poor match; a 30 with coverage 25 mostly means the Match Profile is empty.
+
+Each evaluation stores `score_breakdown` (JSON, validated by `ScoreBreakdown`):
+
+```json
+{
+  "scoring_version": "v1",
+  "score": 74,
+  "coverage": 90,
+  "components": {
+    "technical": {
+      "score": 67, "weight": 35, "missing": false, "missing_input": null,
+      "reason": "Matched 2 of 3 skills: Python, SQL.",
+      "matched": ["Python", "SQL"], "unmatched": ["Rust"], "details": null
+    }
+  }
+}
+```
+
+`missing_input` is `profile` or `opportunity` for a missing component. List responses carry `fit_score`, `scoring_version`, `fit_coverage`, and per-component `{score, weight, missing}`; detail carries the full breakdown ("Why this match?").
+
+## When Scores Change
+
+Evaluations are history ([ADR-006](decisions/ADR-006-core-domain-persistence-model.md)): every new row carries eligibility and fit. Automatic evaluation appends a row only when the eligibility fingerprint or the fit fingerprint differs from the latest row's. The fit fingerprint hashes `SCORING_VERSION`, the fit profile inputs, and the posting fields above, never timestamps such as `updated_at`/`last_seen_at` or IDs. So:
+
+- a Match Profile save runs one catalog pass and rescores only opportunities whose inputs changed (none when nothing changed; activities and experience don't score);
+- a posting edit or sync update rescores that posting only if a fit or eligibility input changed;
+- a sync that only refreshes `last_seen_at`/validators appends nothing;
+- **Re-evaluate** on an opportunity always appends a row.
+
+Evaluations from before v1 have NULL fit fields; the first catalog pass after the upgrade (any Match Profile save) fills them in. Until then, the recommended order falls back to eligibility bucket, then newest.
+
+## Known Limitations (v1)
+
+- Lexical only: synonyms outside the alias table don't match, and a skill that's also an ordinary word (for example `Go`) can match unrelated text. The breakdown shows the evidence, so such matches are visible.
+- Location matching is plain text: "Bay Area" doesn't match "San Jose".
+- Activities and experience don't score.
+- Scores reflect the posting text the sources provide; short or truncated descriptions match less.
 
 ## Version History
 
 | Version | Status | Date | Notes |
 |---|---|---|---|
-| v1 | Planned | — | Initial weights above. |
+| v1 | Implemented | 2026-09-29 | Weights 35/20/15/10/10/10, rules above ([ADR-010](decisions/ADR-010-fit-scoring-v1.md)). |
 
 ## Maintenance
 
-Any change to weights or component definitions bumps the version and updates this file. Old evaluations keep their original version so results stay comparable.
+Any change to a weight, rule, threshold, alias, or stop word bumps `SCORING_VERSION` and updates this file and ADR-010 (or a successor ADR). Stored evaluations keep their version, so results stay comparable.

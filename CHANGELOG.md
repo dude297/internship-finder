@@ -6,6 +6,22 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Milestone 4: Match Profile, fit scoring v1, eligibility-first ranking, and internships-only board scope ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), [docs/scoring.md](docs/scoring.md)).
+  - Migration `b41e7c9d2f60`: `profiles` fit preferences (`interests`, `preferred_locations`, `remote_preference`, `availability_start`/`end` with an end-after-start CHECK); nullable `fit_score` (0–100), `score_breakdown`, `scoring_version`, `fit_input_fingerprint` on `opportunity_evaluations` (all set or all NULL); `ingestion_sources.scope` (`all` / `internships_only`; existing sources backfilled `all`; the built-in feed must be `all`); `ingestion_runs.filtered_count`.
+  - Match Profile API (`GET`/`PUT /api/profile/match`): skills, courses, projects, research, activities, experience (manual, user-verified `profile_facts`), interests, preferred locations, remote preference, availability. One atomic save replaces only the facts it owns and runs one catalog pass. Input limits on counts and lengths.
+  - Deterministic fit scoring v1 (`app/opportunities/scoring/`): technical 35, academic 20, projects/research 15, interests 10, location/schedule 10, opportunity quality 10; integer half-up rounding; missing evidence scores 0 and is reported with `coverage`; lexical matching with a small alias table and punctuation-aware tokens (`c++`, `c#`, `.net`); explainable breakdown stored per evaluation.
+  - Every new evaluation carries eligibility and fit. Automatic evaluation appends a row only when the eligibility or fit fingerprint changed; profile and Match Profile saves run one batched catalog pass that skips unchanged opportunities (~2 s for 1,100 synthetic opportunities locally, 0.3 s when nothing changed).
+  - `GET /api/opportunities?sort=recommended`: eligible, needs verification, ineligible, not evaluated; fit inside each bucket; then posted date, first seen, ID. List items include the current fit score, coverage, and component summary; detail includes the full breakdown.
+  - Greenhouse/Lever boards default to **Internships only** (whole-word title filter: intern, internship, co-op, apprentice…); **All postings** keeps everything. Filtered items are counted, never processed. Changing scope clears the HTTP validators so the next sync applies it (closing or reopening postings).
+  - Frontend: Eligibility Profile / Match Profile tabs, Match Profile editor (chips and item lists, one save with a rescoring state and a waking-server message), fit badges with coverage next to eligibility, Recommended/Newest sort (recommended by default), "Why this match?" on the detail page, board scope controls and a Filtered count on the Sources page.
+  - `backend/scripts/perf_smoke.py`: manual performance smoke on a disposable database.
+  - Tests: scoring unit tests (components, boundaries, rounding, aliases, fingerprints), Match Profile and ranking API tests, scope ingestion/API tests, migration and constraint tests, Vitest for the new UI, and Playwright fit-ranking and board-scope scenarios.
+
+### Changed
+
+- An eligibility-relevant profile save no longer appends an evaluation for every opportunity; only opportunities whose inputs changed get one.
+- Editing an opportunity's title, organization, description, location, work mode, dates, or application URL now appends an evaluation (they are fit inputs).
+
 - Milestone 3.5: hosted deployment foundation ([ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md), runbook in [docs/deployment.md](docs/deployment.md)).
   - Migration `92a17353e5a8`: creates `uq_ingestion_runs_one_running_per_source` on databases migrated with the pre-merge `726372d627b8`; no-op on fresh databases; refuses (with a clear error) if duplicate `running` rows exist; the downgrade keeps the index.
   - Topology: Vercel Hobby (static build, same-origin `/api` rewrite) → Render Free (FastAPI, one instance, one worker) → Neon Free (PostgreSQL 18, direct endpoint). Manual migrations and deploys; no scheduler or keep-alive.

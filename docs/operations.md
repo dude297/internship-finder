@@ -23,7 +23,7 @@ Measured locally on 2026-09-27 against the live discovery feed (disposable datab
 
 ## Run Summaries (implemented)
 
-Every sync records an `ingestion_runs` row: status (`running`, `success`, `partial`, `failed`, `no_change`), start/finish time, the source's own snapshot time, and counts (fetched, normalized, created, updated, deduplicated, unchanged, closed, reactivated, invalid, errors). Up to 100 safe per-item errors are stored per run (stage, short code, message, source item ID). The Sources page shows each source's latest run; `GET /api/sources/{id}/runs` lists recent ones. Each finished run is also logged as one line with the source key and counts. No payloads, headers, or stack traces are stored or returned.
+Every sync records an `ingestion_runs` row: status (`running`, `success`, `partial`, `failed`, `no_change`), start/finish time, the source's own snapshot time, and counts (fetched, filtered by the source's scope, normalized, created, updated, deduplicated, unchanged, closed, reactivated, invalid, errors). Up to 100 safe per-item errors are stored per run (stage, short code, message, source item ID). The Sources page shows each source's latest run; `GET /api/sources/{id}/runs` lists recent ones. Each finished run is also logged as one line with the source key and counts. No payloads, headers, or stack traces are stored or returned.
 
 ## Failed and Partial Runs (implemented)
 
@@ -33,6 +33,10 @@ Every sync records an `ingestion_runs` row: status (`running`, `success`, `parti
 - Only one sync of a source can run at a time: a partial unique index allows one `running` run per source, so a concurrent second start gets "already syncing" (`409` from the API). Different sources can sync concurrently.
 - A run left `running` (e.g. the process stopped mid-sync) is marked `failed` by the next sync of that source after 15 minutes; until then that source reports "already syncing".
 - Retries: at most 3 attempts per request on timeouts, connection errors, 429, and 5xx, with short backoff. There's no alerting; check the Sources page.
+
+## Board Scope Changes (implemented)
+
+Switching a Greenhouse/Lever board between **Internships only** and **All postings** takes effect on its next sync: the change clears the HTTP validators, so that sync fetches the whole board, closes postings the new scope excludes, and reopens ones it admits again ([sources.md](sources.md#board-scope-internships-only-greenhouse-and-lever)). A partial run closes nothing, as always.
 
 ## Closed Postings (implemented)
 
@@ -50,11 +54,22 @@ Structured logs as described in [ENGINEERING_GUIDELINES.md §11](../ENGINEERING_
 
 `app.repositories` appends `opportunity_evaluations` rows with their rule results. Earlier rows are kept as history, and the latest `evaluated_at` is current. Evaluations run:
 
-- when an opportunity is created or updated by hand or by a sync (if a profile exists), **only if** its eligibility inputs changed since the latest evaluation (SHA-256 input fingerprint), so unchanged syncs and title-only edits add nothing
-- for **every** opportunity when the profile is saved with a changed eligibility input (education timeline, date of birth, citizenships), in the same transaction as the profile update
+- when an opportunity is created or updated by hand or by a sync (if a profile exists), **only if** its eligibility or fit inputs changed since the latest evaluation (two SHA-256 fingerprints, [ADR-010 §8](decisions/ADR-010-fit-scoring-v1.md#8-persistence-and-fingerprints)), so unchanged syncs and edits of other fields add nothing
+- in **one catalog pass** when the profile is saved with a changed eligibility input (education timeline, date of birth, citizenships) or the Match Profile is saved, in the same transaction; the pass appends rows only for opportunities whose inputs changed
 - on demand, always: `POST /api/opportunities/{id}/evaluate`
 
-Scaling note: profile re-evaluation is synchronous and proportional to the number of opportunities. With ~1,100 imported opportunities it took about 4 s locally (2026-09-27). Acceptable for a local single-user app; before hosted use or a much larger catalog, move it to batched or background re-evaluation (and consider evaluating only opportunities whose requirements read the changed fields). History still grows with every real input change; pruning is TBD.
+Every row since Milestone 4 carries eligibility and fit. Rows from before have NULL fit; the first Match Profile save after upgrading scores them (until then the recommended order falls back to eligibility, then newest).
+
+**Catalog pass performance** ([ADR-010 §9](decisions/ADR-010-fit-scoring-v1.md#9-catalog-re-evaluation-stays-synchronous)). The pass reads every latest fingerprint in one query, loads opportunities in keyset batches of 200 with their requirements, skips unchanged pairs, and flushes once per batch, so it issues a few dozen SQL statements regardless of catalog size. Measured 2026-09-29 (Windows, Docker PostgreSQL 18, local):
+
+| Operation | ~1,100 synthetic opportunities (`scripts/perf_smoke.py`) | 1,050 live discovery-feed postings (disposable DB) |
+|---|---|---|
+| First Match Profile save (scores everything) | 2.14 s, 32 SQL statements | 1.34 s |
+| Unchanged Match Profile save | 0.30 s, 17 statements | 0.16 s |
+| Changed Match Profile save | 2.25 s, 31 statements | 1.20 s |
+| Recommended list page (50) | 0.05 s, 5 statements | 0.06 s |
+
+The Milestone 3 path (a forced row per opportunity, one flush each) took ~4 s locally and ~10 s hosted for the same size. Batch size barely changes the time (50 to 1,100 all within noise) but bounds memory (traced peak ~9 MB at 50, ~13 MB at 200, ~33 MB unbatched), so 200 is kept. Hosted timings on Render Free/Neon are expected to be a few times the local ones, well under the proxy timeout; if a much larger catalog approaches it, background re-evaluation becomes a later-milestone requirement (no queue exists). Re-run with `PERF_DATABASE_URL=<disposable db> python scripts/perf_smoke.py` in `backend/`. History still grows with every real input change; pruning is TBD.
 
 Still not automatic: re-evaluation when the eligibility rules version changes, and when time passes an expected graduation or enrollment date (see Future Scheduled Jobs).
 
