@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from app.api.auth import DIRECT_CLIENT, PROXY_SECRET_HEADER, login_client_key
+from app.api.auth import DIRECT_CLIENT, PROXY_CLIENT, PROXY_SECRET_HEADER, login_client_key
 from app.core.config import get_settings
 from app.main import create_app
 
@@ -36,12 +36,19 @@ def hosted_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
 
 
 @pytest.mark.usefixtures("proxy_secret")
-def test_proxied_request_is_keyed_by_the_forwarded_client() -> None:
-    request = request_with(
-        x_if_proxy_secret=SECRET, x_forwarded_for="198.51.100.7, 203.0.113.1, 10.0.0.2"
-    )
-
-    assert login_client_key(request) == "proxy:198.51.100.7"
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"x_forwarded_for": "198.51.100.7, 203.0.113.1, 10.0.0.2"},
+        {"x_forwarded_for": "203.0.113.50"},  # forged, passed through by Vercel
+        {"x_vercel_forwarded_for": "203.0.113.51", "x_real_ip": "203.0.113.52"},
+    ],
+)
+def test_proxied_requests_share_one_key_whatever_their_address_headers(
+    headers: dict[str, str],
+) -> None:
+    assert login_client_key(request_with(x_if_proxy_secret=SECRET, **headers)) == PROXY_CLIENT
 
 
 @pytest.mark.usefixtures("proxy_secret")
@@ -63,11 +70,6 @@ def test_forwarded_headers_are_ignored_without_a_configured_secret() -> None:
     request = request_with(x_if_proxy_secret=SECRET, x_forwarded_for="198.51.100.7")
 
     assert login_client_key(request) == DIRECT_CLIENT
-
-
-@pytest.mark.usefixtures("proxy_secret")
-def test_proxied_request_without_forwarded_for_still_has_a_key() -> None:
-    assert login_client_key(request_with(x_if_proxy_secret=SECRET)) == "proxy:unknown"
 
 
 def test_proxy_secret_header_name() -> None:
