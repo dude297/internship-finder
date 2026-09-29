@@ -25,6 +25,7 @@ from app.ingestion.normalize import (
     SnapshotError,
     canonical_url,
     html_to_text,
+    is_internship_title,
     parse_timestamp,
 )
 from app.opportunities.eligibility.schemas import OpportunityInput, ProfileInput, RequirementInput
@@ -581,3 +582,41 @@ def test_fingerprint_ignores_requirement_order_and_ids_but_not_values() -> None:
     moved = OpportunityInput(start_date=date(2041, 6, 21))
     assert base != eligibility_fingerprint(profile, moved, [age, cit])
     assert base != eligibility_fingerprint(ProfileInput(), opportunity, [age, cit])
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Software Engineering Intern",
+        "Summer 2041 Internship - Robotics",
+        "Interns: Synthetic Data",
+        "Co-op, Hardware (Fall)",
+        "Co op Student",
+        "Engineering COOP",
+        "Mechanical Co-ops",
+        "Electrician Apprentice",
+        "Apprenticeship Program",
+        "INTERN – Synthetic Lab",
+        "Research Intern/Associate",
+    ],
+)
+def test_internship_titles(title: str) -> None:
+    assert is_internship_title(title)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Senior Software Engineer",
+        "Internal Tools Engineer",
+        "International Sales Manager",
+        "Cooperative Robotics Engineer",
+        "Co-operative Systems Lead",
+        "Student Success Manager",
+        "New Grad Software Engineer",
+        "Junior Data Analyst",
+        "Entry Level Technician",
+    ],
+)
+def test_non_internship_titles(title: str) -> None:
+    assert not is_internship_title(title)

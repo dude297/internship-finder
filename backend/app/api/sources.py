@@ -48,10 +48,20 @@ def create_source(body: SourceCreate, db: DbSession) -> SourceResponse | JSONRes
     return service.to_response(source, None)
 
 
-@router.put("/{source_id}")
-def update_source(source_id: uuid.UUID, body: SourceUpdate, db: DbSession) -> SourceResponse:
+@router.put("/{source_id}", response_model=SourceResponse)
+def update_source(
+    source_id: uuid.UUID, body: SourceUpdate, db: DbSession
+) -> SourceResponse | JSONResponse:
     source = _load(db, source_id)
-    service.update_source(source, body)
+    try:
+        service.update_source(source, body)
+    except ValueError as error:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={
+                "detail": [{"loc": ["body", "scope"], "msg": str(error), "type": "value_error"}]
+            },
+        )
     db.commit()
     return service.to_response(source, service.latest_runs(db).get(source.id))
 

@@ -7,6 +7,7 @@ untrusted: HTML becomes plain text, URLs must be http(s), and display fields are
 import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from html import unescape
@@ -160,6 +161,18 @@ def parse_timestamp(value: object) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo is not None else None
+
+
+# Whole-word internship/early-training titles (ADR-010 §10). Deliberately narrow: "student",
+# "new grad", "junior", and "entry level" don't count, and descriptions are never searched.
+_INTERNSHIP_TITLE = re.compile(
+    r"\b(?:interns?|internships?|co[- ]?ops?|apprentices?|apprenticeships?)\b"
+)
+
+
+def is_internship_title(title: str) -> bool:
+    text = " ".join(unicodedata.normalize("NFKC", title).casefold().split())
+    return _INTERNSHIP_TITLE.search(text) is not None
 
 
 def canonical_url(value: str | None) -> str | None:

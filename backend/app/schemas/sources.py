@@ -4,7 +4,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.enums import IngestionRunStatus, IngestionSourceKind, IngestionStage, SourceRegion
+from app.enums import (
+    IngestionRunStatus,
+    IngestionSourceKind,
+    IngestionStage,
+    SourceRegion,
+    SourceScope,
+)
 
 
 class SourceCreate(BaseModel):
@@ -19,15 +25,19 @@ class SourceCreate(BaseModel):
     board: str = Field(min_length=1, max_length=500)
     # Lever only; a jobs.eu.lever.co link implies EU. Defaults to global.
     region: SourceRegion | None = None
+    # Boards import internship titles only unless the owner asks for everything (ADR-010).
+    scope: SourceScope = SourceScope.INTERNSHIPS_ONLY
 
 
 class SourceUpdate(BaseModel):
-    """Only the name and the enabled flag change. The provider identifier never does."""
+    """The name, the enabled flag, and the scope change. The provider identifier never does.
+    Omitting `scope` keeps it; the built-in feed's scope is always `all`."""
 
     model_config = ConfigDict(extra="forbid")
 
     display_name: str = Field(min_length=1, max_length=200)
     enabled: bool
+    scope: SourceScope | None = None
 
 
 class RunErrorResponse(BaseModel):
@@ -51,6 +61,8 @@ class RunResponse(BaseModel):
     finished_at: datetime | None
     source_generated_at: datetime | None
     fetched_count: int
+    # Provider items excluded by the source's scope; normalized_count counts the admitted ones.
+    filtered_count: int
     normalized_count: int
     created_count: int
     updated_count: int
@@ -74,6 +86,7 @@ class SourceResponse(BaseModel):
     region: SourceRegion | None
     display_name: str
     enabled: bool
+    scope: SourceScope
     builtin: bool
     last_attempted_at: datetime | None
     last_success_at: datetime | None
