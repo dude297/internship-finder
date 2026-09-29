@@ -17,6 +17,10 @@ All notable changes to this project are documented here.
   - Frontend: an unreachable backend (network error, 5xx, non-JSON wake-up page) shows "server waking up" with bounded retries and a Retry button instead of logging out.
   - `frontend/vercel.json`; Python 3.12 and Node 24.x pinned for hosting and CI.
 
+### Fixed
+
+- Greenhouse and Lever board links with credentials (`user:pw@`) or an explicit port are rejected with `422` instead of being reduced to the board name.
+
 - Milestone 3: automated opportunity discovery and ingestion ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md)).
   - Migration `726372d627b8`: `ingestion_sources` (with the built-in "Tech Internship Discovery Feed"), `ingestion_runs`, `ingestion_run_errors`, `opportunity_identifiers`; `opportunities.posted_at` and `manually_curated_at`; source-record lifecycle (`ingestion_source_id`, `is_active`, `closed_at`, source dates, `content_hash`); `opportunity_evaluations.input_fingerprint`.
   - Automatic repair of development databases migrated with the pre-merge `7d7f4f8b9a3c` (restores `ck_profiles_graduation_after_status_as_of`; no manual SQL).

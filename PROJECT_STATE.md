@@ -3,7 +3,7 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-09-28
-Current Milestone: **Milestone 3.5 — Hosted Deployment Foundation** (implemented; deployed from the review branch; owner-login hosted checks open; see In Progress). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Milestone: **Milestone 3.5 — Hosted Deployment Foundation** (implemented; deployed from the review branch; hosted checks mostly done; one open security bug in the login throttle key; see In Progress and Known Bugs). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
 Current Production Version: `feature/hosted-deployment-foundation` (unmerged, deployed for validation) on https://internship-finder-pi.vercel.app
 Active Development Branch: `feature/hosted-deployment-foundation`. Remote: https://github.com/dude297/internship-finder
 
@@ -104,24 +104,27 @@ Done:
 - Vercel production deployed by CLI from a clean checkout; `PROXY_SHARED_SECRET` is Production-only and Sensitive; Git deployments disabled; Standard Deployment Protection on non-production URLs
 - Hosted checks passed: health, same-origin `/api`, API 404s (not the SPA), no slash redirect, SPA deep links, docs hidden, `no-store`, direct-path shared throttle bucket (forged `X-Forwarded-For` ignored), proxy secret accepted, non-production URLs SSO-protected, cold start (~3 min wake; Vercel `502` meanwhile, which the UI shows as waking)
 
-Open (need the owner's real login, which the owner deferred):
+Verified with the owner's login (2026-09-29): cookie attributes (host-only, `HttpOnly; Secure; SameSite=lax; Path=/`), CSRF (`403` without/with a wrong token, `200` with the valid one), first hosted sync (`success`, 1,055 created, 30.8 s) and second sync (`no_change`, 0.8 s), profile re-evaluation over 1,055 opportunities (9–10 s, synthetic profile), invalid source links rejected.
 
-- session cookie attributes on the Vercel host; CSRF `403` without the token and success with it; per-client `429` through Vercel
-- first hosted discovery sync (counts, time, Vercel timeout behavior) and a second sync; one Greenhouse/Lever board
-- profile re-evaluation timing over the imported catalog
-- invalid source links rejected over HTTP (validation is tested locally)
-- session survival across a Render redeploy
+Open:
+
+- the per-client throttle key bug ([Known Bugs](#known-bugs)): needs a diagnostic deploy and a fix
+- deploy `65964c6` (board-link fix) to Render; session survival across that redeploy
+- session return after a cold start
+- one Greenhouse/Lever board (optional; none chosen)
+- the hosted profile is **synthetic** (location "SYNTHETIC TEST PROFILE - replace"): replace it with the real one when ready (its 2,110 evaluation rows stay as history)
 
 After merge: switch Render's branch back to `main`, deploy `main`, and redeploy Vercel production from `main` ([deployment.md](docs/deployment.md#unmerged-branch-validation)).
 
 ## Known Bugs
 
-None known.
+- **Per-client login-throttle key is forgeable through Vercel** (found 2026-09-29, open). Vercel doesn't consistently overwrite a client-supplied `X-Forwarded-For` on the external rewrite, so the leftmost entry is sometimes attacker-controlled. The global 50-per-15-minutes cap and the direct-path shared bucket still bound guessing. Details and fix options: [deployment.md](docs/deployment.md#production-verification).
+- Board links with credentials or a port were accepted (reduced to the board name, never fetched). Fixed in `65964c6`; not yet deployed to Render.
 
 ## Known Technical Debt
 
 - The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. The global cap lets a distributed attacker lock the owner out for up to 15 minutes (accepted).
-- Profile re-evaluation is synchronous and re-evaluates every opportunity (~4 s for ~1,100 opportunities locally; hosted timing not yet measured). Batching/background work is proposed for Milestone 4 ([operations.md](docs/operations.md)).
+- Profile re-evaluation is synchronous and re-evaluates every opportunity (~4 s for ~1,100 opportunities locally; ~10 s for 1,055 opportunities hosted). Batching/background work is proposed for Milestone 4 ([operations.md](docs/operations.md)).
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
 - Render Free cold starts take about 3 minutes; meanwhile Vercel returns `502` and the UI shows the waking state.
 - No database backups beyond Neon Free's short restore window.
@@ -149,7 +152,7 @@ None known.
 
 ## Database State
 
-Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `92a17353e5a8` (`alembic check` clean), holds the owner account, and has an empty catalog (8.4 MB on 2026-09-28). Schema head: migration `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`, no new tables) on top of the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and `92a17353e5a8`, repairing the graduation constraint and the running-run index if needed.
+Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `92a17353e5a8` (`alembic check` clean), holds the owner account, and after the first hosted sync holds 1,055 opportunities (13 MB on 2026-09-29). Schema head: migration `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`, no new tables) on top of the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and `92a17353e5a8`, repairing the graduation constraint and the running-run index if needed.
 
 ## Current Scoring Version
 
@@ -181,7 +184,7 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Run the owner-login hosted checks ([In Progress](#in-progress)), then review and merge the Milestone 3.5 PR and restore Render to `main`. Milestone 4 (proposed: profile enrichment and fit scoring v1, with batched/background profile re-evaluation and an internships-only filter for Greenhouse/Lever) follows. Not started.
+Fix the forgeable per-client throttle key and deploy `65964c6` ([Known Bugs](#known-bugs)), finish the open hosted checks ([In Progress](#in-progress)), then review and merge the Milestone 3.5 PR and restore Render to `main`. Milestone 4 (proposed: profile enrichment and fit scoring v1, with batched/background profile re-evaluation and an internships-only filter for Greenhouse/Lever) follows. Not started.
 
 ## Recent Important Decisions
 
