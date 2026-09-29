@@ -3,7 +3,7 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-09-29
-Current Milestone: none in progress. Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7) and released from `main`. Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Milestone: **Milestone 4 — Profile Intelligence + Fit Ranking v1, in progress** on `feature/profile-intelligence-fit-ranking` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7) and released from `main`. Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
 Current Production Version: `main` at `d78b93d` on https://internship-finder-pi.vercel.app (Render and Vercel both deployed from it, 2026-09-29)
 Active Development Branch: `main`. Remote: https://github.com/dude297/internship-finder
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Plan Milestone 4 (not started).
+Milestone 4: Match Profile, deterministic fit scoring v1, eligibility-first ranking, and the internships-only ATS scope ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Production stays on `main` until the PR is reviewed.
 
 ## Status Summary
 
@@ -95,7 +95,7 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-None. Milestone 4 planning is next.
+Milestone 4 on `feature/profile-intelligence-fit-ranking`. Not deployed; production Neon is not migrated.
 
 ## Milestone 3.5 (complete; merged via PR #7)
 
