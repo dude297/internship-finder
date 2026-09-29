@@ -31,13 +31,14 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Source/profile strategy | **Selected** ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Opportunity ingestion implemented (ADR-008). No profile parsers. |
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
-| Opportunity ingestion | **Implemented, manual sync only** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`) |
+| Opportunity ingestion | **Implemented, manual sync only** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`); internships-only board scope on the Milestone 4 branch |
 | Eligibility | **Implemented** v1 (rules version `v1`), evaluated automatically (only when inputs change) |
+| Fit scoring and ranking | **Implemented on the Milestone 4 branch, in review** (scoring `v1`, [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`). Not deployed |
 | Application tracking | **Implemented** |
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local) |
-| Next milestone | Milestone 4 (proposed, not started; planning next) |
+| Next milestone | Milestone 4 in review (PR open; not merged, not deployed). Milestone 5 not started |
 
 ### Selected stack
 
@@ -47,7 +48,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Frontend hosting | Vercel Hobby | — | **Yes** (project `internship-finder`, `internship-finder-pi.vercel.app`) |
 | Backend | Python 3.12+, FastAPI, Pydantic, pwdlib (Argon2id), httpx2 (ingestion HTTP) | Yes (`backend/`) | — |
 | Backend hosting | Render Free Web Service | — | **Yes** (`internship-finder-api`, Oregon, connected to Neon, auto-deploy off) |
-| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (4 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `92a17353e5a8`, owner created, 1,055 opportunities) |
+| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (5 migrations on the Milestone 4 branch; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `92a17353e5a8`, owner created, 1,055 opportunities) |
 | CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`: frontend, backend, e2e jobs; PR/push only; no scheduled jobs) | Running on GitHub |
 | End-to-end | Playwright (Chromium) | Yes (`frontend/e2e/`) | — |
 
@@ -95,7 +96,26 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 4 on `feature/profile-intelligence-fit-ranking`. Not deployed; production Neon is not migrated.
+Milestone 4 review (below). Production is unchanged.
+
+## Milestone 4 (implemented; PR open, in review)
+
+Profile Intelligence + Fit Ranking v1 on `feature/profile-intelligence-fit-ranking` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), [scoring.md](docs/scoring.md)). **Not merged, not deployed; production Neon is not migrated.** The release closeout after approval: migrate Neon to `b41e7c9d2f60`, deploy `main` on Render and Vercel, hosted smoke ([deployment.md](docs/deployment.md#unmerged-branch-validation)).
+
+Implemented:
+
+- migration `b41e7c9d2f60`: `profiles` fit preferences; nullable fit columns on `opportunity_evaluations` (all set or all NULL); `ingestion_sources.scope` (existing sources backfilled `all`; the built-in feed must be `all`); `ingestion_runs.filtered_count`
+- Match Profile (`GET`/`PUT /api/profile/match`): manual, user-verified `profile_facts` (skills, courses, projects, research, activities, experience) plus interests, preferred locations, remote preference, availability; one atomic save that replaces only its own facts and runs one catalog pass
+- deterministic fit scoring v1 (six components, weights 35/20/15/10/10/10, half-up integer rounding, missing = 0 with `coverage`, lexical matcher with a small alias table), breakdown stored per evaluation
+- eligibility + fit on every new evaluation; fingerprint-based skipping for both; batched catalog pass (keyset batches of 200)
+- `sort=recommended` (eligibility bucket, then fit, then posted/first seen/ID), fit summary on list items, full breakdown on detail
+- internships-only title filter for Greenhouse/Lever (default), All postings override, filtered counts, validator reset on scope change (closes/reopens through normal closure)
+- UI: Eligibility/Match Profile tabs, Match Profile editor, fit badges with coverage, Recommended/Newest sort, "Why this match?", board scope controls and Filtered counts
+- `backend/scripts/perf_smoke.py`
+
+Validation (2026-09-29, local): backend 537 tests (286 unit + 251 PostgreSQL), frontend 63 Vitest tests, Playwright 4 scenarios passing twice on the same reused database, ruff/format/pyright/ESLint/Prettier/tsc/build clean, `git diff --check` clean, migration base → head → `92a17353e5a8` → head → base → head with `alembic check`. Performance (1,100 synthetic): first Match Profile save 2.14 s, unchanged 0.30 s, changed 2.25 s, recommended page 0.05 s ([operations.md](docs/operations.md#evaluation-history-and-re-evaluation-implemented-not-scheduled)). Live smoke on a disposable database (discovery feed): 1,050 created in 20.3 s, Match Profile save 1.34 s, second sync `no_change`. GitHub Actions status is recorded in the PR.
+
+Not implemented (by design): résumé upload/parsing, OCR, AI or embeddings, background jobs or queues, scheduled sync, notifications.
 
 ## Milestone 3.5 (complete; merged via PR #7)
 
@@ -130,11 +150,13 @@ None open. Fixed during hosted validation (2026-09-29):
 ## Known Technical Debt
 
 - The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. All logins through the site share one bucket, so anyone's 10 failed attempts block new logins for up to 15 minutes (accepted; no trustworthy per-browser address exists behind Vercel's rewrite).
-- Profile re-evaluation is synchronous and re-evaluates every opportunity (~4 s for ~1,100 opportunities locally; ~10 s for 1,055 opportunities hosted). Batching/background work is proposed for Milestone 4 ([operations.md](docs/operations.md)).
+- Catalog re-evaluation (profile or Match Profile save) is synchronous in the request. Milestone 4 batches it and skips unchanged pairs (~2 s for 1,100 opportunities locally when everything changes); hosted timing is unmeasured until the release. A much larger catalog would need background re-evaluation ([operations.md](docs/operations.md)).
+- Fit v1 is lexical: synonyms outside the alias table don't match, and a skill that's also a common word (e.g. `Go`) can match unrelated text. Location matching is plain text. Activities and experience don't score ([scoring.md](docs/scoring.md#known-limitations-v1)).
+- Evaluations from before Milestone 4 have no fit until the first Match Profile save after the release.
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
 - Render Free cold starts take about 1–3 minutes (measured 73 s and ~3 min); Vercel either holds the request or returns `502`, which the UI shows as the waking state. Sessions survive the restart.
 - No database backups beyond Neon Free's short restore window.
-- Direct ATS boards import every published posting (not only internships); they're typed `other` unless a structured field says internship.
+- Board scope is title-based: internships titled without intern/co-op/apprentice words are filtered, and titles such as "Internship Program Manager" are kept. Greenhouse postings are still typed `other`. Boards added before Milestone 4 were migrated to **All postings**.
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
 - Deleting an imported opportunity deletes its source records, so the next sync re-imports it (no "hide" yet). There's no "revert to source" for curated opportunities.
 - Title/organization search uses `ILIKE '%term%'` without a trigram index; fine at thousands of rows.
@@ -144,7 +166,6 @@ None open. Fixed during hosted validation (2026-09-29):
 - Backend dependencies are range-pinned in `pyproject.toml` without a lock file, so backend installs aren't fully reproducible. The frontend has `package-lock.json`.
 - Nothing re-evaluates when the eligibility rules version changes or when time passes an expected graduation/enrollment date.
 - `work_authorization` requirements are stored but not evaluated (always `needs_verification`, ELIG-REQ-001).
-- Profile preferences, remote preference, and availability aren't modeled yet (they arrive with fit scoring).
 
 ## Architecture Constraints
 
@@ -158,11 +179,11 @@ None open. Fixed during hosted validation (2026-09-29):
 
 ## Database State
 
-Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `92a17353e5a8` (`alembic check` clean), holds the owner account, and after the first hosted sync holds 1,055 opportunities (13 MB on 2026-09-29). Schema head: migration `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`, no new tables) on top of the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and `92a17353e5a8`, repairing the graduation constraint and the running-run index if needed.
+Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `92a17353e5a8` (`alembic check` clean), holds the owner account, and after the first hosted sync holds 1,055 opportunities (13 MB on 2026-09-29). Schema head: migration `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`, no new tables) on top of the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. The Milestone 4 branch adds `b41e7c9d2f60` (additive columns and constraints only, no new tables; verified locally: base → head, `alembic check`, downgrade to `92a17353e5a8`, upgrade, downgrade to base, upgrade); it is **not** applied to Neon until the release closeout. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and `92a17353e5a8`, repairing the graduation constraint and the running-run index if needed.
 
 ## Current Scoring Version
 
-Not implemented yet. Planned v1 documented in [docs/scoring.md](docs/scoring.md).
+`v1` on the Milestone 4 branch (in review, not deployed): [docs/scoring.md](docs/scoring.md), [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md).
 
 ## Current Eligibility Rules Version
 
@@ -190,9 +211,11 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Review and merge the Milestone 3.5 PR and restore Render to `main`. Milestone 4 (proposed: profile enrichment and fit scoring v1, with batched/background profile re-evaluation and an internships-only filter for Greenhouse/Lever) follows. Not started.
+Review the Milestone 4 PR. After approval, the release closeout: migrate Neon to `b41e7c9d2f60`, merge, deploy `main` (Render, then Vercel), hosted smoke, and a first Match Profile save to score the catalog. Milestone 5 (proposed: résumé/profile-source ingestion with deterministic parsing and a review/accept/reject workflow; optional AI enrichment only afterwards) is not started.
 
 ## Recent Important Decisions
+
+- 2026-09-29: ADR-010 accepted: fit scoring v1 (deterministic, weights 35/20/15/10/10/10, missing evidence scores 0 with coverage, one canonical config), eligibility-first ranking, Match Profile on `profile_facts` + `profiles` preference columns, fit fingerprints, a synchronous batched catalog pass (no queue), and an internships-only title scope for Greenhouse/Lever boards (default; validators cleared on scope change). Migration `b41e7c9d2f60`.
 
 - 2026-09-28: ADR-009 accepted: Vercel same-origin `/api` rewrite → Render (one instance, one worker) → Neon direct endpoint; proxy-secret-gated login throttle (amended 2026-09-29 to shared `proxy`/`direct` buckets of 10 after Vercel was found to pass forged forwarding headers; 50 global); Argon2 concurrency 2; `HOSTED` mode; manual migrations and deploys; Git deployments off on Vercel; `PROXY_SHARED_SECRET` Production-only; no scheduler or keep-alive. Migration `92a17353e5a8` reconciles the running-run index.
 - 2026-09-28: PR #6 review fixes: the same-source/external-ID update path is subject to the identity-conflict rule (the record's own unchanged URL is exempt for rule-4 false duplicates); one running ingestion run per source is enforced by the partial unique index `uq_ingestion_runs_one_running_per_source` (added to `726372d627b8` before merge). Milestone 3 merged via PR #6.
