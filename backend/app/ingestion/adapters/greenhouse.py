@@ -60,7 +60,13 @@ def parse_board_reference(value: str) -> str:
     if "://" in text:
         parts = urlsplit(text)
         segments = [s for s in parts.path.split("/") if s]
-        if (parts.hostname or "").lower() not in BOARD_HOSTS or not segments:
+        # Credentials or a port mean it isn't a plain public board link: refuse, don't strip.
+        if (
+            (parts.hostname or "").lower() not in BOARD_HOSTS
+            or not segments
+            or parts.username is not None
+            or parts.port is not None
+        ):
             raise ValueError(
                 "Use a Greenhouse board link like https://job-boards.greenhouse.io/<board>"
             )

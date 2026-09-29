@@ -71,7 +71,13 @@ def parse_site_reference(value: str, region: SourceRegion | None) -> tuple[str, 
         parts = urlsplit(text)
         segments = [s for s in parts.path.split("/") if s]
         url_region = SITE_HOSTS.get((parts.hostname or "").lower())
-        if url_region is None or not segments:
+        # Credentials or a port mean it isn't a plain public job-site link: refuse, don't strip.
+        if (
+            url_region is None
+            or not segments
+            or parts.username is not None
+            or parts.port is not None
+        ):
             raise ValueError("Use a Lever job-site link like https://jobs.lever.co/<site>")
         if region is not None and region is not url_region:
             raise ValueError("The link's region doesn't match the selected region.")
