@@ -15,6 +15,7 @@ from app.opportunities.scoring import (
 )
 from app.opportunities.scoring.engine import percent
 from app.opportunities.scoring.text import Corpus, tokens
+from app.repositories import fit_fingerprint
 
 LONG = "x " * 150  # ≥ 200 characters of description
 
@@ -311,3 +312,70 @@ def test_deterministic_and_serializable() -> None:
     assert first == score_fit(fit, posting()).model_dump(mode="json")
     assert first["scoring_version"] == "v1"
     assert set(first["components"]) == set(config.WEIGHTS)
+
+
+# --- fit fingerprint (ADR-010 §8) ---------------------------------------------------------------
+
+
+class _Row:
+    """Stands in for an ORM opportunity: fit reads only its fit fields."""
+
+    def __init__(self, **fields: object) -> None:
+        self.__dict__.update(
+            {
+                "title": "Synthetic Software Intern",
+                "organization": "Example Robotics",
+                "description": "Python.",
+                "updated_at": datetime(2040, 9, 1, tzinfo=UTC),
+                "last_seen_at": datetime(2040, 9, 1, tzinfo=UTC),
+                "id": "row-1",
+            }
+            | fields
+        )
+
+
+def fingerprint(row: _Row, fit: FitProfileInput | None = None) -> str:
+    return fit_fingerprint(
+        fit or profile(skills=["Python"]), FitOpportunityInput.model_validate(row)
+    )
+
+
+def test_fit_fingerprint_is_stable_and_ignores_bookkeeping() -> None:
+    base = fingerprint(_Row())
+    assert base == fingerprint(_Row())
+    assert len(base) == 64
+    moved = _Row(
+        updated_at=datetime(2041, 1, 1, tzinfo=UTC),
+        last_seen_at=datetime(2041, 1, 1, tzinfo=UTC),
+        id="row-2",
+    )
+    assert fingerprint(moved) == base
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"title": "Renamed"},
+        {"organization": "Example Institute"},
+        {"description": "SQL."},
+        {"location": "Example City"},
+        {"remote_mode": RemoteMode.REMOTE},
+        {"application_deadline": date(2041, 2, 1)},
+        {"start_date": date(2041, 6, 20)},
+        {"end_date": date(2041, 8, 1)},
+        {"posted_at": datetime(2040, 9, 1, tzinfo=UTC)},
+        {"application_url": "https://example.org/apply"},
+        {"requirements_assessment_status": RequirementsAssessmentStatus.COMPLETE},
+    ],
+)
+def test_fit_fingerprint_changes_with_each_fit_input(changes: dict[str, object]) -> None:
+    assert fingerprint(_Row(**changes)) != fingerprint(_Row())
+
+
+def test_fit_fingerprint_changes_with_the_profile() -> None:
+    base = fingerprint(_Row())
+    assert fingerprint(_Row(), profile(skills=["SQL"])) != base
+    assert fingerprint(_Row(), profile(skills=["Python"], interests=["robots"])) != base
+    assert (
+        fingerprint(_Row(), profile(skills=["Python"], availability_end=date(2041, 8, 1))) != base
+    )

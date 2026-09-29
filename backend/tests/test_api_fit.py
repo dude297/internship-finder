@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.enums import ExtractionMethod, FactCategory, ProfileSourceKind
 from app.models import OpportunityEvaluation, Profile, ProfileFact
+from app.repositories import evaluation_context
 from app.services import match_profile as match_service
 from tests.test_api_workflow import count, create, put_profile
 
@@ -340,3 +341,42 @@ def test_ranking_updates_after_a_match_profile_change(client: TestClient) -> Non
     assert ranked(client)[0] == "Synthetic Python Role"
     put_match(client, skills=["Chemistry"], courses=[], projects=[], interests=[])
     assert ranked(client)[0] == "Synthetic Chemistry Role"
+
+
+def test_fit_reads_only_user_entered_or_verified_facts(client: TestClient, db: Session) -> None:
+    put_match(client, skills=["Python"])
+    profile = db.scalars(select(Profile)).one()
+    db.add_all(
+        [
+            ProfileFact(  # inferred and unverified: ignored by v1
+                profile_id=profile.id,
+                category=FactCategory.SKILL,
+                fact_key="inferred",
+                value={"name": "Synthetic Inferred"},
+                source_kind=ProfileSourceKind.RESUME,
+                extraction_method=ExtractionMethod.AI_INFERENCE,
+                extractor_name="synthetic-extractor",
+            ),
+            ProfileFact(  # parsed and verified by the owner: used
+                profile_id=profile.id,
+                category=FactCategory.SKILL,
+                fact_key="verified",
+                value={"name": "Synthetic Verified"},
+                source_kind=ProfileSourceKind.RESUME,
+                extraction_method=ExtractionMethod.DETERMINISTIC_PARSER,
+                verified_by_user=True,
+            ),
+            ProfileFact(  # malformed value: left out, not coerced
+                profile_id=profile.id,
+                category=FactCategory.SKILL,
+                fact_key="malformed",
+                value="Synthetic Malformed",
+                source_kind=ProfileSourceKind.MANUAL,
+                extraction_method=ExtractionMethod.MANUAL,
+            ),
+        ]
+    )
+    db.flush()
+    context = evaluation_context(db)
+    assert context is not None
+    assert set(context.fit.skills) == {"Python", "Synthetic Verified"}

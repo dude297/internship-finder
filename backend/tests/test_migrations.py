@@ -5,6 +5,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import Engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from app.models import Base
 from tests.conftest import alembic_config
@@ -202,3 +203,106 @@ def test_models_match_migrations(pg_engine: Engine) -> None:
         diff = compare_metadata(MigrationContext.configure(connection), Base.metadata)
 
     assert diff == []
+
+
+MILESTONE_35_REVISION = "92a17353e5a8"
+M4_COLUMNS = {
+    "profiles": {
+        "interests",
+        "preferred_locations",
+        "remote_preference",
+        "availability_start",
+        "availability_end",
+    },
+    "opportunity_evaluations": {
+        "fit_score",
+        "score_breakdown",
+        "scoring_version",
+        "fit_input_fingerprint",
+    },
+    "ingestion_sources": {"scope"},
+    "ingestion_runs": {"filtered_count"},
+}
+M4_CHECKS = {
+    "profiles": {"ck_profiles_remote_preference", "ck_profiles_availability_end_not_before_start"},
+    "opportunity_evaluations": {
+        "ck_opportunity_evaluations_fit_score_range",
+        "ck_opportunity_evaluations_fit_input_fingerprint_length",
+        "ck_opportunity_evaluations_fit_fields_together",
+    },
+    "ingestion_sources": {
+        "ck_ingestion_sources_source_scope",
+        "ck_ingestion_sources_builtin_scope_all",
+    },
+}
+
+
+def columns(engine: Engine, table: str) -> set[str]:
+    return {c["name"] for c in inspect(engine).get_columns(table)}
+
+
+def checks(engine: Engine, table: str) -> set[str]:
+    return {str(c["name"]) for c in inspect(engine).get_check_constraints(table)}
+
+
+def test_milestone_4_migration_round_trip(pg_engine: Engine, pg_url: str) -> None:
+    config = alembic_config(pg_url)
+    for table, names in M4_COLUMNS.items():
+        assert names <= columns(pg_engine, table)
+    for table, names in M4_CHECKS.items():
+        assert names <= checks(pg_engine, table)
+
+    # A board added before Milestone 4 must keep importing everything after the upgrade.
+    command.downgrade(config, MILESTONE_35_REVISION)
+    for table, names in M4_COLUMNS.items():
+        assert not names & columns(pg_engine, table)
+    for table, names in M4_CHECKS.items():
+        assert not names & checks(pg_engine, table)
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ingestion_sources (id, kind, identifier, display_name)"
+                " VALUES (gen_random_uuid(), 'greenhouse', 'examplelegacy', 'Example Legacy')"
+            )
+        )
+
+    command.upgrade(config, "head")
+    with pg_engine.begin() as connection:
+        scopes = dict(
+            connection.execute(text("SELECT identifier, scope FROM ingestion_sources")).all()
+        )
+        connection.execute(text("DELETE FROM ingestion_sources WHERE kind = 'greenhouse'"))
+    assert scopes == {"zshah-tech-internships": "all", "examplelegacy": "all"}
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE profiles SET availability_start = '2041-09-01', availability_end = '2041-06-01'",
+        "UPDATE profiles SET remote_preference = 'sometimes'",
+        "UPDATE ingestion_sources SET scope = 'internships_only'",  # the built-in feed
+        "UPDATE ingestion_sources SET scope = 'some'",
+        "UPDATE opportunity_evaluations SET fit_score = 101, scoring_version = 'v1',"
+        " score_breakdown = '{}', fit_input_fingerprint = repeat('a', 64)",
+        "UPDATE opportunity_evaluations SET fit_score = 50",  # without the other fit fields
+        "UPDATE opportunity_evaluations SET fit_score = 50, scoring_version = 'v1',"
+        " score_breakdown = '{}', fit_input_fingerprint = 'short'",
+    ],
+)
+def test_milestone_4_constraints(pg_engine: Engine, statement: str) -> None:
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(
+            text(
+                "INSERT INTO profiles (id) VALUES ('00000000-0000-4000-8000-000000000001');"
+                "INSERT INTO opportunities (id, title, organization, opportunity_type)"
+                " VALUES ('00000000-0000-4000-8000-000000000002', 'Synthetic', 'Example',"
+                " 'other');"
+                "INSERT INTO opportunity_evaluations (id, profile_id, opportunity_id,"
+                " eligibility_status, eligibility_rules_version, depends_on_projected_status)"
+                " VALUES (gen_random_uuid(), '00000000-0000-4000-8000-000000000001',"
+                " '00000000-0000-4000-8000-000000000002', 'eligible', 'v1', false)"
+            )
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(text(statement))
+        transaction.rollback()
