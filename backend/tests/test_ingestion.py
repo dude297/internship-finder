@@ -21,6 +21,7 @@ from app.enums import (
     RequirementsAssessmentStatus,
     RequirementType,
     SourceRegion,
+    SourceScope,
 )
 from app.ingestion.adapters.community_feed import BUILTIN_IDENTIFIER
 from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_source
@@ -37,6 +38,8 @@ from app.models import (
 )
 from app.models.ingestion import RUNNING_RUN_INDEX
 from app.repositories import latest_evaluation
+from app.schemas.sources import SourceUpdate
+from app.services.sources import update_source
 from tests.ingestion_fixtures import (
     FEED_URL,
     GREENHOUSE_BOARD,
@@ -120,6 +123,7 @@ def counts(run: IngestionRun) -> dict[str, int]:
         name: getattr(run, f"{name}_count")
         for name in (
             "fetched",
+            "filtered",
             "created",
             "updated",
             "deduplicated",
@@ -844,3 +848,124 @@ def test_an_invalid_url_is_dropped_not_fatal(
     rec = record(db, feed_source, "a")
     assert rec.opportunity.application_url is None
     assert {i.namespace for i in rec.opportunity.identifiers} == {"zshah"}
+
+
+# --- Source scope (ADR-010 §10) -----------------------------------------------------------------
+
+FULL_TIME_GH = greenhouse_job(
+    2002,
+    title="Synthetic Staff Engineer",
+    # Full-time postings often mention internships; the description is never searched.
+    content="&lt;p&gt;Mentor our internship program.&lt;/p&gt;",
+)
+
+
+def conditional(body: Any, etag: str) -> Callable[[httpx2.Request], httpx2.Response]:
+    """A provider that answers 304 whenever the request carries its current ETag."""
+
+    def handle(request: httpx2.Request) -> httpx2.Response:
+        if request.headers.get("If-None-Match") == etag:
+            return httpx2.Response(304)
+        return httpx2.Response(200, json=body, headers={"ETag": etag})
+
+    return handle
+
+
+def set_scope(db: Session, source: IngestionSource, scope: SourceScope | None) -> None:
+    update_source(source, SourceUpdate(display_name=source.display_name, enabled=True, scope=scope))
+    db.commit()
+
+
+def test_ats_sources_default_to_internships_only(
+    db: Session, gh_source: IngestionSource, lever_source: IngestionSource
+) -> None:
+    feed = db.scalars(
+        select(IngestionSource).where(IngestionSource.kind == IngestionSourceKind.COMMUNITY_FEED)
+    ).one()
+    assert gh_source.scope is SourceScope.INTERNSHIPS_ONLY
+    assert lever_source.scope is SourceScope.INTERNSHIPS_ONLY
+    assert feed.scope is SourceScope.ALL
+
+
+def test_greenhouse_internships_only_filters_by_title(
+    db: Session, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(), FULL_TIME_GH))
+    run = sync(db, gh_source, web)
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert counts(run) == {"fetched": 2, "filtered": 1, "created": 1}
+    assert run.normalized_count == 1
+    assert [o.title for o in db.scalars(select(Opportunity))] == ["Synthetic Robotics Intern"]
+
+
+def test_lever_internships_only_filters_by_title(
+    db: Session, lever_source: IngestionSource, web: FakeSource
+) -> None:
+    full_time = lever_posting(
+        "0a1b2c3d-0000-4000-8000-000000000002",
+        text="Synthetic Account Executive",
+        categories={"commitment": "Full-time", "location": "Example City"},
+    )
+    web.json(LEVER_URL, [lever_posting(), full_time])
+    run = sync(db, lever_source, web)
+    assert counts(run) == {"fetched": 2, "filtered": 1, "created": 1}
+    assert [o.title for o in db.scalars(select(Opportunity))] == ["Synthetic Research Intern"]
+
+
+def test_all_postings_scope_keeps_everything(
+    db: Session, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    set_scope(db, gh_source, SourceScope.ALL)
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(), FULL_TIME_GH))
+    assert counts(sync(db, gh_source, web)) == {"fetched": 2, "created": 2}
+
+
+def test_builtin_feed_is_never_filtered(
+    db: Session, feed_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(JOB_A | {"title": "Synthetic Software Engineer"}))
+    assert counts(sync(db, feed_source, web)) == {"fetched": 1, "created": 1}
+    with pytest.raises(ValueError, match="built-in"):
+        set_scope(db, feed_source, SourceScope.INTERNSHIPS_ONLY)
+
+
+def test_scope_change_forces_a_full_sync_that_closes_and_reactivates(
+    db: Session, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    set_scope(db, gh_source, SourceScope.ALL)
+    web.respond(
+        GREENHOUSE_URL, conditional(greenhouse_board(greenhouse_job(), FULL_TIME_GH), '"v1"')
+    )
+    assert counts(sync(db, gh_source, web)) == {"fetched": 2, "created": 2}
+    assert gh_source.etag == '"v1"'
+
+    # Unchanged scope: the validators stay, so the provider's 304 is honored.
+    set_scope(db, gh_source, None)
+    assert sync(db, gh_source, web).status is IngestionRunStatus.NO_CHANGE
+
+    # all → internships_only: validators cleared, full snapshot, the full-time posting closes.
+    set_scope(db, gh_source, SourceScope.INTERNSHIPS_ONLY)
+    assert (gh_source.etag, gh_source.last_modified) == (None, None)
+    run = sync(db, gh_source, web)
+    assert "If-None-Match" not in web.requests[-1].headers
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert counts(run) == {"fetched": 2, "filtered": 1, "unchanged": 1, "closed": 1}
+    staff = record(db, gh_source, "2002")
+    assert not staff.is_active and staff.closed_at is not None
+    assert count(db, Opportunity) == 2  # closed, never deleted
+
+    # internships_only → all: full snapshot again, the posting comes back.
+    set_scope(db, gh_source, SourceScope.ALL)
+    run = sync(db, gh_source, web)
+    assert counts(run) == {"fetched": 2, "unchanged": 2, "reactivated": 1}
+    db.expire_all()
+    assert record(db, gh_source, "2002").is_active
+
+
+def test_filtered_items_do_not_evaluate(
+    db: Session, gh_source: IngestionSource, web: FakeSource, profile: Profile
+) -> None:
+    web.json(GREENHOUSE_URL, greenhouse_board(FULL_TIME_GH))
+    run = sync(db, gh_source, web)
+    assert counts(run) == {"fetched": 1, "filtered": 1}
+    assert count(db, OpportunityEvaluation) == 0

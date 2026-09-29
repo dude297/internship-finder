@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, selectinload
 
-from app.enums import IngestionSourceKind
+from app.enums import IngestionSourceKind, SourceScope
 from app.ingestion.adapters import greenhouse, lever
 from app.models import IngestionRun, IngestionSource
 from app.schemas.sources import RunResponse, SourceCreate, SourceResponse, SourceUpdate
@@ -61,7 +61,11 @@ def create_source(db: Session, body: SourceCreate) -> IngestionSource:
     if duplicate is not None:
         raise SourceConflict(f"{duplicate.display_name} is already configured.")
     source = IngestionSource(
-        kind=body.kind, identifier=identifier, region=region, display_name=body.display_name
+        kind=body.kind,
+        identifier=identifier,
+        region=region,
+        display_name=body.display_name,
+        scope=body.scope,
     )
     db.add(source)
     db.flush()
@@ -69,6 +73,16 @@ def create_source(db: Session, body: SourceCreate) -> IngestionSource:
 
 
 def update_source(source: IngestionSource, body: SourceUpdate) -> None:
+    """Raises ValueError when the built-in feed is asked to filter.
+
+    A scope change clears the HTTP validators, so the next sync fetches and applies a full
+    snapshot instead of getting a 304 (ADR-010 §10)."""
+    if body.scope is not None and body.scope is not source.scope:
+        if source.builtin and body.scope is not SourceScope.ALL:
+            raise ValueError("The built-in discovery feed always imports every posting.")
+        source.scope = body.scope
+        source.etag = None
+        source.last_modified = None
     source.display_name = body.display_name
     source.enabled = body.enabled
 

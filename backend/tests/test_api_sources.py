@@ -392,3 +392,62 @@ def test_manual_opportunity_is_curated_from_creation(client: TestClient) -> None
     assert created["manually_curated_at"] is not None
     assert (created["origin"], created["availability"]) == ("manual", "manual")
     assert [s["source_name"] for s in created["sources"]] == ["Manual entry"]
+
+
+# --- Source scope (ADR-010 §10) -----------------------------------------------------------------
+
+
+def test_boards_default_to_internships_only_and_can_switch(
+    client: TestClient, web: FakeSource
+) -> None:
+    source = add_greenhouse(client)
+    assert source["scope"] == "internships_only"
+    assert builtin(client)["scope"] == "all"
+    full_time = greenhouse_job(2002, title="Synthetic Staff Engineer")
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(), full_time))
+
+    run = sync(client, source["id"])
+    counted = ("fetched_count", "filtered_count", "normalized_count", "created_count")
+    assert tuple(run[k] for k in counted) == (2, 1, 1, 1)
+
+    response = client.put(
+        f"/api/sources/{source['id']}",
+        json={"display_name": "Example Robotics", "enabled": True, "scope": "all"},
+    )
+    assert response.status_code == 200 and response.json()["scope"] == "all"
+    run = sync(client, source["id"])
+    assert (run["filtered_count"], run["created_count"]) == (0, 1)
+    # Omitting the scope keeps it.
+    kept = client.put(
+        f"/api/sources/{source['id']}", json={"display_name": "Renamed", "enabled": True}
+    )
+    assert kept.json()["scope"] == "all"
+
+
+def test_boards_can_be_added_with_all_postings(client: TestClient) -> None:
+    response = client.post(
+        "/api/sources",
+        json={
+            "kind": "lever",
+            "display_name": "Example Institute",
+            "board": "exampleinstitute",
+            "scope": "all",
+        },
+    )
+    assert response.status_code == 201 and response.json()["scope"] == "all"
+
+
+def test_builtin_feed_scope_cannot_filter(client: TestClient) -> None:
+    source = builtin(client)
+    response = client.put(
+        f"/api/sources/{source['id']}",
+        json={"display_name": source["display_name"], "enabled": True, "scope": "internships_only"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "scope"]
+    assert builtin(client)["scope"] == "all"
+    bad = client.put(
+        f"/api/sources/{source['id']}",
+        json={"display_name": source["display_name"], "enabled": True, "scope": "some"},
+    )
+    assert bad.status_code == 422

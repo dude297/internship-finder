@@ -17,7 +17,7 @@ from sqlalchemy import select, tuple_, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
-from app.enums import IngestionRunStatus, IngestionStage
+from app.enums import IngestionRunStatus, IngestionStage, SourceScope
 from app.ingestion.adapters import SourceConfig, adapter_for
 from app.ingestion.http import FetchError, fetch_json
 from app.ingestion.normalize import (
@@ -26,6 +26,7 @@ from app.ingestion.normalize import (
     NormalizedOpportunity,
     SnapshotError,
     canonical_url,
+    is_internship_title,
 )
 from app.models import (
     IngestionRun,
@@ -115,11 +116,13 @@ def _finish(db: Session, run: IngestionRun, status: IngestionRunStatus) -> Inges
     run.finished_at = datetime.now(UTC)
     db.commit()
     logger.info(
-        "ingestion run source=%s status=%s fetched=%d created=%d updated=%d deduplicated=%d"
+        "ingestion run source=%s status=%s fetched=%d filtered=%d created=%d updated=%d"
+        " deduplicated=%d"
         " unchanged=%d closed=%d reactivated=%d invalid=%d errors=%d",
         run.source.key,
         status.value,
         run.fetched_count,
+        run.filtered_count,
         run.created_count,
         run.updated_count,
         run.deduplicated_count,
@@ -455,7 +458,13 @@ def _sync(
 
     run.fetched_count = len(snapshot.items)
     run.source_generated_at = snapshot.generated_at
-    _process(db, source, run, snapshot.items, now)
+    items = snapshot.items
+    if source.scope is SourceScope.INTERNSHIPS_ONLY:
+        # Excluded items are never processed, so a complete snapshot closes records they
+        # previously created (ADR-010 §10). Invalid items have no trustworthy title: kept.
+        items = [i for i in items if isinstance(i, ItemError) or is_internship_title(i.title)]
+        run.filtered_count = run.fetched_count - len(items)
+    _process(db, source, run, items, now)
 
     if run.invalid_count or run.error_count:
         return _finish(db, run, IngestionRunStatus.PARTIAL)
