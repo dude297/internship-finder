@@ -2,14 +2,14 @@
 
 Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md). This file is the runbook. It never contains secrets: no `DATABASE_URL`, proxy secret, password, hash, session or CSRF token.
 
-## Status (2026-09-28)
+## Status (2026-09-29)
 
 | Part | State |
 |---|---|
-| Neon | **Provisioned.** Migrated to `92a17353e5a8`. Owner created (CLI, `getpass`). Catalog empty until the first hosted sync. |
-| Render | **Deployed** from `feature/hosted-deployment-foundation` for hosted validation (branch switched temporarily, see [Unmerged branch validation](#unmerged-branch-validation)). Auto-deploy off. |
-| Vercel | **Deployed** (production, manual CLI deploy from a clean checkout of the same branch at `af6b6f1`; nothing under `frontend/` has changed since). |
-| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)). Render runs `36b9896` from the feature branch. |
+| Neon | **Provisioned.** Migrated to `92a17353e5a8`. Owner created (CLI, `getpass`). 1,055 opportunities from the first hosted sync. |
+| Render | **Deployed** from `main` at `d78b93d` (branch restored after the [unmerged branch validation](#unmerged-branch-validation)). Auto-deploy off. |
+| Vercel | **Deployed** (production, manual CLI deploy from a clean checkout of `d78b93d`). |
+| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)), then re-smoked after the `main` release (health, login page, database, catalog 1,055). |
 
 ## Topology
 
@@ -97,7 +97,9 @@ With `DATABASE_URL` set as in step 1: `python -m app.cli create-owner --username
 
 ### Unmerged branch validation
 
-Milestone 3.5 was validated before merge by switching the Render service's branch to `feature/hosted-deployment-foundation` (auto-deploy stayed off) and deploying manually; Vercel production was deployed from a clean checkout of that branch. After the PR is merged: switch Render's branch back to `main`, deploy `main` on Render, and redeploy Vercel production from `main`. Until then, the hosted app runs the reviewed-but-unmerged branch.
+Milestone 3.5 was validated before merge by switching the Render service's branch to `feature/hosted-deployment-foundation` (auto-deploy stayed off) and deploying manually; Vercel production was deployed from a clean checkout of that branch. After the PR is merged: switch Render's branch back to `main`, deploy `main` on Render, and redeploy Vercel production from `main`. Done on 2026-09-29 for `d78b93d` (PR #7). The rebase merge rewrote the branch SHAs cited on this page: `36b9896` → `03e86c7`, `65964c6` → `17e5877`, `3563021` → `680c2b7`, `3ab655f` → `6eaaed6`.
+
+The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `.gitignore` and writes an `.env.local` (a short-lived OIDC token), so the deployment reports `gitDirty`. Both stay out of the build; delete `.env.local` and the checkout afterwards.
 
 ## Rollback
 

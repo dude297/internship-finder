@@ -2,10 +2,10 @@
 
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
-Last Updated: 2026-09-28
-Current Milestone: **Milestone 3.5 — Hosted Deployment Foundation** (implemented and hosted-verified from the review branch; awaiting PR review; see In Progress). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
-Current Production Version: `feature/hosted-deployment-foundation` (unmerged, deployed for validation) on https://internship-finder-pi.vercel.app
-Active Development Branch: `feature/hosted-deployment-foundation`. Remote: https://github.com/dude297/internship-finder
+Last Updated: 2026-09-29
+Current Milestone: none in progress. Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7) and released from `main`. Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Production Version: `main` at `d78b93d` on https://internship-finder-pi.vercel.app (Render and Vercel both deployed from it, 2026-09-29)
+Active Development Branch: `main`. Remote: https://github.com/dude297/internship-finder
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 3.5 — Hosted Deployment Foundation.
+Plan Milestone 4 (not started).
 
 ## Status Summary
 
@@ -27,7 +27,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 
 | Area | Status |
 |---|---|
-| Technology stack | **Selected** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)); hosting per [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md). **Provisioned and deployed** (Vercel Hobby → Render Free → Neon Free) from the review branch. |
+| Technology stack | **Selected** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)); hosting per [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md). **Provisioned and deployed** (Vercel Hobby → Render Free → Neon Free) from `main`. |
 | Source/profile strategy | **Selected** ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Opportunity ingestion implemented (ADR-008). No profile parsers. |
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
@@ -37,7 +37,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local) |
-| Next milestone | Milestone 3.5 — Hosted Deployment Foundation (current); then Milestone 4 (proposed, not started) |
+| Next milestone | Milestone 4 (proposed, not started; planning next) |
 
 ### Selected stack
 
@@ -47,7 +47,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Frontend hosting | Vercel Hobby | — | **Yes** (project `internship-finder`, `internship-finder-pi.vercel.app`) |
 | Backend | Python 3.12+, FastAPI, Pydantic, pwdlib (Argon2id), httpx2 (ingestion HTTP) | Yes (`backend/`) | — |
 | Backend hosting | Render Free Web Service | — | **Yes** (`internship-finder-api`, Oregon, connected to Neon, auto-deploy off) |
-| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (4 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `92a17353e5a8`, owner created, catalog empty) |
+| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (4 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `92a17353e5a8`, owner created, 1,055 opportunities) |
 | CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`: frontend, backend, e2e jobs; PR/push only; no scheduled jobs) | Running on GitHub |
 | End-to-end | Playwright (Chromium) | Yes (`frontend/e2e/`) | — |
 
@@ -58,6 +58,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 - Milestone 1: Core Domain, Persistence, and Eligibility v1 ([PR #4](https://github.com/dude297/internship-finder/pull/4)).
 - Milestone 2: Private Single-User Workflow MVP ([PR #5](https://github.com/dude297/internship-finder/pull/5)): single-user auth, sessions, CSRF, private profile and opportunity API/UI, structured requirements, automatic eligibility evaluation, application tracking, Playwright, local PostgreSQL.
 - Milestone 3: Automated Opportunity Discovery and Ingestion ([PR #6](https://github.com/dude297/internship-finder/pull/6)).
+- Milestone 3.5: Hosted Deployment Foundation ([PR #7](https://github.com/dude297/internship-finder/pull/7)).
 
 ## Milestone 3 (complete; merged via PR #6)
 
@@ -94,7 +95,11 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 3.5 — Hosted Deployment Foundation, on `feature/hosted-deployment-foundation` (PR open, not merged). Runbook and verification results: [docs/deployment.md](docs/deployment.md).
+None. Milestone 4 planning is next.
+
+## Milestone 3.5 (complete; merged via PR #7)
+
+Hosted Deployment Foundation. Runbook and verification results: [docs/deployment.md](docs/deployment.md).
 
 Done:
 
@@ -113,7 +118,7 @@ Open:
 - one Greenhouse/Lever board (optional; none chosen)
 - the hosted profile is **synthetic** (location "SYNTHETIC TEST PROFILE - replace"): replace it with the real one when ready (its 2,110 evaluation rows stay as history)
 
-After merge: switch Render's branch back to `main`, deploy `main`, and redeploy Vercel production from `main` ([deployment.md](docs/deployment.md#unmerged-branch-validation)).
+Release (2026-09-29): PR #7 rebase-merged as `d78b93d` (post-merge CI green). Render's branch was switched back to `main` (auto-deploy still off) and `d78b93d` deployed; Vercel production was redeployed from a clean checkout of `d78b93d`. Smoke: health `200` through Vercel, login page loads, database reachable, catalog 1,055, owner and synthetic profile present. The rebase rewrote the branch SHAs cited above: `36b9896` → `03e86c7`, `65964c6` → `17e5877`, `3563021` → `680c2b7`.
 
 ## Known Bugs
 
