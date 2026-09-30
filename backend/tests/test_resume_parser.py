@@ -1,6 +1,7 @@
 """Unit tests for app.profile.resume_parser (ADR-011 §2, §6, §7). No DB, no `postgres` marker:
 this parser is pure (bytes in, candidates out)."""
 
+import threading
 import time
 
 import pytest
@@ -14,6 +15,7 @@ from app.profile.resume_parser import (
     TEXT_PLAIN,
     Candidate,
     ParsedDocument,
+    ParserBusy,
     UnreadableFile,
     UnsupportedFileType,
     extract_candidates,
@@ -22,6 +24,7 @@ from app.profile.resume_parser import (
 from tests.resume_fixtures import (
     SYNTHETIC_RESUME_PDF_LINES,
     SYNTHETIC_RESUME_TEXT,
+    exit_immediately_worker,
     make_encrypted_pdf,
     make_flate_bomb_pdf,
     make_text_pdf,
@@ -418,3 +421,138 @@ def test_decompression_bomb_pdf_is_stopped(monkeypatch: pytest.MonkeyPatch) -> N
         parse_document(data)
     assert time.monotonic() - started < 10
     assert str(caught.value) in {"That PDF took too long to read.", "Couldn't read that PDF."}
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    # The slot was released: a normal PDF parses right after, with the real (unpatched) timeout.
+    monkeypatch.setattr(resume_parser, "PDF_TIMEOUT_SECONDS", 15.0)
+    doc = parse_document(make_text_pdf(SYNTHETIC_RESUME_PDF_LINES))
+    assert doc.content_type == APPLICATION_PDF
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+
+# --- Single-PDF-at-a-time slot (Render Free: ~512 MB host, one worker) -----------------------
+
+
+def test_second_concurrent_pdf_is_rejected_without_spawning_a_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    calls: list[bytes] = []
+
+    def fake_run_pdf_child(data: bytes) -> str:
+        calls.append(data)
+        entered.set()
+        assert release.wait(timeout=5)
+        return "Skills\nPython\n"
+
+    monkeypatch.setattr(resume_parser, "_run_pdf_child", fake_run_pdf_child)
+
+    result: dict[str, ParsedDocument] = {}
+
+    def run_first() -> None:
+        result["doc"] = parse_document(b"%PDF-1.4\nfirst")
+
+    thread = threading.Thread(target=run_first)
+    thread.start()
+    try:
+        assert entered.wait(timeout=5)
+
+        with pytest.raises(ParserBusy) as excinfo:
+            parse_document(b"%PDF-1.4\nsecond")
+        assert str(excinfo.value) == "Another PDF is being processed. Try again shortly."
+        assert len(calls) == 1  # no second child was spawned
+
+        release.set()
+    finally:
+        thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert result["doc"].candidates == (Candidate(FactCategory.SKILL, "Python"),)
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    # The slot was released after success: a later PDF parses normally.
+    calls.clear()
+    release.clear()
+    entered.clear()
+
+    def fake_run_pdf_child_again(data: bytes) -> str:
+        return "Skills\nJava\n"
+
+    monkeypatch.setattr(resume_parser, "_run_pdf_child", fake_run_pdf_child_again)
+    doc = parse_document(b"%PDF-1.4\nthird")
+    assert doc.candidates == (Candidate(FactCategory.SKILL, "Java"),)
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+
+def test_pdf_slot_is_released_after_unreadable_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run_pdf_child(data: bytes) -> str:
+        raise UnreadableFile("Couldn't read that PDF.")
+
+    monkeypatch.setattr(resume_parser, "_run_pdf_child", fake_run_pdf_child)
+    with pytest.raises(UnreadableFile):
+        parse_document(b"%PDF-1.4\nbad")
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+
+def test_pdf_slot_is_released_after_an_unexpected_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Design decision: an exception from `_run_pdf_child` that isn't `UnreadableFile` (a bug,
+    not a hostile-file outcome) propagates as-is rather than being wrapped or swallowed — the
+    slot still must be released so the next request isn't permanently blocked."""
+
+    def fake_run_pdf_child(data: bytes) -> str:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(resume_parser, "_run_pdf_child", fake_run_pdf_child)
+    with pytest.raises(RuntimeError, match="boom"):
+        parse_document(b"%PDF-1.4\nbad")
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+
+def test_text_parses_while_the_pdf_slot_is_held(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Text parsing is never gated by the PDF slot."""
+    entered = threading.Event()
+    release = threading.Event()
+
+    def fake_run_pdf_child(data: bytes) -> str:
+        entered.set()
+        assert release.wait(timeout=5)
+        return "Skills\nPython\n"
+
+    monkeypatch.setattr(resume_parser, "_run_pdf_child", fake_run_pdf_child)
+    thread = threading.Thread(target=lambda: parse_document(b"%PDF-1.4\nblocked"))
+    thread.start()
+    try:
+        assert entered.wait(timeout=5)
+        doc = parse_document(b"Skills\nJava\n")
+        assert doc.content_type == TEXT_PLAIN
+        assert doc.candidates == (Candidate(FactCategory.SKILL, "Java"),)
+    finally:
+        release.set()
+        thread.join(timeout=5)
+
+
+def test_pdf_slot_is_released_when_the_child_dies_without_reporting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real spawned child (not a fake) that exits without sending anything on the pipe: the
+    parent sees EOF, raises the same generic UnreadableFile as any other child death, and
+    releases the slot. `_pdf_worker` itself can't be monkeypatched here because the spawned
+    child re-imports this module fresh; `exit_immediately_worker` is a module-level function in
+    tests.resume_fixtures instead, importable by the child by qualified name."""
+    real_run_pdf_child = resume_parser._run_pdf_child  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    def fake_run_pdf_child(data: bytes) -> str:
+        return real_run_pdf_child(data, target=exit_immediately_worker)
+
+    monkeypatch.setattr(resume_parser, "_run_pdf_child", fake_run_pdf_child)
+    with pytest.raises(UnreadableFile) as excinfo:
+        parse_document(b"%PDF-1.4\ndying")
+    assert str(excinfo.value) == "Couldn't read that PDF."
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    monkeypatch.undo()
+    doc = parse_document(make_text_pdf(SYNTHETIC_RESUME_PDF_LINES))
+    assert doc.content_type == APPLICATION_PDF
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]

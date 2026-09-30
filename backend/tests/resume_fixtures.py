@@ -172,6 +172,16 @@ def make_encrypted_pdf() -> bytes:
     return buffer.getvalue()
 
 
+def exit_immediately_worker(data: bytes, sender: object) -> None:
+    """A `_pdf_worker`-shaped target that dies without sending anything, for the child-death
+    test. Module-level so a spawned child (which imports this module fresh) can find it by
+    qualified name; `sender` isn't typed as `Connection` to avoid importing multiprocessing here
+    for something never actually used."""
+    import os
+
+    os._exit(1)  # noqa: SLF001
+
+
 def make_flate_bomb_pdf(decompressed_bytes: int = 70 * 1024 * 1024) -> bytes:
     """A small PDF whose one content stream inflates to `decompressed_bytes` of text operators:
     under pypdf's own inflate cap, but far too much to interpret in the request (ADR-011 §2)."""

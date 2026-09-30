@@ -1,5 +1,6 @@
 """Profile source ingestion and review API (ADR-011). Synthetic data only."""
 
+import threading
 import uuid
 from typing import Any
 
@@ -8,10 +9,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import app.profile.resume_parser as resume_parser
 from app.enums import ExtractionMethod, FactCategory, FactReviewState, ProfileSourceKind
 from app.models import OpportunityEvaluation, Profile, ProfileFact, ProfileSourceArtifact
 from app.profile.resume_parser import MAX_UPLOAD_BYTES
 from app.services.profile_sources import sanitize_filename
+from tests.resume_fixtures import SYNTHETIC_RESUME_PDF_LINES, make_text_pdf
 from tests.test_api_fit import put_match
 from tests.test_api_workflow import count, create, put_profile
 
@@ -550,6 +553,85 @@ def test_reparse_error_maps_to_422(client: TestClient, monkeypatch: pytest.Monke
     monkeypatch.setattr(service, "parse_document", boom)
     response = client.post(f"{SOURCES}/{created['id']}/reparse")
     assert response.status_code == 422
+
+
+# --- PDF concurrency: at most one extraction child per process (ADR-011 §2) -------------------
+
+
+def test_concurrent_pdf_extraction_returns_503_with_retry_after(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    existing_pdf = make_text_pdf(SYNTHETIC_RESUME_PDF_LINES)
+    existing = upload_ok(
+        client, data=existing_pdf, filename="existing.pdf", content_type="application/pdf"
+    )
+    existing_source_id = uuid.UUID(existing["id"])
+
+    def facts_snapshot() -> dict[str, tuple[Any, FactReviewState]]:
+        rows = db.scalars(
+            select(ProfileFact).where(ProfileFact.profile_source_id == existing_source_id)
+        ).all()
+        return {f.fact_key: (f.value, f.review_state) for f in rows}
+
+    before = facts_snapshot()
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    def fake_run_pdf_child(data: bytes) -> str:
+        entered.set()
+        assert release.wait(timeout=5)
+        return "Skills\nBlocked Skill\n"
+
+    monkeypatch.setattr(resume_parser, "_run_pdf_child", fake_run_pdf_child)
+
+    blocked_pdf = make_text_pdf(["A different synthetic line"])
+    result: dict[str, Any] = {}
+
+    def do_blocked_upload() -> None:
+        result["response"] = upload(
+            client, data=blocked_pdf, filename="blocked.pdf", content_type="application/pdf"
+        )
+
+    thread = threading.Thread(target=do_blocked_upload)
+    thread.start()
+    try:
+        assert entered.wait(timeout=5)
+
+        health = client.get("/api/health")
+        assert health.status_code == 200
+
+        second_pdf = make_text_pdf(["Yet another synthetic line"])
+        second = upload(
+            client, data=second_pdf, filename="second.pdf", content_type="application/pdf"
+        )
+        assert second.status_code == 503
+        assert second.headers["retry-after"] == "5"
+        assert second.json()["detail"] == "Another PDF is being processed. Try again shortly."
+        assert "second.pdf" not in second.text
+        assert "Yet another synthetic line" not in second.text
+        assert len(client.get(SOURCES).json()) == 1  # no new source row for the busy request
+
+        reparse = client.post(f"{SOURCES}/{existing['id']}/reparse")
+        assert reparse.status_code == 503
+        assert reparse.headers["retry-after"] == "5"
+        assert reparse.json()["detail"] == "Another PDF is being processed. Try again shortly."
+        assert facts_snapshot() == before  # untouched: parsing runs before any delete
+
+        text_upload = upload_ok(client, data=resume_bytes("Text Skill"), filename="ok.txt")
+        assert text_upload["pending_count"] == 1
+
+        release.set()
+    finally:
+        thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert result["response"].status_code == 201, result["response"].text
+
+    monkeypatch.undo()
+    later_pdf = make_text_pdf(["One more synthetic line"])
+    later = upload_ok(client, data=later_pdf, filename="later.pdf", content_type="application/pdf")
+    assert later["content_type"] == "application/pdf"
 
 
 # --- Delete ----------------------------------------------------------------------------------
