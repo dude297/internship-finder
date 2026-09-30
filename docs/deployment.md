@@ -103,6 +103,45 @@ Milestone 4 was released without the branch-swap step: PR #9 merged into `main` 
 
 The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `.gitignore` and writes an `.env.local` (a short-lived OIDC token), so the deployment reports `gitDirty`. Both stay out of the build; delete `.env.local` and the checkout afterwards.
 
+### Milestone 5 release (after PR #11 approval)
+
+Prepared, **not executed**. Production stays on Milestone 4 (`b41e7c9d2f60`) until the owner approves and merges [PR #11](https://github.com/dude297/internship-finder/pull/11) ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)).
+
+**Ordering hazard.** Milestone 4's Match Profile save creates `profile_facts` without `review_state`, which `c5a1e0f3d7b2` makes NOT NULL with no default. After the migration, Milestone 4 code can't save a Match Profile. So: migrate, then deploy Render **immediately**, with no Match Profile save in between. After migrating, never roll Render back to Milestone 4 code; fix forward.
+
+1. **Preconditions.** PR #11 merged; merged SHA recorded; post-merge CI green. Render (`internship-finder-api`, `srv-dastve60tbcc7392dfgg`, never the stray `internship-finder`) and Vercel still on the released Milestone 4 commit. Read-only baseline (aggregates only), expected per the Milestone 4 smoke unless the owner used the app since:
+   ```sql
+   SELECT count(*) FROM opportunities;                                         -- 1,055
+   SELECT count(*) FROM opportunity_source_records;                            -- 1,055
+   SELECT count(*), count(fit_score) FROM opportunity_evaluations;             -- 4,220, 2,110
+   SELECT count(*) FROM profile_facts;                                         -- 10
+   SELECT count(*) FROM profile_sources;                                       -- 0
+   SELECT pg_size_pretty(pg_database_size(current_database()));                -- ~18 MB
+   SELECT version_num FROM alembic_version;                                    -- b41e7c9d2f60
+   ```
+   Stop if these drift without an explanation.
+2. **Migrate Neon** (same shell pattern as [Deploy Order](#deploy-order) step 1): `alembic upgrade head`, `alembic current` → `c5a1e0f3d7b2`, `alembic check`, remove `DATABASE_URL`. Never downgrade. Then verify read-only:
+   ```sql
+   SELECT review_state, count(*) FROM profile_facts GROUP BY 1;                -- accepted: 10
+   SELECT count(*) FROM profile_facts
+    WHERE extraction_method <> 'manual' AND (review_state = 'accepted') <> verified_by_user;  -- 0
+   SELECT count(*) FROM opportunity_evaluations;                               -- unchanged (4,220)
+   SELECT count(*) FROM profile_source_artifacts;                              -- 0
+   ```
+   Stop (and don't deploy) if `alembic current` or `alembic check` disagree.
+3. **Render:** deploy the merged SHA on `internship-finder-api` right away (Manual Deploy, or the deploys API with the key from the local Render CLI config, never printed). Wait for `live`; `/api/health` `200`; confirm the deploy's commit SHA.
+4. **Vercel:** clean detached worktree at the merged SHA, `vercel link`, `vercel deploy --prod`, delete `.env.local` and the worktree, verify the alias (as for Milestone 4).
+5. **Hosted smoke** through the Vercel URL, logged in as the owner (browser, or a script whose session cookie is supplied locally and never logged). Synthetic, fabricated documents only:
+   - upload a synthetic text résumé with a unique marker line → pending facts; evaluation count unchanged (no pass on upload)
+   - accept one skill → `catalog_pass: true`; record the time and `evaluated_opportunities`
+   - reject one fact; re-parse → no duplicates, decided facts unchanged
+   - download → identical bytes; `attachment`, `nosniff`, `no-store`
+   - upload a synthetic text PDF (`tests/resume_fixtures.make_text_pdf`) → `201`; record latency (child-process start on Render)
+   - same file again → `409`; a > 2 MB file → `413`
+   - optional, owner's call: while the flate-bomb fixture parses (up to 15 s), `/api/health` answers and a second PDF gets `503` with `Retry-After`
+   - delete both synthetic sources → `catalog_pass: true` (an accepted fit fact existed)
+6. **Final counts:** `profile_sources` 0, `profile_source_artifacts` 0, `profile_facts` 10 (all accepted), migration `c5a1e0f3d7b2`, database size. Evaluations: 4,220 + the accept pass + the delete pass, each at most 1,055 (only opportunities whose fit input changed get a row), so at most 6,330; record the actual `evaluated_opportunities` of both passes and reconcile exactly. Record everything in [PROJECT_STATE.md](../PROJECT_STATE.md) and the Production Verification table.
+
 ## Rollback
 
 - **Code (Render):** Render dashboard → Deploys → **Rollback** to an earlier deploy, or deploy an earlier commit. Health check afterwards.

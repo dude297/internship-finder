@@ -3,9 +3,9 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-09-30
-Current Milestone: none in progress. Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) and released from `main` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Milestone: **Milestone 5 — Private Profile Source Ingestion + Review, implemented; [PR #11](https://github.com/dude297/internship-finder/pull/11) in review** ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)); not merged, not deployed. Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) and released from `main` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
 Current Production Version: `main` at `ca9b91b` on https://internship-finder-pi.vercel.app (Render deploy finished 2026-09-29 06:21 UTC; Vercel production deployment created 2026-09-29 07:39 UTC from `main` via CLI; both verified 2026-09-30)
-Active Development Branch: `main`. Remote: https://github.com/dude297/internship-finder. Milestone 5 (Private Profile Source Ingestion + Review) is in progress on `feature/profile-source-ingestion`.
+Active Development Branch: `main`. Remote: https://github.com/dude297/internship-finder. Milestone 5 is on `feature/profile-source-ingestion` (PR #11).
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 4 is released. Milestone 5 — Private Profile Source Ingestion + Review is in progress on `feature/profile-source-ingestion`.
+Milestone 4 is released. Milestone 5 — Private Profile Source Ingestion + Review is implemented on `feature/profile-source-ingestion` and in review ([PR #11](https://github.com/dude297/internship-finder/pull/11)); production stays on Milestone 4 until it's approved.
 
 ## Status Summary
 
@@ -38,7 +38,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local and hosted) |
-| Next milestone | Milestone 5 — Private Profile Source Ingestion + Review, in progress on `feature/profile-source-ingestion` |
+| Next milestone | Milestone 5 in review (PR #11; not merged, not deployed). Milestone 6 not started |
 
 ### Selected stack
 
@@ -97,7 +97,7 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-None on `main`. Milestone 5 — Private Profile Source Ingestion + Review is in progress on `feature/profile-source-ingestion` (not started in this repository state beyond that branch).
+Milestone 5 review ([PR #11](https://github.com/dude297/internship-finder/pull/11), section below). Production is unchanged (Milestone 4).
 
 ## Milestone 4 (complete; merged via PR #9)
 
@@ -203,7 +203,7 @@ Local development uses the Compose database (private data in the `pgdata` volume
 
 ## Milestone 5 (implemented; PR open, in review)
 
-Private Profile Source Ingestion + Review on `feature/profile-source-ingestion` ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). **Not merged, not deployed; production Neon is not migrated** (still `b41e7c9d2f60`). This section is self-contained so it doesn't conflict with the open Milestone 4 release-docs PR; the header, status table, and next-task lines are updated when both have merged.
+Private Profile Source Ingestion + Review on `feature/profile-source-ingestion` ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). **Not merged, not deployed; production Neon is not migrated** (still `b41e7c9d2f60`). The release closeout, after approval, is in [deployment.md](docs/deployment.md#milestone-5-release-after-pr-11-approval).
 
 Implemented:
 
@@ -247,7 +247,7 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Milestone 5 — Private Profile Source Ingestion + Review is in progress on `feature/profile-source-ingestion`. Cleanup debt: delete the stray Render service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`) and replace the hosted synthetic Match Profile with the owner's real one through the app.
+Review Milestone 5 ([PR #11](https://github.com/dude297/internship-finder/pull/11)). After approval: migrate Neon to `c5a1e0f3d7b2`, then deploy Render immediately (Milestone 4 code can't save a Match Profile on the migrated schema), then Vercel, then the hosted synthetic résumé smoke ([deployment.md](docs/deployment.md#milestone-5-release-after-pr-11-approval)). Cleanup debt: delete the stray Render service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`) and replace the hosted synthetic Match Profile with the owner's real one through the app.
 
 ## Recent Important Decisions
 
