@@ -133,13 +133,20 @@ def _run_pdf_child(data: bytes, target: Callable[[bytes, Connection], None] | No
     process = multiprocessing.get_context("spawn").Process(
         target=target, args=(data, sender), daemon=True
     )
-    process.start()
+    try:
+        process.start()
+    except BaseException:
+        sender.close()
+        receiver.close()
+        raise
     sender.close()
     try:
         if not receiver.poll(PDF_TIMEOUT_SECONDS):
             raise UnreadableFile("That PDF took too long to read.")
         kind, value = receiver.recv()
-    except EOFError:  # the child died, e.g. killed for exceeding its memory limit
+    except UnreadableFile:
+        raise
+    except Exception:  # EOFError when the child died (e.g. its memory limit), or a garbled reply
         raise UnreadableFile("Couldn't read that PDF.") from None
     finally:
         receiver.close()

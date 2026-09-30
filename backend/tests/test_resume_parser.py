@@ -1,8 +1,10 @@
 """Unit tests for app.profile.resume_parser (ADR-011 §2, §6, §7). No DB, no `postgres` marker:
 this parser is pure (bytes in, candidates out)."""
 
+import multiprocessing
 import threading
 import time
+from typing import Any
 
 import pytest
 
@@ -25,6 +27,7 @@ from tests.resume_fixtures import (
     SYNTHETIC_RESUME_PDF_LINES,
     SYNTHETIC_RESUME_TEXT,
     exit_immediately_worker,
+    garbled_reply_worker,
     make_encrypted_pdf,
     make_flate_bomb_pdf,
     make_text_pdf,
@@ -555,4 +558,49 @@ def test_pdf_slot_is_released_when_the_child_dies_without_reporting(
     monkeypatch.undo()
     doc = parse_document(make_text_pdf(SYNTHETIC_RESUME_PDF_LINES))
     assert doc.content_type == APPLICATION_PDF
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+
+def test_garbled_child_reply_is_unreadable_and_releases_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_run_pdf_child = resume_parser._run_pdf_child  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+    def fake_run_pdf_child(data: bytes) -> str:
+        return real_run_pdf_child(data, target=garbled_reply_worker)
+
+    monkeypatch.setattr(resume_parser, "_run_pdf_child", fake_run_pdf_child)
+    with pytest.raises(UnreadableFile) as excinfo:
+        parse_document(b"%PDF-1.4\ngarbled")
+    assert str(excinfo.value) == "Couldn't read that PDF."
+    assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+
+def test_failed_child_start_closes_the_pipe_and_releases_the_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    closed: list[str] = []
+    context = multiprocessing.get_context("spawn")
+    real_pipe = context.Pipe
+
+    def tracking_pipe(duplex: bool = True) -> tuple[Any, Any]:
+        receiver, sender = real_pipe(duplex)
+        for name, end in (("receiver", receiver), ("sender", sender)):
+            original = end.close
+
+            def close(name: str = name, original: Any = original) -> None:
+                closed.append(name)
+                original()
+
+            end.close = close
+        return receiver, sender
+
+    def failing_start(self: object) -> None:
+        raise OSError("synthetic spawn failure")
+
+    monkeypatch.setattr(context, "Pipe", tracking_pipe)
+    monkeypatch.setattr(context.Process, "start", failing_start)
+    with pytest.raises(OSError):
+        parse_document(b"%PDF-1.4\nnever-started")
+    assert sorted(closed) == ["receiver", "sender"]
     assert not resume_parser._PDF_SLOT.locked()  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]

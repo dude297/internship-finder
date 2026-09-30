@@ -2,6 +2,8 @@
 fabricated: no real person, no real employer, no real school (ADR-011; CLAUDE.md public-repo
 safety)."""
 
+from typing import Any
+
 # Covers: contact header (must be ignored), a Summary section (must be ignored and must end
 # before Skills content leaks into it), every alias family, a "Label: ..." skill line, an
 # entry section with bullet continuations, an Education entry, and a duplicate skill to
@@ -180,6 +182,13 @@ def exit_immediately_worker(data: bytes, sender: object) -> None:
     import os
 
     os._exit(1)  # noqa: SLF001
+
+
+def garbled_reply_worker(data: bytes, sender: Any) -> None:
+    """A `_pdf_worker`-shaped target that replies with something other than a (kind, value)
+    pair: the parent must treat it as an unreadable PDF, not a server error."""
+    sender.send("synthetic garbled reply")
+    sender.close()
 
 
 def make_flate_bomb_pdf(decompressed_bytes: int = 70 * 1024 * 1024) -> bytes:
