@@ -8,7 +8,10 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
+    LargeBinary,
     String,
+    UniqueConstraint,
     false,
     func,
 )
@@ -19,6 +22,7 @@ from app.enums import (
     EducationLevel,
     ExtractionMethod,
     FactCategory,
+    FactReviewState,
     ProfileSourceKind,
     RemotePreference,
 )
@@ -96,6 +100,9 @@ class ProfileSource(IdMixin, Base):
         CheckConstraint(
             "content_sha256 IS NULL OR length(content_sha256) = 64", name="content_sha256_length"
         ),
+        CheckConstraint("byte_size IS NULL OR byte_size > 0", name="byte_size_positive"),
+        # The same file can't be uploaded twice for one profile (ADR-011 §4).
+        UniqueConstraint("profile_id", "content_sha256"),
     )
 
     profile_id: Mapped[uuid.UUID] = mapped_column(
@@ -109,6 +116,11 @@ class ProfileSource(IdMixin, Base):
     storage_ref: Mapped[str | None] = mapped_column(String(1024))
     content_sha256: Mapped[str | None] = mapped_column(String(64))
     details: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    # Uploaded artifacts (ADR-011): sniffed allowlisted type, size, and the parser that read it.
+    content_type: Mapped[str | None] = mapped_column(String(100))
+    byte_size: Mapped[int | None] = mapped_column(Integer)
+    parser_name: Mapped[str | None] = mapped_column(String(100))
+    parser_version: Mapped[str | None] = mapped_column(String(50))
     ingested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -117,6 +129,23 @@ class ProfileSource(IdMixin, Base):
     facts: Mapped[list["ProfileFact"]] = relationship(
         back_populates="profile_source", passive_deletes=True
     )
+    artifact: Mapped["ProfileSourceArtifact | None"] = relationship(
+        back_populates="profile_source", passive_deletes=True
+    )
+
+
+class ProfileSourceArtifact(Base):
+    """The original uploaded bytes, immutable, 1:1 with its source (ADR-011 §3). Kept apart
+    from `profile_sources` so listing sources never loads file content."""
+
+    __tablename__ = "profile_source_artifacts"
+
+    profile_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("profile_sources.id", ondelete="CASCADE"), primary_key=True
+    )
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+
+    profile_source: Mapped[ProfileSource] = relationship(back_populates="artifact")
 
 
 class ProfileFact(IdMixin, TimestampMixin, Base):
@@ -130,6 +159,11 @@ class ProfileFact(IdMixin, TimestampMixin, Base):
         CheckConstraint(
             "extraction_method <> 'ai_inference' OR extractor_name IS NOT NULL",
             name="ai_inference_has_extractor",
+        ),
+        # A non-manual fact is user-verified exactly when the owner accepted it (ADR-011 §5).
+        CheckConstraint(
+            "extraction_method = 'manual' OR (review_state = 'accepted') = verified_by_user",
+            name="review_state_matches_verified",
         ),
     )
 
@@ -152,6 +186,11 @@ class ProfileFact(IdMixin, TimestampMixin, Base):
     extractor_version: Mapped[str | None] = mapped_column(String(50))
     confidence: Mapped[float | None] = mapped_column(Float)
     verified_by_user: Mapped[bool] = mapped_column(default=False, server_default=false())
+    # No default: every writer states the review state, so a new fact can't slip into fit
+    # scoring by omission (ADR-011 §5).
+    review_state: Mapped[FactReviewState] = mapped_column(
+        str_enum(FactReviewState, "fact_review_state")
+    )
 
     profile: Mapped[Profile] = relationship(back_populates="facts")
     profile_source: Mapped[ProfileSource | None] = relationship(back_populates="facts")

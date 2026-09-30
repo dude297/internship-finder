@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.enums import ExtractionMethod, FactCategory, ProfileSourceKind
+from app.enums import ExtractionMethod, FactCategory, FactReviewState, ProfileSourceKind
 from app.models import Profile, ProfileFact
 from app.repositories import CatalogEvaluation, get_profile
 from app.schemas.profile import MatchItem, MatchProfile
@@ -106,6 +106,7 @@ def save_match_profile(db: Session, body: MatchProfile) -> CatalogEvaluation:
                 source_kind=ProfileSourceKind.MANUAL,
                 extraction_method=ExtractionMethod.MANUAL,
                 verified_by_user=True,
+                review_state=FactReviewState.ACCEPTED,
             )
             for position, (category, value) in enumerate(desired)
         )

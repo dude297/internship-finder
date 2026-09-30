@@ -14,6 +14,9 @@ dependencies = [
     "uvicorn[standard]>=0.54,<1",
     # Ingestion HTTP client (ADR-008 §10); also FastAPI's test client.
     "httpx2>=2.13,<3",
+    # Profile source uploads (ADR-011): multipart parsing for UploadFile, text-based PDF reading.
+    "python-multipart>=0.0.32,<0.1",
+    "pypdf>=6.19,<7",
 ]
 
 [project.optional-dependencies]

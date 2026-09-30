@@ -30,6 +30,7 @@ TABLES = MILESTONE_2_TABLES | {
     "ingestion_runs",
     "ingestion_run_errors",
     "opportunity_identifiers",
+    "profile_source_artifacts",
 }
 GRADUATION_CHECK = "ck_profiles_graduation_after_status_as_of"
 MILESTONE_3_REVISION = "726372d627b8"
