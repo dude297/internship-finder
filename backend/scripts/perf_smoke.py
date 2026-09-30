@@ -2,7 +2,8 @@
 
 Seeds ~1,100 synthetic opportunities into a DISPOSABLE database, then times the operations the
 owner triggers: the first Match Profile save (scores everything), an unchanged save, a changed
-save, and the recommended list query. Prints timings and SQL statement counts (to spot N+1).
+save, the recommended list query, and (Milestone 5) a résumé upload plus one review batch that
+accepts every imported fact. Prints timings and SQL statement counts (to spot N+1).
 
     PERF_DATABASE_URL=postgresql+psycopg://…/if_perf python scripts/perf_smoke.py
 
@@ -32,10 +33,12 @@ from app.enums import (
     RequirementsAssessmentStatus,
     RequirementType,
 )
-from app.models import Opportunity, OpportunityRequirement, Profile
+from app.models import Opportunity, OpportunityRequirement, Profile, ProfileSource
 from app.schemas.profile import MatchItem, MatchProfile
+from app.schemas.profile_source import AcceptItem, ReviewRequest
 from app.services.discovery import Filters, list_page
 from app.services.match_profile import save_match_profile
+from app.services.profile_sources import create_source, get_source, review_source
 
 OPPORTUNITIES = 1_100
 VOCABULARY = (
@@ -51,7 +54,15 @@ def description(n: int) -> str:
     return " ".join(WORDS[(n * 7 + i * 3) % len(WORDS)] for i in range(420))
 
 
+RESUME = (
+    "Skills\n" + ", ".join(f"Synthetic Skill {n}" for n in range(40)) + ", Robotics, SQL\n\n"
+    "Relevant Coursework\nSynthetic Statistics, Synthetic Embedded Systems\n\n"
+    "Projects\nSynthetic Sensor Array\n- Firmware for embedded sensors in C++\n"
+).encode()
+
+
 def seed(db: Session) -> None:
+    db.execute(delete(ProfileSource))
     db.execute(delete(Opportunity))
     db.execute(delete(Profile))
     start = date(2041, 6, 1)
@@ -148,6 +159,16 @@ def main() -> None:
             db,
             "recommended list, last page",
             lambda: len(list_page(db, Filters(), 50, OPPORTUNITIES - 50, "recommended")[0]),
+        )
+        detail = create_source(db, RESUME, "synthetic-resume.txt")
+        db.commit()
+        source = get_source(db, detail.id)
+        assert source is not None
+        batch = ReviewRequest(accept=[AcceptItem(id=fact.id) for fact in detail.facts])
+        timed(
+            db,
+            f"review batch ({len(detail.facts)} accepted)",
+            lambda: review_source(db, source, batch).evaluated_opportunities,
         )
 
 
