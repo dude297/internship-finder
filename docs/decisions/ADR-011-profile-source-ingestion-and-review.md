@@ -50,7 +50,7 @@ Deleting a source removes its row, its artifact, and its facts in one transactio
 
 ### 5. Review state
 
-`profile_facts.review_state` is `pending`, `accepted`, or `rejected`. It's NOT NULL with **no default**, so every code path that creates a fact has to choose one.
+`profile_facts.review_state` is `pending`, `accepted`, or `rejected`. It's NOT NULL with a server default of `accepted`. The default exists only for deployment compatibility: it lets the immediately previous (Milestone 4) application, whose manual Match Profile inserts don't name `review_state`, keep saving after this migration runs and before Milestone 5 is deployed (and lets a Render rollback to Milestone 4 keep working). It is not an invitation for Milestone 5 code to omit `review_state`; every Milestone 5 write still states it explicitly, and the CHECK below makes an unverified non-manual insert that omits it fail regardless (only a verified or manual fact can land on `accepted` by default).
 
 | Fact | `review_state` | `verified_by_user` |
 |---|---|---|
