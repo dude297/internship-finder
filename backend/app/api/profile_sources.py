@@ -17,6 +17,7 @@ from app.profile.resume_parser import (
     APPLICATION_PDF,
     MAX_UPLOAD_BYTES,
     TEXT_PLAIN,
+    ParserBusy,
     UnreadableFile,
     UnsupportedFileType,
 )
@@ -43,6 +44,14 @@ def _load(db: DbSession, source_id: uuid.UUID) -> service.ProfileSource:
     if source is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Source not found.")
     return source
+
+
+def _busy_response(exc: ParserBusy) -> HTTPException:
+    # Retry-After 5: shorter than PDF_TIMEOUT_SECONDS, since the slot usually frees up well
+    # before the timeout (most PDFs extract in well under a second).
+    return HTTPException(
+        status.HTTP_503_SERVICE_UNAVAILABLE, str(exc), headers={"Retry-After": "5"}
+    )
 
 
 @router.get("")
@@ -99,6 +108,8 @@ async def upload_source(request: Request, db: DbSession) -> ProfileSourceDetail:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except service.DuplicateSource as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except ParserBusy as exc:
+        raise _busy_response(exc) from exc
     await run_in_threadpool(db.commit)
     return detail
 
@@ -159,6 +170,8 @@ def reparse_source(source_id: uuid.UUID, db: DbSession) -> ProfileSourceDetail:
         detail = service.reparse_source(db, source)
     except (UnsupportedFileType, UnreadableFile) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    except ParserBusy as exc:
+        raise _busy_response(exc) from exc
     db.commit()
     return detail
 
