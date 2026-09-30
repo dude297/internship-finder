@@ -2,10 +2,10 @@
 
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
-Last Updated: 2026-09-29
-Current Milestone: **Milestone 4 — Profile Intelligence + Fit Ranking v1, in progress** on `feature/profile-intelligence-fit-ranking` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7) and released from `main`. Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
-Current Production Version: `main` at `d78b93d` on https://internship-finder-pi.vercel.app (Render and Vercel both deployed from it, 2026-09-29)
-Active Development Branch: `main`. Remote: https://github.com/dude297/internship-finder
+Last Updated: 2026-09-30
+Current Milestone: none in progress. Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) and released from `main` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Production Version: `main` at `ca9b91b` on https://internship-finder-pi.vercel.app (Render deploy finished 2026-09-29 06:21 UTC; Vercel production deployment created 2026-09-29 07:39 UTC from `main` via CLI; both verified 2026-09-30)
+Active Development Branch: `main`. Remote: https://github.com/dude297/internship-finder. Milestone 5 (Private Profile Source Ingestion + Review) is in progress on `feature/profile-source-ingestion`.
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 4: Match Profile, deterministic fit scoring v1, eligibility-first ranking, and the internships-only ATS scope ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Production stays on `main` until the PR is reviewed.
+Milestone 4 is released. Milestone 5 — Private Profile Source Ingestion + Review is in progress on `feature/profile-source-ingestion`.
 
 ## Status Summary
 
@@ -33,12 +33,12 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
 | Opportunity ingestion | **Implemented, manual sync only** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`); internships-only board scope on the Milestone 4 branch |
 | Eligibility | **Implemented** v1 (rules version `v1`), evaluated automatically (only when inputs change) |
-| Fit scoring and ranking | **Implemented on the Milestone 4 branch, in review** (scoring `v1`, [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`). Not deployed |
+| Fit scoring and ranking | **Implemented and deployed** (scoring `v1`, [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`, applied to Neon 2026-09-30) |
 | Application tracking | **Implemented** |
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
-| Product implementation | Private single-user app with automated discovery (local) |
-| Next milestone | Milestone 4 in review (PR open; not merged, not deployed). Milestone 5 not started |
+| Product implementation | Private single-user app with automated discovery (local and hosted) |
+| Next milestone | Milestone 5 — Private Profile Source Ingestion + Review, in progress on `feature/profile-source-ingestion` |
 
 ### Selected stack
 
@@ -48,7 +48,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Frontend hosting | Vercel Hobby | — | **Yes** (project `internship-finder`, `internship-finder-pi.vercel.app`) |
 | Backend | Python 3.12+, FastAPI, Pydantic, pwdlib (Argon2id), httpx2 (ingestion HTTP) | Yes (`backend/`) | — |
 | Backend hosting | Render Free Web Service | — | **Yes** (`internship-finder-api`, Oregon, connected to Neon, auto-deploy off) |
-| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (5 migrations on the Milestone 4 branch; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `92a17353e5a8`, owner created, 1,055 opportunities) |
+| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (5 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `b41e7c9d2f60`, owner created, 1,055 opportunities) |
 | CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`: frontend, backend, e2e jobs; PR/push only; no scheduled jobs) | Running on GitHub |
 | End-to-end | Playwright (Chromium) | Yes (`frontend/e2e/`) | — |
 
@@ -60,6 +60,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 - Milestone 2: Private Single-User Workflow MVP ([PR #5](https://github.com/dude297/internship-finder/pull/5)): single-user auth, sessions, CSRF, private profile and opportunity API/UI, structured requirements, automatic eligibility evaluation, application tracking, Playwright, local PostgreSQL.
 - Milestone 3: Automated Opportunity Discovery and Ingestion ([PR #6](https://github.com/dude297/internship-finder/pull/6)).
 - Milestone 3.5: Hosted Deployment Foundation ([PR #7](https://github.com/dude297/internship-finder/pull/7)).
+- Milestone 4: Profile Intelligence + Fit Ranking v1 ([PR #9](https://github.com/dude297/internship-finder/pull/9)).
 
 ## Milestone 3 (complete; merged via PR #6)
 
@@ -96,11 +97,11 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 4 review (below). Production is unchanged.
+None on `main`. Milestone 5 — Private Profile Source Ingestion + Review is in progress on `feature/profile-source-ingestion` (not started in this repository state beyond that branch).
 
-## Milestone 4 (implemented; PR open, in review)
+## Milestone 4 (complete; merged via PR #9)
 
-Profile Intelligence + Fit Ranking v1 on `feature/profile-intelligence-fit-ranking` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), [scoring.md](docs/scoring.md)). **Not merged, not deployed; production Neon is not migrated.** The release closeout after approval: migrate Neon to `b41e7c9d2f60`, deploy `main` on Render and Vercel, hosted smoke ([deployment.md](docs/deployment.md#unmerged-branch-validation)).
+Profile Intelligence + Fit Ranking v1 ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), [scoring.md](docs/scoring.md)).
 
 Implemented:
 
@@ -116,6 +117,12 @@ Implemented:
 Validation (2026-09-29, local): backend 537 tests (286 unit + 251 PostgreSQL), frontend 63 Vitest tests, Playwright 4 scenarios passing twice on the same reused database, ruff/format/pyright/ESLint/Prettier/tsc/build clean, `git diff --check` clean, migration base → head → `92a17353e5a8` → head → base → head with `alembic check`. Performance (1,100 synthetic): first Match Profile save 2.14 s, unchanged 0.30 s, changed 2.25 s, recommended page 0.05 s ([operations.md](docs/operations.md#evaluation-history-and-re-evaluation-implemented-not-scheduled)). Live smoke on a disposable database (discovery feed): 1,050 created in 20.3 s, Match Profile save 1.34 s, second sync `no_change`. GitHub Actions status is recorded in the PR.
 
 Not implemented (by design): résumé upload/parsing, OCR, AI or embeddings, background jobs or queues, scheduled sync, notifications.
+
+Release (2026-09-29/2026-09-30): PR #9 merged (2026-09-29); production main is `ca9b91b`. Neon migrated to `b41e7c9d2f60` (verified by read-only query 2026-09-30, existing boards backfilled scope `all`, pre-Milestone-4 evaluations kept NULL fit). Render `internship-finder-api` (`srv-dastve60tbcc7392dfgg`) deployed `ca9b91b` (live, finished 2026-09-29 06:21 UTC, auto-deploy off). Vercel production redeployed from `main` via CLI (2026-09-29 07:39 UTC), aliased to `internship-finder-pi.vercel.app`; `/api/health` returned `200` through Vercel on 2026-09-30.
+
+Hosted smoke (2026-09-29, owner-run, all PASS): Match Profile GET; first Match Profile save evaluated 1,055/unchanged 0 in 6,359 ms; identical save evaluated 0/unchanged 1,055 in 1,995 ms; changed save evaluated 1,055/unchanged 0 in 6,391 ms; Recommended page size 100 in 306 ms, page size 50 in 216 ms; all 1,055 opportunities loaded; eligibility-first/fit ordering PASS; all 1,055 scored with scoring version `v1`; coverage present (values `[100]`); "Why This Match" full breakdown PASS; built-in source remains scope `all`; latest run exposes `filtered_count`. Details and full production verification: [deployment.md](docs/deployment.md#production-verification).
+
+All 1,055 current evaluations are `needs_verification` (imported requirements are unassessed), fit range 2–22. Cross-bucket dominance (an eligible/lower-fit opportunity ranking below an ineligible/higher-fit one) is covered by deterministic backend/E2E tests, not by production data. The hosted Match Profile is still the synthetic one used for the smoke; the owner will replace it with the real Match Profile through the app (clearing it first would only add another 1,055 evaluation rows, so it is left in place deliberately).
 
 ## Milestone 3.5 (complete; merged via PR #7)
 
@@ -150,9 +157,10 @@ None open. Fixed during hosted validation (2026-09-29):
 ## Known Technical Debt
 
 - The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. All logins through the site share one bucket, so anyone's 10 failed attempts block new logins for up to 15 minutes (accepted; no trustworthy per-browser address exists behind Vercel's rewrite).
-- Catalog re-evaluation (profile or Match Profile save) is synchronous in the request. Milestone 4 batches it and skips unchanged pairs (~2 s for 1,100 opportunities locally when everything changes); hosted timing is unmeasured until the release. A much larger catalog would need background re-evaluation ([operations.md](docs/operations.md)).
+- Catalog re-evaluation (profile or Match Profile save) is synchronous in the request. Milestone 4 batches it and skips unchanged pairs (~2 s for 1,100 opportunities locally when everything changes; hosted, measured 2026-09-29 against 1,055 real opportunities: 6.36 s scoring everything, 2.0 s when nothing changed — see [operations.md](docs/operations.md#evaluation-history-and-re-evaluation-implemented-not-scheduled)). A much larger catalog would need background re-evaluation.
 - Fit v1 is lexical: synonyms outside the alias table don't match, and a skill that's also a common word (e.g. `Go`) can match unrelated text. Location matching is plain text. Activities and experience don't score ([scoring.md](docs/scoring.md#known-limitations-v1)).
-- Evaluations from before Milestone 4 have no fit until the first Match Profile save after the release.
+- All 1,055 current evaluations are `needs_verification` (imported requirements are unassessed); fit scores range 2–22. Cross-bucket dominance is exercised by deterministic tests, not by current production data.
+- A stray Render web service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`, Free) exists from earlier setup; its only deploy of `ca9b91b` failed to build (2026-09-29 06:17 UTC), auto-deploy is off (verified 2026-09-30), and it serves no traffic. To be deleted later by the owner.
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
 - Render Free cold starts take about 1–3 minutes (measured 73 s and ~3 min); Vercel either holds the request or returns `502`, which the UI shows as the waking state. Sessions survive the restart.
 - No database backups beyond Neon Free's short restore window.
@@ -179,11 +187,15 @@ None open. Fixed during hosted validation (2026-09-29):
 
 ## Database State
 
-Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `92a17353e5a8` (`alembic check` clean), holds the owner account, and after the first hosted sync holds 1,055 opportunities (13 MB on 2026-09-29). Schema head: migration `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`, no new tables) on top of the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair. The Milestone 4 branch adds `b41e7c9d2f60` (additive columns and constraints only, no new tables; verified locally: base → head, `alembic check`, downgrade to `92a17353e5a8`, upgrade, downgrade to base, upgrade); it is **not** applied to Neon until the release closeout. Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8` and `92a17353e5a8`, repairing the graduation constraint and the running-run index if needed.
+Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `b41e7c9d2f60` (`alembic check` clean), holds the owner account, and holds 1,055 opportunities. Schema head: migration `b41e7c9d2f60` (Milestone 4: `profiles` fit preferences; nullable fit columns on `opportunity_evaluations`; `ingestion_sources.scope`; `ingestion_runs.filtered_count`; additive only, no new tables) on top of `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`), the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair.
+
+Final Neon counts (read-only, 2026-09-30): 1,055 opportunities; 1,055 source records; 4,220 evaluations (2,110 with fit); 1,055 current (latest per opportunity) evaluations, all with a non-null fit score and scoring version `v1`; 1 ingestion source (scope `all`); 2 ingestion runs (both 2026-09-29 00:37 UTC — no sync happened during the release smoke); 1 profile; 0 profile sources; 10 profile facts; 1 owner account; database size 18 MB. Evaluation arithmetic: 2,110 pre-smoke (0 with fit) + 1,055 first Match Profile save + 0 unchanged save + 1,055 changed save = 4,220 total, 2,110 with fit — matches exactly.
+
+Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8`, `92a17353e5a8`, and `b41e7c9d2f60`, repairing the graduation constraint and the running-run index if needed.
 
 ## Current Scoring Version
 
-`v1` on the Milestone 4 branch (in review, not deployed): [docs/scoring.md](docs/scoring.md), [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md).
+`v1`, in production since the Milestone 4 release (2026-09-29): [docs/scoring.md](docs/scoring.md), [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md).
 
 ## Current Eligibility Rules Version
 
@@ -211,10 +223,11 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Review the Milestone 4 PR. After approval, the release closeout: migrate Neon to `b41e7c9d2f60`, merge, deploy `main` (Render, then Vercel), hosted smoke, and a first Match Profile save to score the catalog. Milestone 5 (proposed: résumé/profile-source ingestion with deterministic parsing and a review/accept/reject workflow; optional AI enrichment only afterwards) is not started.
+Milestone 5 — Private Profile Source Ingestion + Review is in progress on `feature/profile-source-ingestion`. Cleanup debt: delete the stray Render service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`) and replace the hosted synthetic Match Profile with the owner's real one through the app.
 
 ## Recent Important Decisions
 
+- 2026-09-29/2026-09-30: Milestone 4 released. PR #9 merged (2026-09-29); production `main` is `ca9b91b`. Neon migrated to `b41e7c9d2f60`; Render and Vercel production redeployed from `main`; hosted smoke passed (see the Milestone 4 section above and [deployment.md](docs/deployment.md#production-verification)).
 - 2026-09-29: ADR-010 accepted: fit scoring v1 (deterministic, weights 35/20/15/10/10/10, missing evidence scores 0 with coverage, one canonical config), eligibility-first ranking, Match Profile on `profile_facts` + `profiles` preference columns, fit fingerprints, a synchronous batched catalog pass (no queue), and an internships-only title scope for Greenhouse/Lever boards (default; validators cleared on scope change). Migration `b41e7c9d2f60`.
 
 - 2026-09-28: ADR-009 accepted: Vercel same-origin `/api` rewrite → Render (one instance, one worker) → Neon direct endpoint; proxy-secret-gated login throttle (amended 2026-09-29 to shared `proxy`/`direct` buckets of 10 after Vercel was found to pass forged forwarding headers; 50 global); Argon2 concurrency 2; `HOSTED` mode; manual migrations and deploys; Git deployments off on Vercel; `PROXY_SHARED_SECRET` Production-only; no scheduler or keep-alive. Migration `92a17353e5a8` reconciles the running-run index.

@@ -60,16 +60,17 @@ Structured logs as described in [ENGINEERING_GUIDELINES.md §11](../ENGINEERING_
 
 Every row since Milestone 4 carries eligibility and fit. Rows from before have NULL fit; the first Match Profile save after upgrading scores them (until then the recommended order falls back to eligibility, then newest).
 
-**Catalog pass performance** ([ADR-010 §9](decisions/ADR-010-fit-scoring-v1.md#9-catalog-re-evaluation-stays-synchronous)). The pass reads every latest fingerprint in one query, loads opportunities in keyset batches of 200 with their requirements, skips unchanged pairs, and flushes once per batch, so it issues a few dozen SQL statements regardless of catalog size. Measured 2026-09-29 (Windows, Docker PostgreSQL 18, local):
+**Catalog pass performance** ([ADR-010 §9](decisions/ADR-010-fit-scoring-v1.md#9-catalog-re-evaluation-stays-synchronous)). The pass reads every latest fingerprint in one query, loads opportunities in keyset batches of 200 with their requirements, skips unchanged pairs, and flushes once per batch, so it issues a few dozen SQL statements regardless of catalog size. Measured 2026-09-29 (Windows, Docker PostgreSQL 18, local) and hosted (Render Free / Neon Free, 1,055 real opportunities, through Vercel):
 
-| Operation | ~1,100 synthetic opportunities (`scripts/perf_smoke.py`) | 1,050 live discovery-feed postings (disposable DB) |
-|---|---|---|
-| First Match Profile save (scores everything) | 2.14 s, 32 SQL statements | 1.34 s |
-| Unchanged Match Profile save | 0.30 s, 17 statements | 0.16 s |
-| Changed Match Profile save | 2.25 s, 31 statements | 1.20 s |
-| Recommended list page (50) | 0.05 s, 5 statements | 0.06 s |
+| Operation | ~1,100 synthetic opportunities (`scripts/perf_smoke.py`, local) | 1,050 live discovery-feed postings (disposable DB, local) | 1,055 hosted opportunities (production, 2026-09-29) |
+|---|---|---|---|
+| First Match Profile save (scores everything) | 2.14 s, 32 SQL statements | 1.34 s | 6.359 s (evaluated 1,055 / unchanged 0) |
+| Unchanged Match Profile save | 0.30 s, 17 statements | 0.16 s | 1.995 s (evaluated 0 / unchanged 1,055) |
+| Changed Match Profile save | 2.25 s, 31 statements | 1.20 s | 6.391 s (evaluated 1,055 / unchanged 0) |
+| Recommended list page (50) | 0.05 s, 5 statements | 0.06 s | 0.216 s |
+| Recommended list page (100) | — | — | 0.306 s |
 
-The Milestone 3 path (a forced row per opportunity, one flush each) took ~4 s locally and ~10 s hosted for the same size. Batch size barely changes the time (50 to 1,100 all within noise) but bounds memory (traced peak ~9 MB at 50, ~13 MB at 200, ~33 MB unbatched), so 200 is kept. Hosted timings on Render Free/Neon are expected to be a few times the local ones, well under the proxy timeout; if a much larger catalog approaches it, background re-evaluation becomes a later-milestone requirement (no queue exists). Re-run with `PERF_DATABASE_URL=<disposable db> python scripts/perf_smoke.py` in `backend/`. History still grows with every real input change; pruning is TBD.
+The Milestone 3 path (a forced row per opportunity, one flush each) took ~4 s locally and ~10 s hosted for the same size. Batch size barely changes the time (50 to 1,100 all within noise) but bounds memory (traced peak ~9 MB at 50, ~13 MB at 200, ~33 MB unbatched), so 200 is kept. Hosted timings (Render Free/Neon, cold network hop plus Vercel's proxy) run a few times the local ones, well under the proxy timeout; if a much larger catalog approaches it, background re-evaluation becomes a later-milestone requirement (no queue exists). Re-run with `PERF_DATABASE_URL=<disposable db> python scripts/perf_smoke.py` in `backend/`. History still grows with every real input change; pruning is TBD.
 
 Still not automatic: re-evaluation when the eligibility rules version changes, and when time passes an expected graduation or enrollment date (see Future Scheduled Jobs).
 
