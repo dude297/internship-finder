@@ -15,6 +15,9 @@ export function ProfileTabs() {
       <NavLink to="/profile/match" className={tabClass}>
         Match Profile
       </NavLink>
+      <NavLink to="/profile/sources" className={tabClass}>
+        Sources
+      </NavLink>
     </nav>
   )
 }

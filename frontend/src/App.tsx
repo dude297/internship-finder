@@ -8,6 +8,7 @@ import { OpportunityDetailPage } from './pages/OpportunityDetailPage'
 import { OpportunityFormPage } from './pages/OpportunityFormPage'
 import { OpportunityListPage } from './pages/OpportunityListPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { ProfileSourcesPage } from './pages/ProfileSourcesPage'
 import { SourcesPage } from './pages/SourcesPage'
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/match" element={<MatchProfilePage />} />
+            <Route path="/profile/sources" element={<ProfileSourcesPage />} />
             <Route path="/opportunities" element={<OpportunityListPage />} />
             <Route path="/opportunities/new" element={<OpportunityFormPage />} />
             <Route path="/opportunities/:id" element={<OpportunityDetailPage />} />
