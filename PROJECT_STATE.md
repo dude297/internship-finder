@@ -247,7 +247,7 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Review Milestone 5 ([PR #11](https://github.com/dude297/internship-finder/pull/11)). After approval: migrate Neon to `c5a1e0f3d7b2`, then deploy Render immediately (Milestone 4 code can't save a Match Profile on the migrated schema), then Vercel, then the hosted synthetic résumé smoke ([deployment.md](docs/deployment.md#milestone-5-release-after-pr-11-approval)). Cleanup debt: delete the stray Render service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`) and replace the hosted synthetic Match Profile with the owner's real one through the app.
+Review Milestone 5 ([PR #11](https://github.com/dude297/internship-finder/pull/11)). After approval: migrate Neon to `c5a1e0f3d7b2` (the `review_state` default keeps the Milestone 4 app working on the migrated schema, so there's no deploy-ordering hazard), then deploy Render, then Vercel, then the hosted synthetic résumé smoke ([deployment.md](docs/deployment.md#milestone-5-release-after-pr-11-approval)). Cleanup debt: delete the stray Render service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`) and replace the hosted synthetic Match Profile with the owner's real one through the app.
 
 ## Recent Important Decisions
 
