@@ -2,14 +2,14 @@
 
 Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md). This file is the runbook. It never contains secrets: no `DATABASE_URL`, proxy secret, password, hash, session or CSRF token.
 
-## Status (2026-09-29)
+## Status (2026-09-30)
 
 | Part | State |
 |---|---|
-| Neon | **Provisioned.** Migrated to `92a17353e5a8`. Owner created (CLI, `getpass`). 1,055 opportunities from the first hosted sync. |
-| Render | **Deployed** from `main` at `d78b93d` (branch restored after the [unmerged branch validation](#unmerged-branch-validation)). Auto-deploy off. |
-| Vercel | **Deployed** (production, manual CLI deploy from a clean checkout of `d78b93d`). |
-| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)), then re-smoked after the `main` release (health, login page, database, catalog 1,055). |
+| Neon | **Provisioned.** Migrated to `b41e7c9d2f60` (verified by read-only query 2026-09-30). Owner created (CLI, `getpass`). 1,055 opportunities. |
+| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy of `ca9b91b` live (finished 2026-09-29 06:21 UTC). Auto-deploy off, branch `main`. |
+| Vercel | **Deployed** (production, `Ready`, aliased to `internship-finder-pi.vercel.app`; created 2026-09-29 07:39 UTC from `main` via CLI). |
+| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); `/api/health` through Vercel `200` on 2026-09-30. |
 
 ## Topology
 
@@ -99,7 +99,7 @@ With `DATABASE_URL` set as in step 1: `python -m app.cli create-owner --username
 
 Milestone 3.5 was validated before merge by switching the Render service's branch to `feature/hosted-deployment-foundation` (auto-deploy stayed off) and deploying manually; Vercel production was deployed from a clean checkout of that branch. After the PR is merged: switch Render's branch back to `main`, deploy `main` on Render, and redeploy Vercel production from `main`. Done on 2026-09-29 for `d78b93d` (PR #7). The rebase merge rewrote the branch SHAs cited on this page: `36b9896` → `03e86c7`, `65964c6` → `17e5877`, `3563021` → `680c2b7`, `3ab655f` → `6eaaed6`.
 
-Milestone 4 is **not** validated this way: it stays off production until its PR is reviewed. Its release closeout, after approval: migrate Neon to `b41e7c9d2f60` (additive; existing boards get scope `all`, existing evaluations keep NULL fit), deploy `main` on Render and Vercel, then run the hosted smoke. Existing evaluations get fit scores on the first Match Profile save (one catalog pass; ~1–2 s locally for ~1,100 opportunities); until then the recommended order is eligibility, then newest.
+Milestone 4 was released without the branch-swap step: PR #9 merged into `main` on 2026-09-29 (production `main` is `ca9b91b`). Release closeout: Neon migrated to `b41e7c9d2f60` (additive; existing boards backfilled scope `all`, pre-Milestone-4 evaluations kept NULL fit until the first Match Profile save), Render and Vercel production redeployed from `main`, then the hosted smoke below. The first Match Profile save on 2026-09-29 gave every pre-existing opportunity a fit score (1,055 evaluated in 6,359 ms).
 
 The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `.gitignore` and writes an `.env.local` (a short-lived OIDC token), so the deployment reports `gitDirty`. Both stay out of the build; delete `.env.local` and the checkout afterwards.
 
@@ -149,6 +149,29 @@ Run after every deploy. Results of the first hosted validation (2026-09-28) are 
 
 Global failed-login cap (50 per 15 minutes) is covered by unit tests only: a hosted test needs five distinct client addresses, since a blocked key stops adding failures.
 
+### Milestone 4 hosted smoke (2026-09-29)
+
+Run by the owner against production after the release (Neon migrated to `b41e7c9d2f60`, Render and Vercel redeployed from `main` at `ca9b91b`). All PASS.
+
+| Check | Result |
+|---|---|
+| Match Profile `GET` | PASS |
+| First Match Profile save | evaluated 1,055 / unchanged 0 in 6,359 ms |
+| Identical save (no changes) | evaluated 0 / unchanged 1,055 in 1,995 ms |
+| Changed save | evaluated 1,055 / unchanged 0 in 6,391 ms |
+| Recommended list page (100) | 306 ms |
+| Recommended list page (50) | 216 ms |
+| Full catalog load | all 1,055 opportunities loaded |
+| Eligibility-first / fit ordering | PASS |
+| Scoring coverage | all 1,055 scored with scoring version `v1`; coverage present (values `[100]`) |
+| "Why This Match" breakdown | full breakdown PASS |
+| Board scope | built-in source remains scope `all` |
+| Run counts | latest ingestion run exposes `filtered_count` |
+
+Final Neon counts (read-only, 2026-09-30): 1,055 opportunities; 1,055 source records; 4,220 evaluations (2,110 with fit); 1,055 current evaluations, all with fit score and scoring version `v1`; 1 ingestion source; 2 ingestion runs (both 2026-09-29 00:37 UTC, before the smoke); 1 profile; 0 profile sources; 10 profile facts; 1 owner account; 18 MB database size. All 1,055 current evaluations are `needs_verification` (imported requirements are unassessed), fit range 2–22; cross-bucket dominance is covered by deterministic backend/E2E tests, not by this production data. The hosted Match Profile used for the smoke is still the synthetic one; it is left in place deliberately (clearing it would add another 1,055 evaluation rows) until the owner replaces it with the real Match Profile through the app.
+
+Cleanup debt: a stray Render web service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`, Free) exists from earlier setup; its only deploy of `ca9b91b` failed to build (2026-09-29 06:17 UTC), auto-deploy is off (verified 2026-09-30), and it serves no traffic. To be deleted later by the owner.
+
 ## Cold Starts
 
 Render Free sleeps after about 15 minutes without traffic. Observed 2026-09-28: the first proxied request arrived about 07:25 UTC, Render started the process at 07:27:46, and uvicorn was ready at 07:28:10, so the wake took **about 3 minutes**. Meanwhile Vercel answered `502` (`text/plain`, `ROUTER_EXTERNAL_TARGET_ERROR`). A second test on 2026-09-29 (Render slept at 00:53:48 UTC, request at about 01:09:33): the process started at 01:10:28 and was ready at 01:10:44. Vercel held that first request and returned `200` after **73 s**, and the existing session was still authenticated (sessions are database rows, so they survive restarts). Wake time varies from about 1 to 3 minutes. The frontend treats any non-`401` failure of the session check (network error, 5xx, non-JSON) as "server waking up", retries automatically (backoff over about a minute, each attempt also waiting on Vercel's upstream timeout), then offers **Retry**. It never treats it as a logout. No keep-alive pings, by design.
@@ -162,7 +185,7 @@ None. Source sync stays manual (Sources page, API, or CLI with `DATABASE_URL` se
 - **Render Free:** sleeps when idle (cold starts above); monthly instance hours are capped. Exhaustion suspends the service, never bills.
 - **Neon Free:** compute auto-suspends when idle (the first query after that is slower; `pool_pre_ping` reconnects); storage is capped (the empty schema is 8.4 MB). Exhaustion suspends compute or blocks writes, never bills.
 - **Vercel Hobby:** usage limits pause or limit the project, never bill.
-- Long requests: the first discovery sync (30.8 s hosted) and profile re-evaluation over the whole catalog (~10 s for 1,055 opportunities hosted) run inside one proxied request. Neither hit Vercel's external-rewrite timeout on 2026-09-29. If one ever is cut off, the backend may still finish and commit: refresh before retrying (a second sync of the same source reports "already syncing" until the first ends).
+- Long requests: the first discovery sync (30.8 s hosted), profile re-evaluation over the whole catalog (~10 s for 1,055 opportunities hosted), and a Match Profile save that scores the whole catalog (6.4 s for 1,055 opportunities hosted, measured 2026-09-29) run inside one proxied request. None hit Vercel's external-rewrite timeout. If one ever is cut off, the backend may still finish and commit: refresh before retrying (a second sync of the same source reports "already syncing" until the first ends).
 
 ## Maintenance
 

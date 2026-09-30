@@ -2,7 +2,7 @@
 
 ## Current
 
-Milestones 0–3.5 are merged; Milestone 4 (Match Profile, fit scoring v1, eligibility-first ranking, internships-only board scope, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)) is on its feature branch awaiting review. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is deployed from `main`: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
+Milestones 0–4 are merged. Milestone 4 (Match Profile, fit scoring v1, eligibility-first ranking, internships-only board scope, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)) is released from `main`. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is deployed from `main`: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
 
 ```text
 Browser ── same origin ──► Vite dev server (localhost:5173)

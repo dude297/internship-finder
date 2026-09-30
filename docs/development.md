@@ -198,7 +198,7 @@ alembic current                                       # show the applied revisio
 alembic check                                         # fail if models and migrations differ
 ```
 
-Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade 7d7f4f8b9a3c`, `downgrade 3b9c6b57bb60`, `downgrade base`, `upgrade head`, `check` (CI skips the intermediate downgrades; `tests/test_migrations.py` covers them, plus the stale-`7d7f4f8b9a3c` repair). Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. No hosted database is provisioned yet. Rules:
+Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade 7d7f4f8b9a3c`, `downgrade 3b9c6b57bb60`, `downgrade base`, `upgrade head`, `check` (CI skips the intermediate downgrades; `tests/test_migrations.py` covers them, plus the stale-`7d7f4f8b9a3c` repair). Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. A hosted database (Neon Free) is provisioned and migrated to the current head; see [deployment.md](deployment.md). Rules:
 
 - every schema change is an Alembic migration, committed with the code that needs it
 - update [data-model.md](data-model.md) in the same change
