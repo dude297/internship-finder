@@ -1,9 +1,12 @@
 """Unit tests for app.profile.resume_parser (ADR-011 §2, §6, §7). No DB, no `postgres` marker:
 this parser is pure (bytes in, candidates out)."""
 
+import time
+
 import pytest
 
 from app.enums import FactCategory
+from app.profile import resume_parser
 from app.profile.resume_parser import (
     APPLICATION_PDF,
     MAX_CANDIDATES,
@@ -20,6 +23,7 @@ from tests.resume_fixtures import (
     SYNTHETIC_RESUME_PDF_LINES,
     SYNTHETIC_RESUME_TEXT,
     make_encrypted_pdf,
+    make_flate_bomb_pdf,
     make_text_pdf,
 )
 
@@ -401,3 +405,16 @@ def test_parsed_document_and_candidate_are_plain_value_objects() -> None:
     assert isinstance(doc.candidates[0], Candidate)
     with pytest.raises(AttributeError):
         doc.candidates[0].name = "changed"  # type: ignore[misc]
+
+
+def test_decompression_bomb_pdf_is_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 0.2 MB PDF whose content stream inflates to 70 MB: extraction runs in a child process
+    that is killed at the time limit (or, on Linux, stopped by its memory limit)."""
+    monkeypatch.setattr(resume_parser, "PDF_TIMEOUT_SECONDS", 3.0)
+    data = make_flate_bomb_pdf()
+    assert len(data) < MAX_UPLOAD_BYTES
+    started = time.monotonic()
+    with pytest.raises(UnreadableFile) as caught:
+        parse_document(data)
+    assert time.monotonic() - started < 10
+    assert str(caught.value) in {"That PDF took too long to read.", "Couldn't read that PDF."}

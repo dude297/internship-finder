@@ -8,6 +8,7 @@ import urllib.parse
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
@@ -63,7 +64,10 @@ async def upload_source(request: Request, db: DbSession) -> ProfileSourceDetail:
     if length > MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "That file is larger than 2 MB.")
 
-    form = await request.form(max_part_size=MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD)
+    # One file field and nothing else.
+    form = await request.form(
+        max_files=1, max_fields=0, max_part_size=MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD
+    )
     try:
         upload = form.get("file")
         if not isinstance(upload, StarletteUploadFile):
@@ -85,15 +89,17 @@ async def upload_source(request: Request, db: DbSession) -> ProfileSourceDetail:
     finally:
         await form.close()
 
+    # Parsing (up to PDF_TIMEOUT_SECONDS) and database work are blocking: keep them off the event
+    # loop so the single worker still serves other requests meanwhile.
     try:
-        detail = service.create_source(db, data, filename)
+        detail = await run_in_threadpool(service.create_source, db, data, filename)
     except UnsupportedFileType as exc:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
     except UnreadableFile as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except service.DuplicateSource as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    db.commit()
+    await run_in_threadpool(db.commit)
     return detail
 
 

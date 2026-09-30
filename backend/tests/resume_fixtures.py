@@ -170,3 +170,32 @@ def make_encrypted_pdf() -> bytes:
     buffer = io.BytesIO()
     writer.write(buffer)
     return buffer.getvalue()
+
+
+def make_flate_bomb_pdf(decompressed_bytes: int = 70 * 1024 * 1024) -> bytes:
+    """A small PDF whose one content stream inflates to `decompressed_bytes` of text operators:
+    under pypdf's own inflate cap, but far too much to interpret in the request (ADR-011 §2)."""
+    import io
+
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+    operator = b"BT /F1 12 Tf 72 700 Td (Synthetic) Tj ET\n"
+    stream = DecodedStreamObject()
+    stream.set_data(operator * (decompressed_bytes // len(operator)))
+    writer = PdfWriter()
+    page = writer.add_blank_page(612, 792)
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    page[NameObject("/Resources")] = DictionaryObject(
+        {NameObject("/Font"): DictionaryObject({NameObject("/F1"): writer._add_object(font)})}  # pyright: ignore[reportPrivateUsage]
+    )
+    page[NameObject("/Contents")] = writer._add_object(stream.flate_encode())  # pyright: ignore[reportPrivateUsage]
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()

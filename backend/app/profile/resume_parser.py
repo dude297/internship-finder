@@ -4,10 +4,14 @@ Same bytes, same version -> same output, in the same order (ADR-011 §7). No AI,
 network calls, no randomness, no wall-clock reads.
 """
 
+import contextlib
 import io
 import logging
+import multiprocessing
 import re
+import sys
 from dataclasses import dataclass
+from multiprocessing.connection import Connection
 
 from pypdf import PdfReader
 
@@ -24,6 +28,12 @@ APPLICATION_PDF = "application/pdf"
 _MAX_TEXT_CHARS = 100_000
 # ADR-011 §2: only the first 20 pages of a PDF are read.
 _MAX_PDF_PAGES = 20
+# pypdf decompresses and interprets each whole content stream before our page and character
+# caps apply, so a small crafted PDF can use gigabytes and minutes. PDF extraction therefore runs
+# in a child process that is killed after this many seconds and, where the OS supports it
+# (Linux, i.e. Render), can't address more than PDF_MEMORY_LIMIT_BYTES (ADR-011 §2).
+PDF_TIMEOUT_SECONDS = 15.0
+PDF_MEMORY_LIMIT_BYTES = 256 * 1024 * 1024
 
 # pypdf logs warnings (e.g. malformed content streams) through the "pypdf" logger. Nothing we
 # extract from a file may reach a log, so this is raised once, at import time, rather than
@@ -64,7 +74,7 @@ def parse_document(data: bytes) -> ParsedDocument:
         raise ValueError("data exceeds MAX_UPLOAD_BYTES")
 
     if data.startswith(b"%PDF-"):
-        return ParsedDocument(APPLICATION_PDF, extract_candidates(_extract_pdf_text(data)))
+        return ParsedDocument(APPLICATION_PDF, extract_candidates(_isolated_pdf_text(data)))
 
     if b"\x00" in data:
         raise UnsupportedFileType("Only plain-text (.txt) and text-based PDF files are supported.")
@@ -79,6 +89,49 @@ def parse_document(data: bytes) -> ParsedDocument:
     if not text.strip():
         raise UnreadableFile("No text found in that file.")
     return ParsedDocument(TEXT_PLAIN, extract_candidates(text))
+
+
+def _isolated_pdf_text(data: bytes) -> str:
+    """Run _extract_pdf_text in a fresh process with a time and memory budget."""
+    receiver, sender = multiprocessing.get_context("spawn").Pipe(duplex=False)
+    process = multiprocessing.get_context("spawn").Process(
+        target=_pdf_worker, args=(data, sender), daemon=True
+    )
+    process.start()
+    sender.close()
+    try:
+        if not receiver.poll(PDF_TIMEOUT_SECONDS):
+            raise UnreadableFile("That PDF took too long to read.")
+        kind, value = receiver.recv()
+    except EOFError:  # the child died, e.g. killed for exceeding its memory limit
+        raise UnreadableFile("Couldn't read that PDF.") from None
+    finally:
+        receiver.close()
+        process.kill()
+        process.join()
+    if kind == "text":
+        return value
+    raise UnreadableFile(value)
+
+
+def _pdf_worker(data: bytes, sender: Connection) -> None:
+    if sys.platform != "win32":  # Windows development runs without a memory limit
+        import resource
+
+        resource.setrlimit(resource.RLIMIT_AS, (PDF_MEMORY_LIMIT_BYTES, PDF_MEMORY_LIMIT_BYTES))
+    # Nothing may escape: an uncaught exception would print a traceback to the server log.
+    # If even reporting fails (e.g. out of memory), the parent sees EOF and rejects the file.
+    try:
+        try:
+            result = ("text", _extract_pdf_text(data))
+        except UnreadableFile as error:
+            result = ("error", str(error))
+        sender.send(result)
+    except BaseException:
+        with contextlib.suppress(BaseException):
+            sender.send(("error", "Couldn't read that PDF."))
+    finally:
+        sender.close()
 
 
 def _extract_pdf_text(data: bytes) -> str:

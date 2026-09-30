@@ -609,3 +609,21 @@ def test_unknown_source_id_is_not_found_on_every_route(client: TestClient) -> No
     )
     assert client.post(f"{SOURCES}/{fake_id}/reparse").status_code == 404
     assert client.delete(f"{SOURCES}/{fake_id}").status_code == 404
+
+
+def test_upload_rejects_extra_form_parts(client: TestClient) -> None:
+    extra_file = client.post(
+        "/api/profile/sources",
+        files=[
+            ("file", ("a.txt", b"Skills\nSynthetic One\n", "text/plain")),
+            ("file", ("b.txt", b"Skills\nSynthetic Two\n", "text/plain")),
+        ],
+    )
+    extra_field = client.post(
+        "/api/profile/sources",
+        files={"file": ("a.txt", b"Skills\nSynthetic Three\n", "text/plain")},
+        data={"note": "synthetic"},
+    )
+    assert extra_file.status_code == 400
+    assert extra_field.status_code == 400
+    assert client.get("/api/profile/sources").json() == []
