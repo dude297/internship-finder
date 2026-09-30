@@ -307,3 +307,111 @@ def test_milestone_4_constraints(pg_engine: Engine, statement: str) -> None:
         with pytest.raises(IntegrityError):
             connection.execute(text(statement))
         transaction.rollback()
+
+
+MILESTONE_4_REVISION = "b41e7c9d2f60"
+PROFILE_ID = "00000000-0000-4000-8000-000000000005"
+# (fact_key, extraction_method, verified_by_user) → expected review_state after the upgrade
+LEGACY_FACTS = {
+    ("manual_unverified", "manual", False): "accepted",
+    ("manual_verified", "manual", True): "accepted",
+    ("parsed_verified", "deterministic_parser", True): "accepted",
+    ("parsed_unverified", "deterministic_parser", False): "pending",
+    ("inferred_unverified", "ai_inference", False): "pending",
+}
+
+
+def test_milestone_5_migration_backfills_review_state(pg_engine: Engine, pg_url: str) -> None:
+    config = alembic_config(pg_url)
+    assert "review_state" in columns(pg_engine, "profile_facts")
+
+    command.downgrade(config, MILESTONE_4_REVISION)
+    assert "profile_source_artifacts" not in tables(pg_engine)
+    assert "review_state" not in columns(pg_engine, "profile_facts")
+    assert not {"content_type", "byte_size", "parser_name", "parser_version"} & columns(
+        pg_engine, "profile_sources"
+    )
+    with pg_engine.begin() as connection:
+        connection.execute(text(f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}')"))
+        for key, method, verified in LEGACY_FACTS:
+            connection.execute(
+                text(
+                    "INSERT INTO profile_facts (id, profile_id, category, fact_key, value,"
+                    " source_kind, extraction_method, extractor_name, verified_by_user)"
+                    " VALUES (gen_random_uuid(), :profile, 'skill', :key, '{\"name\": \"S\"}',"
+                    " 'resume', :method, 'synthetic', :verified)"
+                ),
+                {"profile": PROFILE_ID, "key": key, "method": method, "verified": verified},
+            )
+
+    command.upgrade(config, "head")
+    with pg_engine.begin() as connection:
+        states = dict(
+            connection.execute(text("SELECT fact_key, review_state FROM profile_facts")).all()
+        )
+        connection.execute(text(f"DELETE FROM profiles WHERE id = '{PROFILE_ID}'"))
+    # Exactly the facts the Milestone 4 fit filter used are accepted: no fit input changes.
+    assert states == {key: state for (key, _, _), state in LEGACY_FACTS.items()}
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE profile_facts SET review_state = 'maybe'",
+        "UPDATE profile_facts SET review_state = NULL",
+        # A non-manual fact is accepted exactly when the owner verified it.
+        "UPDATE profile_facts SET review_state = 'accepted', verified_by_user = false",
+        "UPDATE profile_facts SET review_state = 'pending', verified_by_user = true",
+        "UPDATE profile_sources SET byte_size = 0",
+        "INSERT INTO profile_sources (id, profile_id, kind, content_sha256)"
+        " SELECT gen_random_uuid(), profile_id, kind, content_sha256 FROM profile_sources",
+        "INSERT INTO profile_source_artifacts (profile_source_id, content)"
+        " VALUES (gen_random_uuid(), 'x')",
+    ],
+)
+def test_milestone_5_constraints(pg_engine: Engine, statement: str) -> None:
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(
+            text(
+                f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}');"
+                "INSERT INTO profile_sources (id, profile_id, kind, content_sha256, byte_size)"
+                f" VALUES ('00000000-0000-4000-8000-000000000006', '{PROFILE_ID}', 'resume',"
+                " repeat('a', 64), 10);"
+                "INSERT INTO profile_facts (id, profile_id, profile_source_id, category, fact_key,"
+                " value, source_kind, extraction_method, verified_by_user, review_state)"
+                f" VALUES (gen_random_uuid(), '{PROFILE_ID}',"
+                " '00000000-0000-4000-8000-000000000006', 'skill', 'resume.000',"
+                " '{\"name\": \"S\"}', 'resume', 'deterministic_parser',"
+                " false, 'pending')"
+            )
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(text(statement))
+        transaction.rollback()
+
+
+def test_deleting_a_source_removes_its_artifact_and_facts_only(pg_engine: Engine) -> None:
+    source = "00000000-0000-4000-8000-000000000007"
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(
+            text(
+                f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}');"
+                "INSERT INTO profile_sources (id, profile_id, kind)"
+                f" VALUES ('{source}', '{PROFILE_ID}', 'resume');"
+                f"INSERT INTO profile_source_artifacts VALUES ('{source}', 'synthetic bytes');"
+                "INSERT INTO profile_facts (id, profile_id, profile_source_id, category, fact_key,"
+                " value, source_kind, extraction_method, verified_by_user, review_state) VALUES"
+                f" (gen_random_uuid(), '{PROFILE_ID}', '{source}', 'skill', 'resume.000',"
+                " '{\"name\": \"S\"}', 'resume', 'deterministic_parser', true, 'accepted'),"
+                f" (gen_random_uuid(), '{PROFILE_ID}', NULL, 'skill', 'match_profile.000',"
+                " '{\"name\": \"S\"}', 'manual', 'manual', true, 'accepted');"
+                f"DELETE FROM profile_sources WHERE id = '{source}'"
+            )
+        )
+        remaining = connection.execute(
+            text("SELECT fact_key FROM profile_facts WHERE profile_id = :p"), {"p": PROFILE_ID}
+        ).scalars()
+        artifacts = connection.scalar(text("SELECT count(*) FROM profile_source_artifacts"))
+        assert list(remaining) == ["match_profile.000"]
+        assert artifacts == 0
+        transaction.rollback()
