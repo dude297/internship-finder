@@ -6,6 +6,13 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Milestone 5: private profile source ingestion and review ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)).
+  - Migration `c5a1e0f3d7b2`: `profile_source_artifacts` (original upload bytes in PostgreSQL), upload metadata and a per-profile SHA-256 uniqueness constraint on `profile_sources`, and `profile_facts.review_state` (backfilled so no fit input changes).
+  - Deterministic résumé parser for plain text and text-based PDF (no AI, no OCR), content-sniffed, bounded, with PDF extraction in a time- and memory-limited child process.
+  - `/api/profile/sources`: upload (2 MB), list, detail, download, batch review with at most one catalog pass, re-parse, delete.
+  - Fit scoring reads only accepted facts; pending and rejected imported facts never score, and imported facts never touch eligibility.
+  - Frontend **Imported Profile** tab for upload and review.
+  - Tests: parser unit tests with synthetic text and PDF files (including a flate bomb), API and adversarial tests, migration backfill tests, Vitest, and a Playwright upload-review-delete scenario.
 - Milestone 4: Match Profile, fit scoring v1, eligibility-first ranking, and internships-only board scope ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), [docs/scoring.md](docs/scoring.md)).
   - Migration `b41e7c9d2f60`: `profiles` fit preferences (`interests`, `preferred_locations`, `remote_preference`, `availability_start`/`end` with an end-after-start CHECK); nullable `fit_score` (0–100), `score_breakdown`, `scoring_version`, `fit_input_fingerprint` on `opportunity_evaluations` (all set or all NULL); `ingestion_sources.scope` (`all` / `internships_only`; existing sources backfilled `all`; the built-in feed must be `all`); `ingestion_runs.filtered_count`.
   - Match Profile API (`GET`/`PUT /api/profile/match`): skills, courses, projects, research, activities, experience (manual, user-verified `profile_facts`), interests, preferred locations, remote preference, availability. One atomic save replaces only the facts it owns and runs one catalog pass. Input limits on counts and lengths.
