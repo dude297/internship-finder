@@ -10,6 +10,8 @@ import logging
 import multiprocessing
 import re
 import sys
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from multiprocessing.connection import Connection
 
@@ -48,6 +50,21 @@ class UnsupportedFileType(Exception):
 class UnreadableFile(Exception):
     """A supported type that can't be read, or has no text (HTTP 422). The message is safe to
     show: it never contains file content."""
+
+
+class ParserBusy(Exception):
+    """Another PDF extraction is already running in this application process (HTTP 503). Render
+    Free is one worker on a ~512 MB host: each child is capped at PDF_MEMORY_LIMIT_BYTES, but
+    that cap alone doesn't protect the host if two children run at once, so at most one PDF
+    extraction may run per process at a time (ADR-011 §2). The message is fixed and safe to show:
+    it never contains a filename, content, process detail, or limit."""
+
+
+_PARSER_BUSY_MESSAGE = "Another PDF is being processed. Try again shortly."
+
+# Capacity 1: only one PDF extraction child runs per application process at a time. Nothing else
+# acquires this lock and _isolated_pdf_text never blocks on it, so it can't deadlock.
+_PDF_SLOT = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -92,10 +109,29 @@ def parse_document(data: bytes) -> ParsedDocument:
 
 
 def _isolated_pdf_text(data: bytes) -> str:
-    """Run _extract_pdf_text in a fresh process with a time and memory budget."""
+    """Run _run_pdf_child, but at most one at a time per application process (ADR-011 §2): a
+    second concurrent PDF is rejected immediately, before anything is spawned, rather than
+    queued behind a possibly-15-second hostile document.
+
+    The slot is released on every outcome (success, UnreadableFile, timeout, child death,
+    or any unexpected exception, including one from process.start()) because the whole call is
+    wrapped in try/finally.
+    """
+    if not _PDF_SLOT.acquire(blocking=False):
+        raise ParserBusy(_PARSER_BUSY_MESSAGE)
+    try:
+        return _run_pdf_child(data)
+    finally:
+        _PDF_SLOT.release()
+
+
+def _run_pdf_child(data: bytes, target: Callable[[bytes, Connection], None] | None = None) -> str:
+    """Run _extract_pdf_text (or, for tests only, another worker with the same signature) in a
+    fresh process with a time and memory budget."""
+    target = target or _pdf_worker
     receiver, sender = multiprocessing.get_context("spawn").Pipe(duplex=False)
     process = multiprocessing.get_context("spawn").Process(
-        target=_pdf_worker, args=(data, sender), daemon=True
+        target=target, args=(data, sender), daemon=True
     )
     process.start()
     sender.close()
