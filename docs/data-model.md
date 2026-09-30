@@ -2,7 +2,7 @@
 
 ## Current Database State
 
-The schema is created by five Alembic migrations in `backend/alembic/versions/`:
+The schema is created by six Alembic migrations in `backend/alembic/versions/`:
 
 | Revision | Milestone | Tables |
 |---|---|---|
@@ -11,8 +11,9 @@ The schema is created by five Alembic migrations in `backend/alembic/versions/`:
 | `726372d627b8` (opportunity ingestion and deduplication) | 3 | `ingestion_sources` (seeds the built-in discovery feed), `ingestion_runs`, `ingestion_run_errors`, `opportunity_identifiers`; new columns on `opportunities`, `opportunity_source_records`, `opportunity_evaluations`; reconciles `ck_profiles_graduation_after_status_as_of` (below) |
 | `92a17353e5a8` (reconcile the one-running-ingestion-run index) | 3.5 | No new tables or columns; ensures `uq_ingestion_runs_one_running_per_source` exists (below) |
 | `b41e7c9d2f60` (fit scoring v1, Match Profile preferences, and ATS source scope) | 4 | No new tables. `profiles`: fit preferences; `opportunity_evaluations`: fit columns; `ingestion_sources.scope`; `ingestion_runs.filtered_count` (below) |
+| `c5a1e0f3d7b2` (profile source ingestion and fact review state) | 5 | `profile_source_artifacts`; upload metadata on `profile_sources`; `profile_facts.review_state` (below) |
 
-The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), and [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `92a17353e5a8` until the Milestone 4 release migrates it ([deployment.md](deployment.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
+The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope), and [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md) (profile source uploads and review). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `b41e7c9d2f60` (Milestone 4); `c5a1e0f3d7b2` isn't applied until Milestone 5 is reviewed and released ([deployment.md](deployment.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
 ORM models are in `backend/app/models/`. Shared enums are in `backend/app/enums.py`.
 
@@ -31,6 +32,10 @@ Like the graduation-constraint repair, it's **asymmetric**: downgrading `92a1735
 ### Milestone 4 migration (`b41e7c9d2f60`)
 
 Adds nullable columns only (plus `ingestion_sources.scope`, backfilled with `all` for every existing source so an upgrade never starts filtering, then made NOT NULL, and `ingestion_runs.filtered_count` with default 0). Existing evaluations keep NULL fit fields and stay valid. Downgrading to `92a17353e5a8` drops the new columns and constraints (fit results, fit preferences, and scopes are lost; eligibility history is kept). `tests/test_migrations.py` covers the round trip, the `all` backfill for a pre-existing board, and each new constraint.
+
+### Milestone 5 migration (`c5a1e0f3d7b2`)
+
+Creates `profile_source_artifacts`, adds nullable upload metadata to `profile_sources` plus `UNIQUE (profile_id, content_sha256)`, and adds `profile_facts.review_state`. The backfill sets `accepted` for facts that are manual or `verified_by_user` (exactly what Milestone 4's fit filter read) and `pending` for the rest, so the upgrade changes no fit input; then the column becomes NOT NULL with no default. Downgrading to `b41e7c9d2f60` drops the table, columns, and constraints (uploaded files and review states are lost; imported pending/rejected facts are unverified, so the Milestone 4 filter still ignores them). `tests/test_migrations.py` covers the backfill for every provenance combination, the round trip, each new constraint, and the source cascade.
 
 All tables contain **private runtime data**. Nothing from them is ever committed ([ENGINEERING_GUIDELINES.md §16](../ENGINEERING_GUIDELINES.md#16-public-repository-security-and-privacy)).
 
@@ -75,7 +80,7 @@ Constraints: `ck_profiles_education_level_has_as_of` (level and as-of date are b
 
 ### `profile_sources`
 
-Metadata about a private source artifact (résumé, transcript, course list, GitHub, manual entry). The artifact itself is stored privately at runtime, never in Git. No upload exists yet.
+Metadata about a private source artifact (résumé, transcript, course list, GitHub, manual entry). Uploaded bytes live in `profile_source_artifacts`, never in Git or on disk ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)). Milestone 5 uploads create `kind = resume` rows.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -83,9 +88,23 @@ Metadata about a private source artifact (résumé, transcript, course list, Git
 | `kind` | enum `manual` / `resume` / `transcript` / `course_list` / `project` / `github` / `user_preference` / `other` | |
 | `original_filename` | varchar(255), null | |
 | `storage_ref` | varchar(1024), null | Opaque pointer into private storage |
-| `content_sha256` | varchar(64), null | CHECK: 64 characters when present |
+| `content_sha256` | varchar(64), null | CHECK: 64 characters when present. UNIQUE with `profile_id`: the same file can't be uploaded twice |
 | `details` | json, null | |
+| `content_type` | varchar(100), null | Sniffed allowlisted type: `text/plain` or `application/pdf` |
+| `byte_size` | integer, null | CHECK: > 0 when present |
+| `parser_name`, `parser_version` | varchar, null | The parser that produced the current candidates (`resume-sections`, `1`) |
 | `ingested_at` | timestamptz | |
+
+`storage_ref` is unused: the artifact is found by the source's ID.
+
+### `profile_source_artifacts`
+
+The original uploaded bytes, written once, never updated, 1:1 with a source. Kept out of `profile_sources` so listing sources never reads file content. Only `GET /api/profile/sources/{id}/file` and re-parsing read it.
+
+| Column | Type | Notes |
+|---|---|---|
+| `profile_source_id` | PK, FK → `profile_sources`, cascade | |
+| `content` | bytea | At most 2 MB (enforced by the API) |
 
 ### `profile_facts`
 
@@ -103,9 +122,12 @@ Structured facts with provenance. Never read by hard eligibility (ADR-006 §1).
 | `extractor_name`, `extractor_version` | varchar, null | CHECK: required when `ai_inference` |
 | `confidence` | float, null | CHECK: 0–1 |
 | `verified_by_user` | boolean, default false | |
+| `review_state` | enum `pending` / `accepted` / `rejected`, no default | CHECK: a non-manual fact is `accepted` exactly when `verified_by_user` |
 | `created_at`, `updated_at` | timestamptz | |
 
-**Match Profile facts** (Milestone 4) are rows with `source_kind = manual`, `extraction_method = manual`, `verified_by_user = true`, no `profile_source_id`, `fact_key = match_profile.NNN` (position), and category `skill` or `course` (`value` = `{"name": str}`) or `project`, `research`, `activity`, `experience` (`value` = `{"name": str, "description": str | null}`). `PUT /api/profile/match` replaces only these rows; any other fact is left alone. Fit v1 reads `skill`, `course`, `project`, and `research` facts that are manual or `verified_by_user`; a fact whose value doesn't have that shape is skipped (and logged), never coerced.
+**Match Profile facts** (Milestone 4) are rows with `source_kind = manual`, `extraction_method = manual`, `verified_by_user = true`, `review_state = accepted`, no `profile_source_id`, `fact_key = match_profile.NNN` (position), and category `skill` or `course` (`value` = `{"name": str}`) or `project`, `research`, `activity`, `experience` (`value` = `{"name": str, "description": str | null}`). `PUT /api/profile/match` replaces only these rows; any other fact is left alone.
+
+**Imported facts** (Milestone 5) come from `app.profile.resume_parser`: `source_kind = resume`, `extraction_method = deterministic_parser`, `extractor_name`/`extractor_version` = the parser, `profile_source_id` set, `fact_key = resume.NNN`, `review_state = pending`, `verified_by_user = false`, category `skill`, `course`, `project`, `research`, `experience`, `activity`, `award`, or `education` with the Match Profile value shapes. Accepting sets `accepted` and `verified_by_user = true` (value possibly edited); rejecting sets `rejected` and `false`. Fit v1 reads `skill`, `course`, `project`, and `research` facts with `review_state = accepted` (ADR-011 §5); a fact whose value doesn't have that shape is skipped (and logged), never coerced.
 
 ### `opportunities`
 
@@ -308,12 +330,12 @@ The owner's application tracking. Private runtime data; never read by eligibilit
 
 ## Not Yet Modeled
 
-- Résumé/transcript uploads and parsed facts (the tables exist; nothing writes them yet)
+- Transcript and course-list uploads, DOCX, OCR, and AI extraction (only text and text-based PDF résumés in Milestone 5)
 
 ## Provenance Rules
 
-- `profile_sources` rows are never overwritten by parsing. Re-parsing creates new `profile_facts`.
-- Every `profile_facts` row records its source kind and extraction method. AI-inferred facts must name the extractor and default to unverified.
+- Stored artifacts are never modified. Re-parsing replaces only the source's `pending` facts and never recreates a candidate the owner already accepted or rejected.
+- Every `profile_facts` row records its source kind and extraction method. AI-inferred and parsed facts name the extractor and start `pending` and unverified; only `accepted` facts reach fit scoring.
 - Hard eligibility reads only canonical `profiles` columns.
 
 Design rules from [ENGINEERING_GUIDELINES.md §6](../ENGINEERING_GUIDELINES.md#6-database-standards) apply. Authorization is enforced in the FastAPI backend by one dependency on every private route ([ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md)).
@@ -325,6 +347,7 @@ Design rules from [ENGINEERING_GUIDELINES.md §6](../ENGINEERING_GUIDELINES.md#6
 - Requirement rows written by the API have `extraction_method = manual`. An opportunity update replaces the complete requirement set: old rows are deleted, and past `eligibility_rule_results` keep their text with `requirement_id` set to NULL. Any update (including of an imported opportunity) sets `manually_curated_at`.
 - Opportunity create/update appends an `opportunity_evaluations` row when a profile exists **and** the eligibility or fit inputs changed (fingerprints). An eligibility-relevant profile change or any Match Profile save runs one catalog pass that appends rows only for opportunities whose inputs changed, and `POST /api/opportunities/{id}/evaluate` always appends. Nothing is overwritten.
 - `PUT /api/profile/match` creates the profile row if needed, sets the fit preference columns, and replaces the Match Profile facts (unchanged facts aren't rewritten), all in one transaction with the catalog pass.
+- Profile source uploads ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)) write the source, its artifact, and pending facts in one transaction, with no catalog pass. A review batch updates facts and runs at most one catalog pass, only when an accepted fit fact changed. Deleting a source deletes its artifact and facts by cascade (manual facts have no `profile_source_id` and are untouched), with one catalog pass if it had accepted fit facts.
 
 ## How Ingestion Writes
 
