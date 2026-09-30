@@ -6,10 +6,13 @@ Milestone 5 (ADR-011):
   deleted with their source
 - profile_sources: content_type, byte_size, parser_name, parser_version; UNIQUE
   (profile_id, content_sha256) so the same file can't be uploaded twice
-- profile_facts.review_state (pending | accepted | rejected), NOT NULL, no default. Backfill
-  matches the fit filter it replaces: user-verified or manual facts are `accepted`, everything
-  else `pending`, so upgrading changes no fit input. CHECK: a non-manual fact is
-  `accepted` exactly when `verified_by_user`.
+- profile_facts.review_state (pending | accepted | rejected), NOT NULL, with server default
+  'accepted'. The default exists for deployment compatibility with the immediately previous
+  (Milestone 4) application, whose manual Match Profile inserts don't name review_state; it is
+  not an invitation for Milestone 5 code to omit it, and the CHECK below makes an unverified
+  non-manual insert that omits it fail regardless. Backfill matches the fit filter it replaces:
+  user-verified or manual facts are `accepted`, everything else `pending`, so upgrading changes
+  no fit input. CHECK: a non-manual fact is `accepted` exactly when `verified_by_user`.
 
 Downgrade drops these (uploaded files and review states are lost). Rejected and pending
 imported facts are unverified, so the previous fit filter still ignores them.
@@ -76,13 +79,15 @@ def upgrade() -> None:
                 create_constraint=False,
                 length=32,
             ),
+            # PostgreSQL fills every existing row with this default; see the module docstring
+            # for why the default stays after the migration instead of being dropped.
+            server_default="accepted",
             nullable=True,
         ),
     )
     op.execute(
-        "UPDATE profile_facts SET review_state = CASE"
-        " WHEN verified_by_user OR extraction_method = 'manual' THEN 'accepted'"
-        " ELSE 'pending' END"
+        "UPDATE profile_facts SET review_state = 'pending'"
+        " WHERE extraction_method <> 'manual' AND NOT verified_by_user"
     )
     op.alter_column("profile_facts", "review_state", nullable=False)
     op.create_check_constraint(

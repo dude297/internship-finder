@@ -186,10 +186,14 @@ class ProfileFact(IdMixin, TimestampMixin, Base):
     extractor_version: Mapped[str | None] = mapped_column(String(50))
     confidence: Mapped[float | None] = mapped_column(Float)
     verified_by_user: Mapped[bool] = mapped_column(default=False, server_default=false())
-    # No default: every writer states the review state, so a new fact can't slip into fit
-    # scoring by omission (ADR-011 §5).
+    # Server default only (no Python-side default): the default exists purely so the immediately
+    # previous (Milestone 4) application's manual Match Profile inserts, which don't name
+    # review_state, keep working against this schema. Milestone 5 code must still state the
+    # review state on every write (ADR-011 §5); the CHECK below rejects an unverified non-manual
+    # fact that omits it.
     review_state: Mapped[FactReviewState] = mapped_column(
-        str_enum(FactReviewState, "fact_review_state")
+        str_enum(FactReviewState, "fact_review_state"),
+        server_default=FactReviewState.ACCEPTED.value,
     )
 
     profile: Mapped[Profile] = relationship(back_populates="facts")
