@@ -107,9 +107,11 @@ The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `
 
 Prepared, **not executed**. Production stays on Milestone 4 (`b41e7c9d2f60`) until the owner approves and merges [PR #11](https://github.com/dude297/internship-finder/pull/11) ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)).
 
-**Ordering hazard.** Milestone 4's Match Profile save creates `profile_facts` without `review_state`, which `c5a1e0f3d7b2` makes NOT NULL with no default. After the migration, Milestone 4 code can't save a Match Profile. So: migrate, then deploy Render **immediately**, with no Match Profile save in between. After migrating, never roll Render back to Milestone 4 code; fix forward.
+`c5a1e0f3d7b2` gives `profile_facts.review_state` a database default of `'accepted'` (kept after the migration, not dropped once applied). Milestone 4's Match Profile save creates `profile_facts` without naming `review_state`; manual facts are semantically accepted, and the default gives them exactly that value, so Milestone 4 code keeps working unmodified on the migrated schema. The CHECK `ck_profile_facts_review_state_matches_verified` (`extraction_method = 'manual' OR (review_state = 'accepted') = verified_by_user`) still rejects an unverified non-manual fact that omits `review_state` — only manual inserts benefit from the default. Consequence: there is no ordering hazard between the migration and the Render deploy, and a Render code rollback to the Milestone 4 release after the migration remains possible for existing Milestone 4 functionality (see [Rollback](#rollback)). Neon itself is still never downgraded. The Milestone 4 app simply ignores the new table and columns it doesn't know about; Milestone-5-only data (uploaded sources, imported facts) is invisible to it but untouched. Pending or rejected imported facts are unverified, so Milestone 4's fit filter (`verified_by_user OR manual`) ignores them as before; accepted imported facts are verified, so Milestone 4 would score them too, consistent with Milestone 5's behavior.
 
-1. **Preconditions.** PR #11 merged; merged SHA recorded; post-merge CI green. Render (`internship-finder-api`, `srv-dastve60tbcc7392dfgg`, never the stray `internship-finder`) and Vercel still on the released Milestone 4 commit. Read-only baseline (aggregates only), expected per the Milestone 4 smoke unless the owner used the app since:
+1. **Merge PR #11** (owner). Record the merged commit SHA.
+2. **Verify post-merge CI** is green on `main` at that SHA.
+3. **Migrate Neon** (same shell pattern as [Deploy Order](#deploy-order) step 1, existing `DATABASE_URL` pattern; never downgrade). Read-only baseline first, expected per the Milestone 4 smoke unless the owner used the app since:
    ```sql
    SELECT count(*) FROM opportunities;                                         -- 1,055
    SELECT count(*) FROM opportunity_source_records;                            -- 1,055
@@ -119,19 +121,22 @@ Prepared, **not executed**. Production stays on Milestone 4 (`b41e7c9d2f60`) unt
    SELECT pg_size_pretty(pg_database_size(current_database()));                -- ~18 MB
    SELECT version_num FROM alembic_version;                                    -- b41e7c9d2f60
    ```
-   Stop if these drift without an explanation.
-2. **Migrate Neon** (same shell pattern as [Deploy Order](#deploy-order) step 1): `alembic upgrade head`, `alembic current` → `c5a1e0f3d7b2`, `alembic check`, remove `DATABASE_URL`. Never downgrade. Then verify read-only:
+   Stop if these drift without an explanation. Then `alembic upgrade head`, `alembic current` → `c5a1e0f3d7b2`, `alembic check`, remove `DATABASE_URL`.
+4. **Verify the migration**, read-only:
    ```sql
    SELECT review_state, count(*) FROM profile_facts GROUP BY 1;                -- accepted: 10
    SELECT count(*) FROM profile_facts
     WHERE extraction_method <> 'manual' AND (review_state = 'accepted') <> verified_by_user;  -- 0
    SELECT count(*) FROM opportunity_evaluations;                               -- unchanged (4,220)
    SELECT count(*) FROM profile_source_artifacts;                              -- 0
+   SELECT column_default FROM information_schema.columns
+    WHERE table_name = 'profile_facts' AND column_name = 'review_state';       -- 'accepted'::text (or equivalent)
    ```
-   Stop (and don't deploy) if `alembic current` or `alembic check` disagree.
-3. **Render:** deploy the merged SHA on `internship-finder-api` right away (Manual Deploy, or the deploys API with the key from the local Render CLI config, never printed). Wait for `live`; `/api/health` `200`; confirm the deploy's commit SHA.
-4. **Vercel:** clean detached worktree at the merged SHA, `vercel link`, `vercel deploy --prod`, delete `.env.local` and the worktree, verify the alias (as for Milestone 4).
-5. **Hosted smoke** through the Vercel URL, logged in as the owner (browser, or a script whose session cookie is supplied locally and never logged). Synthetic, fabricated documents only:
+   Stop (and don't deploy) if `alembic current` or `alembic check` disagree. The Milestone 4 app keeps running correctly against the migrated schema in the meantime, so there's no rush to deploy Render.
+5. **Render:** deploy the merged SHA on `internship-finder-api` (`srv-dastve60tbcc7392dfgg`, never the stray `internship-finder`) — Manual Deploy, or the deploys API with the key from the local Render CLI config, never printed.
+6. **Verify:** wait for `live`; `/api/health` `200`; confirm the deploy's commit SHA; a synthetic wrong login → `401` (database reachable).
+7. **Vercel:** clean detached worktree at the merged SHA, `vercel link`, `vercel deploy --prod`, delete `.env.local` and the worktree, verify the alias (as for Milestone 4).
+8. **Hosted smoke** through the Vercel URL, logged in as the owner (browser, or a script whose session cookie is supplied locally and never logged). Synthetic, fabricated documents only:
    - upload a synthetic text résumé with a unique marker line → pending facts; evaluation count unchanged (no pass on upload)
    - accept one skill → `catalog_pass: true`; record the time and `evaluated_opportunities`
    - reject one fact; re-parse → no duplicates, decided facts unchanged
@@ -140,15 +145,17 @@ Prepared, **not executed**. Production stays on Milestone 4 (`b41e7c9d2f60`) unt
    - same file again → `409`; a > 2 MB file → `413`
    - optional, owner's call: while the flate-bomb fixture parses (up to 15 s), `/api/health` answers and a second PDF gets `503` with `Retry-After`
    - delete both synthetic sources → `catalog_pass: true` (an accepted fit fact existed)
-6. **Final counts:** `profile_sources` 0, `profile_source_artifacts` 0, `profile_facts` 10 (all accepted), migration `c5a1e0f3d7b2`, database size. Evaluations: 4,220 + the accept pass + the delete pass, each at most 1,055 (only opportunities whose fit input changed get a row), so at most 6,330; record the actual `evaluated_opportunities` of both passes and reconcile exactly. Record everything in [PROJECT_STATE.md](../PROJECT_STATE.md) and the Production Verification table.
+9. **Final counts and reconciliation:** `profile_sources` 0, `profile_source_artifacts` 0, `profile_facts` 10 (all accepted), migration `c5a1e0f3d7b2`, database size. Evaluations: 4,220 + the accept pass + the delete pass, each at most 1,055 (only opportunities whose fit input changed get a row), so at most 6,330; record the actual `evaluated_opportunities` of both passes and reconcile exactly. Record everything in [PROJECT_STATE.md](../PROJECT_STATE.md) and the Production Verification table.
+10. **Release-state docs PR**, if needed, to record the above once production reflects it.
 
 ## Rollback
 
-- **Code (Render):** Render dashboard → Deploys → **Rollback** to an earlier deploy, or deploy an earlier commit. Health check afterwards.
+- **Code (Render):** Render dashboard → Deploys → **Rollback** to an earlier deploy, or deploy an earlier commit. Health check afterwards. After the `c5a1e0f3d7b2` migration, a code rollback to the Milestone 4 release is possible: the `review_state` default keeps Milestone 4's Match Profile save working on the migrated schema, so this is a normal rollback, not a schema/code coupling to avoid.
 - **Frontend (Vercel):** `npx vercel rollback` (or promote an earlier production deployment in the dashboard). Hobby supports rolling back to the previous production deployment.
 - **Schema:** forward only: write a new migration. Don't downgrade Neon.
 - **Data:** Neon Free keeps a short restore history (point-in-time restore / branch from a past point within the free window). For anything older there's no backup yet (see [operations.md](operations.md#database-backup-considerations-planned)).
 - **Secrets:** rotate `PROXY_SHARED_SECRET` as above; rotate the Neon role password in Neon, then update Render's `DATABASE_URL` and redeploy.
+- **Milestone 5 specifically:** if Render/Vercel are rolled back to the Milestone 4 release after the `c5a1e0f3d7b2` migration, Milestone 5 data (`profile_sources`, `profile_source_artifacts`, non-manual `profile_facts`) stays in the database, unused and untouched by the Milestone 4 app, until a forward roll re-deploys Milestone 5 code.
 
 ## Production Verification
 
