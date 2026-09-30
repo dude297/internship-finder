@@ -28,6 +28,8 @@ No AI, OCR, embeddings, queues, background workers, schedulers, or new services.
 | Type detection | By content only. The filename and the client's `Content-Type` are never trusted |
 | Upload size | 2 MB. Vercel limits proxied request bodies to about 4.5 MB, and the whole file is held in memory on a 512 MB Render instance. `Content-Length` is checked first, then the body is read in chunks and abandoned past the limit (`413`) |
 | PDF bounds | First 20 pages only; extraction stops at 100,000 characters; any exception from the PDF library is an unreadable file (`422`). A PDF with no extractable text (scanned) is `422`: OCR isn't supported |
+| PDF isolation | pypdf inflates and interprets a whole content stream before those caps apply: a 0.2 MB crafted PDF inflating to 70 MB grew one process past 2.6 GB during review. So PDF text extraction runs in a spawned child process, killed after 15 s, with a 256 MB address-space limit on Linux (Render). Timeout or death is `422`. The child reports only a fixed message, never a traceback. Upload work runs in the threadpool so the single worker keeps serving other requests |
+| Multipart | Exactly one file part and no other fields (`400` otherwise) |
 | Candidates | At most 200 per source |
 | Not supported | DOCX (zip and XML parsing add attack surface for little gain; export to PDF instead), images, OCR |
 
@@ -96,7 +98,7 @@ The Profile area gets a third tab, **Sources**, next to Eligibility Profile and 
 
 - The owner fills most of the Match Profile from a résumé in a few clicks, and nothing imported is trusted until accepted.
 - File bytes are stored in the database: small, private, and backed up with it, at the cost of database space (bounded by the 2 MB limit).
-- A PDF parse runs in the request. Page, character, and size limits bound it, but a hostile PDF can still use CPU until the limits stop it; single-user access limits the exposure.
+- A PDF upload waits for a child process (about 0.5–1 s to start, at most 15 s in total). A hostile PDF costs at most that time and the child's memory limit; only the owner can upload.
 - Lexical, heading-based parsing misses unusual layouts. The owner can still type facts into the Match Profile.
 - Accepted imported facts appear under Sources, not in the Match Profile editor; both feed fit.
 
