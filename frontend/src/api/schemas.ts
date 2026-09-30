@@ -372,6 +372,78 @@ export const matchProfileSaveSchema = z.object({
   unchanged_opportunities: z.number().int(),
 })
 
+// Profile sources: imported resume facts awaiting review (ADR-011 §8-9). Imported facts never
+// affect matching until accepted; only skill/course/project/research feed the Match Profile.
+export const factCategories = [
+  'skill',
+  'course',
+  'project',
+  'research',
+  'experience',
+  'activity',
+  'award',
+  'education',
+] as const
+export type FactCategory = (typeof factCategories)[number]
+
+export const reviewStates = ['pending', 'accepted', 'rejected'] as const
+export type ReviewState = (typeof reviewStates)[number]
+
+export const importedFactSchema = z.object({
+  id: z.string(),
+  category: z.enum(factCategories),
+  name: z.string(),
+  description: z.string().nullable(),
+  review_state: z.enum(reviewStates),
+})
+export type ImportedFact = z.infer<typeof importedFactSchema>
+
+export const profileSourceSummarySchema = z.object({
+  id: z.string(),
+  kind: z.literal('resume'),
+  original_filename: z.string().nullable(),
+  content_type: z.string(),
+  byte_size: z.number().int(),
+  parser_name: z.string(),
+  parser_version: z.string(),
+  ingested_at: z.string(),
+  pending_count: z.number().int(),
+  accepted_count: z.number().int(),
+  rejected_count: z.number().int(),
+})
+export type ProfileSourceSummary = z.infer<typeof profileSourceSummarySchema>
+
+export const profileSourceDetailSchema = profileSourceSummarySchema.extend({
+  facts: z.array(importedFactSchema),
+})
+export type ProfileSourceDetail = z.infer<typeof profileSourceDetailSchema>
+
+export const profileSourceReviewResultSchema = z.object({
+  source: profileSourceDetailSchema,
+  catalog_pass: z.boolean(),
+  evaluated_opportunities: z.number().int(),
+  unchanged_opportunities: z.number().int(),
+})
+export type ProfileSourceReviewResult = z.infer<typeof profileSourceReviewResultSchema>
+
+export const profileSourceDeleteResultSchema = z.object({
+  catalog_pass: z.boolean(),
+  evaluated_opportunities: z.number().int(),
+  unchanged_opportunities: z.number().int(),
+})
+export type ProfileSourceDeleteResult = z.infer<typeof profileSourceDeleteResultSchema>
+
+export interface FactReviewInput {
+  id: string
+  name?: string
+  description?: string | null
+}
+
+export interface ProfileSourceReviewInput {
+  accept: FactReviewInput[]
+  reject: string[]
+}
+
 /** Server-side list query (GET /api/opportunities). Empty values are omitted. */
 export interface OpportunityQuery {
   limit: number
