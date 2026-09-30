@@ -11,11 +11,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, selectinload
 
-from app.enums import ExtractionMethod, FactCategory
+from app.enums import FactCategory, FactReviewState
 from app.models import (
     EligibilityRuleResult,
     Opportunity,
@@ -85,18 +85,16 @@ FIT_FACT_CATEGORIES = (
 
 
 def fit_profile_input(session: Session, profile: Profile) -> FitProfileInput:
-    """What fit v1 reads about the owner (ADR-010 §5): the preference columns plus facts that
-    are user-entered or user-verified. A fact whose value doesn't have the expected shape is
-    left out and logged, never coerced into a guess."""
+    """What fit v1 reads about the owner (ADR-010 §5): the preference columns plus accepted
+    facts (ADR-011 §5: manual facts are accepted; imported ones once the owner accepts them).
+    A fact whose value doesn't have the expected shape is left out and logged, never coerced
+    into a guess."""
     facts = session.scalars(
         select(ProfileFact)
         .where(
             ProfileFact.profile_id == profile.id,
             ProfileFact.category.in_(FIT_FACT_CATEGORIES),
-            or_(
-                ProfileFact.verified_by_user,
-                ProfileFact.extraction_method == ExtractionMethod.MANUAL,
-            ),
+            ProfileFact.review_state == FactReviewState.ACCEPTED,
         )
         .order_by(ProfileFact.created_at, ProfileFact.fact_key, ProfileFact.id)
     ).all()

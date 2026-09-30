@@ -15,6 +15,7 @@ from app.enums import (
     EligibilityStatus,
     ExtractionMethod,
     FactCategory,
+    FactReviewState,
     OpportunitySourceType,
     OpportunityType,
     ProfileSourceKind,
@@ -119,6 +120,7 @@ def test_profile_source_and_facts_keep_provenance(db: Session) -> None:
             value={"name": "Python"},
             source_kind=ProfileSourceKind.RESUME,
             extraction_method=ExtractionMethod.AI_INFERENCE,
+            review_state=FactReviewState.PENDING,
             extractor_name="example-model",
             extractor_version="0",
             confidence=0.7,
@@ -129,6 +131,7 @@ def test_profile_source_and_facts_keep_provenance(db: Session) -> None:
             value=True,
             source_kind=ProfileSourceKind.MANUAL,
             extraction_method=ExtractionMethod.MANUAL,
+            review_state=FactReviewState.ACCEPTED,
             verified_by_user=True,
         ),
     ]
@@ -160,6 +163,7 @@ def test_deleting_a_profile_removes_its_private_data(db: Session) -> None:
             value="v",
             source_kind=ProfileSourceKind.MANUAL,
             extraction_method=ExtractionMethod.MANUAL,
+            review_state=FactReviewState.ACCEPTED,
         )
     )
     db.add(profile)
@@ -205,6 +209,14 @@ def test_profile_timeline_boundaries_are_accepted(db: Session, changes: dict[str
         {"confidence": 1.5},
         {"confidence": -0.1},
         {"extraction_method": ExtractionMethod.AI_INFERENCE, "extractor_name": None},
+        {"review_state": None},
+        # Imported facts: accepted exactly when verified by the owner (ADR-011 §5).
+        {"extraction_method": ExtractionMethod.DETERMINISTIC_PARSER, "verified_by_user": False},
+        {
+            "extraction_method": ExtractionMethod.DETERMINISTIC_PARSER,
+            "review_state": FactReviewState.PENDING,
+            "verified_by_user": True,
+        },
     ],
 )
 def test_profile_fact_check_constraints(db: Session, changes: dict[str, Any]) -> None:
@@ -218,6 +230,7 @@ def test_profile_fact_check_constraints(db: Session, changes: dict[str, Any]) ->
         "value": "v",
         "source_kind": ProfileSourceKind.MANUAL,
         "extraction_method": ExtractionMethod.MANUAL,
+        "review_state": FactReviewState.ACCEPTED,
     }
 
     assert_rejected(db, ProfileFact(**(fields | changes)))

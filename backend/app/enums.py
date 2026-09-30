@@ -52,6 +52,14 @@ class FactCategory(StrEnum):
     OTHER = "other"
 
 
+class FactReviewState(StrEnum):
+    """Owner review of a profile fact (ADR-011). Only accepted facts feed fit scoring."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
 class OpportunityType(StrEnum):
     INTERNSHIP = "internship"
     RESEARCH = "research"

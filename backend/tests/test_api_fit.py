@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.enums import ExtractionMethod, FactCategory, ProfileSourceKind
+from app.enums import ExtractionMethod, FactCategory, FactReviewState, ProfileSourceKind
 from app.models import OpportunityEvaluation, Profile, ProfileFact
 from app.repositories import evaluation_context
 from app.services import match_profile as match_service
@@ -91,6 +91,7 @@ def test_save_preserves_facts_it_does_not_own(client: TestClient, db: Session) -
             value={"name": "Synthetic Parsed Skill"},
             source_kind=ProfileSourceKind.RESUME,
             extraction_method=ExtractionMethod.DETERMINISTIC_PARSER,
+            review_state=FactReviewState.PENDING,
         ),
         ProfileFact(
             profile_id=profile.id,
@@ -99,6 +100,7 @@ def test_save_preserves_facts_it_does_not_own(client: TestClient, db: Session) -
             value={"name": "Synthetic Inferred Project"},
             source_kind=ProfileSourceKind.GITHUB,
             extraction_method=ExtractionMethod.AI_INFERENCE,
+            review_state=FactReviewState.PENDING,
             extractor_name="synthetic-extractor",
         ),
         ProfileFact(  # manual, but not a Match Profile fact
@@ -108,6 +110,7 @@ def test_save_preserves_facts_it_does_not_own(client: TestClient, db: Session) -
             value={"name": "Synthetic Other"},
             source_kind=ProfileSourceKind.MANUAL,
             extraction_method=ExtractionMethod.MANUAL,
+            review_state=FactReviewState.ACCEPTED,
         ),
     ]
     db.add_all(others)
@@ -355,6 +358,7 @@ def test_fit_reads_only_user_entered_or_verified_facts(client: TestClient, db: S
                 value={"name": "Synthetic Inferred"},
                 source_kind=ProfileSourceKind.RESUME,
                 extraction_method=ExtractionMethod.AI_INFERENCE,
+                review_state=FactReviewState.PENDING,
                 extractor_name="synthetic-extractor",
             ),
             ProfileFact(  # parsed and verified by the owner: used
@@ -364,6 +368,7 @@ def test_fit_reads_only_user_entered_or_verified_facts(client: TestClient, db: S
                 value={"name": "Synthetic Verified"},
                 source_kind=ProfileSourceKind.RESUME,
                 extraction_method=ExtractionMethod.DETERMINISTIC_PARSER,
+                review_state=FactReviewState.ACCEPTED,
                 verified_by_user=True,
             ),
             ProfileFact(  # malformed value: left out, not coerced
@@ -373,6 +378,7 @@ def test_fit_reads_only_user_entered_or_verified_facts(client: TestClient, db: S
                 value="Synthetic Malformed",
                 source_kind=ProfileSourceKind.MANUAL,
                 extraction_method=ExtractionMethod.MANUAL,
+                review_state=FactReviewState.ACCEPTED,
             ),
         ]
     )
