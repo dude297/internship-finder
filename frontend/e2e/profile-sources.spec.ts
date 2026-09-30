@@ -77,13 +77,7 @@ async function fitBreakdown(page: Page, id: string): Promise<ScoreBreakdown | nu
 
 async function goToSources(page: Page) {
   await page.getByRole('link', { name: 'Profile', exact: true }).click()
-  // Scoped to the profile tabs: the main nav has its own "Sources" link (ingestion sources), so
-  // an unscoped `getByRole('link', { name: 'Sources', exact: true })` is ambiguous on this page
-  // (BUG, see the final report: not fixed here, out of this test's file ownership).
-  await page
-    .getByRole('navigation', { name: 'Profile sections' })
-    .getByRole('link', { name: 'Sources', exact: true })
-    .click()
+  await page.getByRole('link', { name: 'Imported Profile', exact: true }).click()
 }
 
 test('profile sources: pending has no effect, review + apply rescoring, persistence, delete falls back', async ({

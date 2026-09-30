@@ -258,12 +258,15 @@ describe('profile sources page', () => {
     expect(document.body.innerHTML).not.toMatch(/"id"\s*:/)
   })
 
-  it('shows the Sources tab on the profile pages', async () => {
+  it('shows the Imported Profile tab, named apart from the main Sources link', async () => {
     mockApi({ ...loggedIn, 'GET /api/profile/sources': () => [] })
     renderAt('/profile/sources')
 
     const tabs = await screen.findByRole('navigation', { name: 'Profile sections' })
-    expect(within(tabs).getByRole('link', { name: 'Sources' })).toBeInTheDocument()
+    expect(
+      within(tabs).getByRole('link', { name: 'Imported Profile' }),
+    ).toBeInTheDocument()
+    expect(within(tabs).queryByRole('link', { name: 'Sources' })).not.toBeInTheDocument()
     expect(
       within(tabs).getByRole('link', { name: 'Eligibility Profile' }),
     ).toBeInTheDocument()
