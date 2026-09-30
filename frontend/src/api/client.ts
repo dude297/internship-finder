@@ -8,6 +8,10 @@ import {
   opportunityPageSchema,
   profileSaveSchema,
   profileSchema,
+  profileSourceDeleteResultSchema,
+  profileSourceDetailSchema,
+  profileSourceReviewResultSchema,
+  profileSourceSummarySchema,
   runSchema,
   sessionSchema,
   sourceSchema,
@@ -16,6 +20,7 @@ import {
   type OpportunityInput,
   type OpportunityQuery,
   type ProfileInput,
+  type ProfileSourceReviewInput,
   type SourceInput,
   type SourceScope,
 } from './schemas'
@@ -115,6 +120,31 @@ async function request<T>(
   return parsed.data
 }
 
+/** Multipart upload; reuses the same CSRF header and error handling as request(). */
+async function upload<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  formData: FormData,
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken
+
+  const response = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers,
+    credentials: 'same-origin',
+    body: formData,
+  })
+  if (!response.ok) {
+    if (response.status === 401) onUnauthorized()
+    throw await toError(response)
+  }
+  const parsed = schema.safeParse(await response.json().catch(() => undefined))
+  if (!parsed.success)
+    throw new ApiError(response.status, 'The server sent an unexpected response.')
+  return parsed.data
+}
+
 export const api = {
   getSession: () => request('GET', '/auth/session', sessionSchema),
   login: (username: string, password: string) =>
@@ -183,4 +213,37 @@ export const api = {
   syncSource: (id: string) =>
     request('POST', `/sources/${encodeURIComponent(id)}/sync`, runSchema),
   syncAllSources: () => request('POST', '/sources/sync', z.array(runSchema)),
+
+  listProfileSources: () =>
+    request('GET', '/profile/sources', z.array(profileSourceSummarySchema)),
+  uploadProfileSource: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return upload('/profile/sources', profileSourceDetailSchema, formData)
+  },
+  getProfileSource: (id: string) =>
+    request(
+      'GET',
+      `/profile/sources/${encodeURIComponent(id)}`,
+      profileSourceDetailSchema,
+    ),
+  reviewProfileSource: (id: string, body: ProfileSourceReviewInput) =>
+    request(
+      'POST',
+      `/profile/sources/${encodeURIComponent(id)}/review`,
+      profileSourceReviewResultSchema,
+      body,
+    ),
+  reparseProfileSource: (id: string) =>
+    request(
+      'POST',
+      `/profile/sources/${encodeURIComponent(id)}/reparse`,
+      profileSourceDetailSchema,
+    ),
+  deleteProfileSource: (id: string) =>
+    request(
+      'DELETE',
+      `/profile/sources/${encodeURIComponent(id)}`,
+      profileSourceDeleteResultSchema,
+    ),
 }
