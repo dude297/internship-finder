@@ -34,7 +34,7 @@ export function mockApi(handlers: Record<string, Handler>): Call[] {
       const call: Call = {
         method,
         path: input,
-        body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined,
+        body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body,
         headers: (init.headers ?? {}) as Record<string, string>,
       }
       calls.push(call)
@@ -165,6 +165,36 @@ export const source = (changes: Record<string, unknown> = {}) => ({
   last_attempted_at: null,
   last_success_at: null,
   latest_run: null,
+  ...changes,
+})
+
+export const importedFact = (changes: Record<string, unknown> = {}) => ({
+  id: 'fact-1',
+  category: 'skill',
+  name: 'Python',
+  description: null,
+  review_state: 'pending',
+  ...changes,
+})
+
+export const profileSource = (changes: Record<string, unknown> = {}) => ({
+  id: 'psrc-1',
+  kind: 'resume',
+  original_filename: 'resume.pdf',
+  content_type: 'application/pdf',
+  byte_size: 12_345,
+  parser_name: 'synthetic-parser',
+  parser_version: '1.0.0',
+  ingested_at: '2040-10-01T12:00:00Z',
+  pending_count: 1,
+  accepted_count: 0,
+  rejected_count: 0,
+  ...changes,
+})
+
+export const profileSourceDetail = (changes: Record<string, unknown> = {}) => ({
+  ...profileSource(),
+  facts: [importedFact()],
   ...changes,
 })
 
