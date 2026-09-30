@@ -92,7 +92,7 @@ All under the private router (`require_owner`: session required, CSRF on every u
 
 ### 9. Frontend
 
-The Profile area gets a third tab, **Sources**, next to Eligibility Profile and Match Profile. It uploads a file, lists sources (file name, type, size, parser and version, counts), and reviews candidates grouped by category with Pending / Accepted / Rejected and Imported labels, edit before accepting, select-all, and one **Apply** per batch that reports the catalog pass. It states that imported facts don't affect matching until accepted. It never renders file content as HTML or shows raw JSON.
+The Profile area gets a third tab, **Imported Profile** (not "Sources": that name is the main navigation's job-board page), next to Eligibility Profile and Match Profile. It uploads a file, lists sources (file name, type, size, parser and version, counts), and reviews candidates grouped by category with Pending / Accepted / Rejected and Imported labels, edit before accepting, select-all, and one **Apply** per batch that reports the catalog pass. It states that imported facts don't affect matching until accepted. It never renders file content as HTML or shows raw JSON.
 
 ## Consequences
 

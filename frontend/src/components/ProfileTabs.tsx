@@ -15,8 +15,9 @@ export function ProfileTabs() {
       <NavLink to="/profile/match" className={tabClass}>
         Match Profile
       </NavLink>
+      {/* Not "Sources": the main nav's Sources link (job boards) must stay unambiguous. */}
       <NavLink to="/profile/sources" className={tabClass}>
-        Sources
+        Imported Profile
       </NavLink>
     </nav>
   )

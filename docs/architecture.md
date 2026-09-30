@@ -65,8 +65,8 @@ profile_sources ─► profile_facts    │ (facts are not read by eligibility)
 opportunity_source_records          ▼
                            resolve_education_status
 
-profiles (fit preferences) + manual/verified profile_facts ─┐
-opportunities ──────────────────────────────────────────────┴► score_fit ──► same evaluation row
+profiles (fit preferences) + accepted profile_facts ─┐
+opportunities ───────────────────────────────────────┴► score_fit ──► same evaluation row
                                                                               (fit_score, score_breakdown)
 ```
 
@@ -148,23 +148,23 @@ ADR-007's same-origin constraint is met by Vercel rewriting `/api/*` to Render b
 
 Milestone 3 implements the sources, normalize/validate/dedupe, and persistence stages, run manually (UI, API, CLI). Scheduled collection is **not** implemented: the database is local, and a GitHub-hosted runner can't reach it. Once a hosted database exists, scheduled workflows run Python application commands (the same backend package, e.g. `python -m app.cli sync-sources`) against the database. The workflow YAML only orchestrates, and core logic lives in reusable Python modules. Sources are layered: public feeds → ATS APIs → early-college/research programs → custom career pages → browser automation ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
 
-### Profile Flow (future)
+### Profile Flow (Milestone 5 for résumés; other sources future)
 
 ```text
-Resume / Coursework / Projects / Preferences
+Résumé (plain text or text-based PDF, ≤ 2 MB)
                      ↓
-               Profile Parsers
+  content sniffing ─► profile_source_artifacts (original bytes, PostgreSQL, immutable)
                      ↓
-         Structured Profile Facts   (with provenance)
+  deterministic parser (PDF text in a time- and memory-limited child process)
                      ↓
-             User Verification
+  profile_facts, review_state = pending   (with provenance; never scored)
                      ↓
-             Canonical Profile
+  owner review on "Imported Profile": accept / edit + accept / reject, one batch
                      ↓
-        Eligibility + Recommendation
+  accepted facts ─► one catalog pass ─► Fit Scoring v1
 ```
 
-Original source documents are kept unchanged, and extracted facts are stored separately with provenance ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
+Imported facts never write the canonical `profiles` row, so eligibility still reads only what the owner entered on the Eligibility Profile ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)). Transcripts, course lists, GitHub, DOCX, OCR, and optional AI enrichment remain future work. Original source documents are kept unchanged, and extracted facts are stored separately with provenance ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)).
 
 Everything in this flow is private runtime data (database or gitignored local storage), never repository content. The public repository holds only code, schemas, migrations, synthetic fixtures, and generic docs ([ENGINEERING_GUIDELINES.md §16](../ENGINEERING_GUIDELINES.md#public-code--private-data-boundary)).
 
