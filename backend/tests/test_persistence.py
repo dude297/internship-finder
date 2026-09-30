@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import null, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -209,7 +209,10 @@ def test_profile_timeline_boundaries_are_accepted(db: Session, changes: dict[str
         {"confidence": 1.5},
         {"confidence": -0.1},
         {"extraction_method": ExtractionMethod.AI_INFERENCE, "extractor_name": None},
-        {"review_state": None},
+        # `null()`, not `None`: review_state now has a server default, so an ORM-level `None`
+        # (never explicitly sent) would be filled by it instead of testing NOT NULL. `null()`
+        # forces an actual NULL onto the wire.
+        {"review_state": null()},
         # Imported facts: accepted exactly when verified by the owner (ADR-011 §5).
         {"extraction_method": ExtractionMethod.DETERMINISTIC_PARSER, "verified_by_user": False},
         {

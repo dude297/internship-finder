@@ -1,13 +1,18 @@
 """The Alembic migrations against real PostgreSQL: up, down, up again, and no model drift."""
 
+import json
+import uuid
+
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import Engine, inspect, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from app.models import Base
+from app.models import Base, Profile
+from app.repositories import fit_profile_input
 from tests.conftest import alembic_config
 
 pytestmark = pytest.mark.postgres
@@ -415,3 +420,210 @@ def test_deleting_a_source_removes_its_artifact_and_facts_only(pg_engine: Engine
         assert list(remaining) == ["match_profile.000"]
         assert artifacts == 0
         transaction.rollback()
+
+
+# --- review_state server default (deployment compatibility with Milestone 4) -------------------
+# The migration gives review_state a server default of 'accepted' so the *previous* (Milestone 4)
+# application, whose manual Match Profile inserts never name review_state, can still save after
+# this migration runs (and so a Render rollback to Milestone 4 doesn't break). Milestone 5 code
+# must still state review_state on every write; these tests are about the deployment gap, not an
+# invitation to omit it going forward.
+
+
+def test_milestone_5_m4_manual_match_profile_facts_backfill_to_accepted(
+    pg_engine: Engine, pg_url: str
+) -> None:
+    """The exact shape Milestone 4's `save_match_profile` writes (no review_state column at all):
+    manual, verified, `match_profile.NNN` keys, skill/project categories. Both become `accepted`,
+    matching the Milestone 4 fit filter (manual facts are always used)."""
+    config = alembic_config(pg_url)
+    command.downgrade(config, MILESTONE_4_REVISION)
+    with pg_engine.begin() as connection:
+        connection.execute(text(f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}')"))
+        connection.execute(
+            text(
+                "INSERT INTO profile_facts (id, profile_id, category, fact_key, value,"
+                " source_kind, extraction_method, verified_by_user) VALUES"
+                f" (gen_random_uuid(), '{PROFILE_ID}', 'skill', 'match_profile.000',"
+                " '{\"name\": \"Python\"}', 'manual', 'manual', true),"
+                f" (gen_random_uuid(), '{PROFILE_ID}', 'project', 'match_profile.001',"
+                " '{\"name\": \"App\", \"description\": null}', 'manual', 'manual', true)"
+            )
+        )
+
+    command.upgrade(config, "head")
+    with pg_engine.begin() as connection:
+        states = (
+            connection.execute(
+                text(
+                    "SELECT review_state FROM profile_facts WHERE profile_id = :p ORDER BY fact_key"
+                ),
+                {"p": PROFILE_ID},
+            )
+            .scalars()
+            .all()
+        )
+        connection.execute(text(f"DELETE FROM profiles WHERE id = '{PROFILE_ID}'"))
+    assert states == ["accepted", "accepted"]
+
+
+def test_head_accepts_m4_manual_insert_without_review_state(pg_engine: Engine) -> None:
+    """At head, an M4-style manual insert that omits review_state succeeds (the server default
+    fills it) and gets 'accepted'."""
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(
+            text(
+                f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}');"
+                "INSERT INTO profile_facts (id, profile_id, category, fact_key, value,"
+                " source_kind, extraction_method, verified_by_user) VALUES"
+                f" (gen_random_uuid(), '{PROFILE_ID}', 'skill', 'match_profile.000',"
+                " '{\"name\": \"Python\"}', 'manual', 'manual', true)"
+            )
+        )
+        state = connection.scalar(
+            text("SELECT review_state FROM profile_facts WHERE fact_key = 'match_profile.000'")
+        )
+        transaction.rollback()
+    assert state == "accepted"
+
+
+def test_head_rejects_unverified_parser_insert_without_review_state(pg_engine: Engine) -> None:
+    """An unverified non-manual insert that omits review_state would default to 'accepted', which
+    the CHECK rejects: review_state must be 'accepted' exactly when verified_by_user."""
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(text(f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}')"))
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                text(
+                    "INSERT INTO profile_facts (id, profile_id, category, fact_key, value,"
+                    " source_kind, extraction_method, verified_by_user) VALUES"
+                    f" (gen_random_uuid(), '{PROFILE_ID}', 'skill', 'resume.000',"
+                    " '{\"name\": \"Python\"}', 'resume', 'deterministic_parser', false)"
+                )
+            )
+        transaction.rollback()
+
+
+def test_head_accepts_verified_parser_insert_without_review_state(pg_engine: Engine) -> None:
+    """A verified non-manual insert that omits review_state also defaults to 'accepted', and the
+    CHECK allows it: verified means the owner already accepted the fact, so 'accepted' is the
+    only value consistent with `verified_by_user = true`."""
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(text(f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}')"))
+        connection.execute(
+            text(
+                "INSERT INTO profile_facts (id, profile_id, category, fact_key, value,"
+                " source_kind, extraction_method, verified_by_user) VALUES"
+                f" (gen_random_uuid(), '{PROFILE_ID}', 'skill', 'resume.001',"
+                " '{\"name\": \"Python\"}', 'resume', 'deterministic_parser', true)"
+            )
+        )
+        state = connection.scalar(
+            text("SELECT review_state FROM profile_facts WHERE fact_key = 'resume.001'")
+        )
+        transaction.rollback()
+    assert state == "accepted"
+
+
+def test_head_explicit_pending_parser_insert_succeeds(pg_engine: Engine) -> None:
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(
+            text(
+                f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}');"
+                "INSERT INTO profile_facts (id, profile_id, category, fact_key, value,"
+                " source_kind, extraction_method, verified_by_user, review_state) VALUES"
+                f" (gen_random_uuid(), '{PROFILE_ID}', 'skill', 'resume.002',"
+                " '{\"name\": \"Python\"}', 'resume', 'deterministic_parser', false, 'pending')"
+            )
+        )
+        transaction.rollback()
+
+
+def test_head_rejects_explicit_accepted_unverified_parser_insert(pg_engine: Engine) -> None:
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(text(f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}')"))
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                text(
+                    "INSERT INTO profile_facts (id, profile_id, category, fact_key, value,"
+                    " source_kind, extraction_method, verified_by_user, review_state) VALUES"
+                    f" (gen_random_uuid(), '{PROFILE_ID}', 'skill', 'resume.003',"
+                    " '{\"name\": \"Python\"}', 'resume', 'deterministic_parser', false,"
+                    " 'accepted')"
+                )
+            )
+        transaction.rollback()
+
+
+# (fact_key, category, extraction_method, verified_by_user, value) - a synthetic mix like
+# production's Match Profile plus imported facts, across every category fit v1 reads.
+FIT_TEST_FACTS: list[tuple[str, str, str, bool, dict[str, object]]] = [
+    ("a1", "skill", "manual", True, {"name": "Python"}),
+    ("a2", "skill", "manual", False, {"name": "SQL"}),
+    ("a3", "skill", "deterministic_parser", True, {"name": "Rust"}),
+    ("a4", "skill", "deterministic_parser", False, {"name": "Go"}),
+    ("b1", "course", "manual", True, {"name": "Algorithms"}),
+    ("b2", "course", "deterministic_parser", False, {"name": "Databases"}),
+    ("c1", "project", "manual", True, {"name": "Tracker", "description": "A tracker"}),
+    ("c2", "project", "deterministic_parser", True, {"name": "Bot", "description": None}),
+    ("d1", "research", "manual", True, {"name": "Vision", "description": None}),
+    ("d2", "research", "deterministic_parser", False, {"name": "NLP", "description": "text"}),
+]
+
+
+def test_m4_fit_filter_survives_the_migration(pg_engine: Engine, pg_url: str) -> None:
+    """`fit_profile_input` after the migration selects exactly what the Milestone 4 fit filter
+    (`verified_by_user OR extraction_method = 'manual'`) selected before it: fit input is
+    unchanged by the migration, for a realistic mix of manual and imported facts."""
+    config = alembic_config(pg_url)
+    command.downgrade(config, MILESTONE_4_REVISION)
+    try:
+        with pg_engine.begin() as connection:
+            connection.execute(text(f"INSERT INTO profiles (id) VALUES ('{PROFILE_ID}')"))
+            for key, category, method, verified, value in FIT_TEST_FACTS:
+                value_json = json.dumps(value).replace("'", "''")
+                connection.execute(
+                    text(
+                        "INSERT INTO profile_facts (id, profile_id, category, fact_key, value,"
+                        " source_kind, extraction_method, verified_by_user) VALUES"
+                        f" (gen_random_uuid(), '{PROFILE_ID}', '{category}', '{key}',"
+                        f" '{value_json}', 'manual', '{method}', {str(verified).lower()})"
+                    )
+                )
+            # What the Milestone 4 fit filter selected, in the app's own order.
+            m4_selection = connection.execute(
+                text(
+                    "SELECT category, value FROM profile_facts WHERE profile_id = :p"
+                    " AND (verified_by_user OR extraction_method = 'manual')"
+                    " ORDER BY created_at, fact_key, id"
+                ),
+                {"p": PROFILE_ID},
+            ).all()
+    finally:
+        # However the insert/select above goes, leave the shared engine at head: every other
+        # test in this session assumes it.
+        command.upgrade(config, "head")
+
+    with pg_engine.connect() as connection:
+        session = Session(bind=connection)
+        profile = session.get(Profile, uuid.UUID(PROFILE_ID))
+        assert profile is not None
+        result = fit_profile_input(session, profile)
+        session.close()
+    with pg_engine.begin() as connection:
+        connection.execute(text(f"DELETE FROM profiles WHERE id = '{PROFILE_ID}'"))
+
+    expected_skills = tuple(v["name"] for c, v in m4_selection if c == "skill")
+    expected_courses = tuple(v["name"] for c, v in m4_selection if c == "course")
+    expected_projects = [v["name"] for c, v in m4_selection if c == "project"]
+    expected_research = [v["name"] for c, v in m4_selection if c == "research"]
+
+    assert result.skills == expected_skills
+    assert result.courses == expected_courses
+    assert [p.name for p in result.projects] == expected_projects
+    assert [r.name for r in result.research] == expected_research
+    # Sanity: the fixture actually exercises exclusion (unverified, non-manual facts left out).
+    assert expected_skills == ("Python", "SQL", "Rust")
+    assert expected_courses == ("Algorithms",)
+    assert expected_projects == ["Tracker", "Bot"]
+    assert expected_research == ["Vision"]
