@@ -69,13 +69,21 @@ Categories: `skill`, `course`, `project`, `research`, `experience`, `activity`, 
 
 The parser never writes `profiles`. Date of birth, citizenship, work authorization, and the education timeline stay canonical fields that only the owner edits on the Eligibility Profile. An accepted `education` fact changes nothing about eligibility.
 
-Parser facts: `source_kind = resume`, `extraction_method = deterministic_parser`, `extractor_name`/`extractor_version` = the parser's name and version, `confidence = NULL`, `fact_key = "resume.NNN"` (position in the parser's output).
+Parser facts: `source_kind = resume`, `extraction_method = deterministic_parser`, `extractor_name`/`extractor_version` = the parser's name and version, `confidence = NULL`. `fact_key` identifies the original parsed candidate (see the M5.1 amendment below); it was originally `"resume.NNN"` (position in the parser's output).
 
 ### 7. Deterministic parsing
 
 `app.profile.resume_parser` (`PARSER_NAME = "resume-sections"`, `PARSER_VERSION = "1"`) is pure: bytes in, candidates out, no I/O. It finds section headings by a fixed alias table (Skills, Technical Skills, Technologies; Relevant Coursework, Coursework; Projects; Research; Experience, Work Experience; Activities, Leadership; Awards, Honors; Education), splits skill and course lists on commas, semicolons, pipes, and bullets, and turns other sections into entries (a name line plus description lines). Same bytes, same version → same output, in the same order. Candidates are deduplicated within a document (case-insensitive by category and name).
 
-Upload and re-parse skip a candidate whose category and name (case-insensitive) match a fact the profile has already accepted, from any source, and one that this source already accepted or rejected. Re-parsing (`POST …/reparse`) replaces only this source's pending facts, so it never duplicates or resurrects anything the owner decided.
+Upload and re-parse skip a candidate whose category and name (case-insensitive) match a fact the profile has already accepted, from any source, and one that this source already accepted or rejected (by `fact_key` identity; see the M5.1 amendment below for how that identity survives an edited value). Re-parsing (`POST …/reparse`) replaces only this source's pending facts, so it never duplicates or resurrects anything the owner decided.
+
+> **Amendment, 2026-10-01 (M5.1):** the original design keyed a parsed candidate by its position (`fact_key = "resume.NNN"`) and skipped a re-parsed candidate by matching the *current* (category, casefolded name) of a reviewed fact of this source. That meant editing an accepted candidate's name (e.g. accepting "Original Skill" renamed to "Edited Skill") made the next re-parse see "Original Skill" again and re-propose it as a new pending candidate, because the skip rule was keyed on the fact's current value, not on the original candidate it came from.
+>
+> `fact_key` is now a stable identity of the *original parsed candidate*: `"resume."` + the first 24 hex characters of SHA-256 over (category, canonical original name), where "canonical" means NFKC-normalized, casefolded, and whitespace-collapsed (`app.profile.resume_parser.canonical_name`, also now the parser's own dedupe key, so the two agree). This key is computed once, from the name the parser extracted, and never recomputed from an edit — so re-parsing skips it regardless of what the owner later renamed it to. It also doesn't depend on `PARSER_VERSION`, so bumping the parser version alone doesn't make a decided candidate look new.
+>
+> Rows written before this change keep their legacy `"resume.NNN"` key; reparse still applies the old by-(category, current casefolded value)-match skip rule to those specifically, so nothing already imported needs a backfill. (Production had zero imported sources at the time of this change.) The cross-source accepted-name skip (previous paragraph) is unchanged: it was never about this source's own history, and still compares by current value.
+>
+> `source_detail`'s ordering changed from `ORDER BY fact_key` to `ORDER BY created_at, id`: a content-hash key no longer doubles as a parse-order sort key the way the old zero-padded position did. Since one upload or reparse call is a single transaction (and `created_at` is a server-side `now()`, frozen for the whole transaction), this is a stable order once persisted, not a parse-order one.
 
 ### 8. API
 
