@@ -256,9 +256,12 @@ describe('manual opportunity form', () => {
         },
       ],
     })
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
-      'Example Summer Research Program',
-    )
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Example Summer Research Program',
+      }),
+    ).toBeInTheDocument()
   })
 
   it('shows requirement validation errors from the backend', async () => {
