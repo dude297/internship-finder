@@ -78,6 +78,38 @@ def test_the_builtin_feed_is_listed(client: TestClient) -> None:
     assert "url" not in source  # no endpoint is exposed or configurable
 
 
+def test_source_health_fields_are_present(client: TestClient) -> None:
+    [source] = client.get("/api/sources").json()
+
+    assert source["health"] == "never_run"
+    assert source["consecutive_failures"] == 0
+    assert source["last_success_age_hours"] is None
+
+
+def test_source_health_is_healthy_after_a_successful_sync(
+    client: TestClient, web: FakeSource
+) -> None:
+    web.json(FEED_URL, feed(feed_job("a")))
+    source = builtin(client)
+
+    sync(client, source["id"])
+
+    [refreshed] = client.get("/api/sources").json()
+    assert refreshed["health"] == "healthy"
+    assert refreshed["consecutive_failures"] == 0
+    assert refreshed["last_success_age_hours"] is not None
+
+
+def test_source_health_is_failing_after_a_failed_sync(client: TestClient, web: FakeSource) -> None:
+    added = add_greenhouse(client)  # nothing is served: every fetch 404s
+
+    client.post(f"/api/sources/{added['id']}/sync")
+
+    [refreshed] = [s for s in client.get("/api/sources").json() if not s["builtin"]]
+    assert refreshed["health"] == "failing"
+    assert refreshed["consecutive_failures"] == 1
+
+
 @pytest.mark.parametrize(
     ("body", "identifier", "region"),
     [

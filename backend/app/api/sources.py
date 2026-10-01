@@ -27,8 +27,15 @@ def _load(db: DbSession, source_id: uuid.UUID) -> IngestionSource:
 
 @router.get("")
 def list_sources(db: DbSession) -> list[SourceResponse]:
+    sources = service.list_sources(db)
     latest = service.latest_runs(db)
-    return [service.to_response(s, latest.get(s.id)) for s in service.list_sources(db)]
+    finished = service.latest_finished_statuses(db)
+    failures = service.consecutive_failure_counts(db)
+    now = service.utcnow()
+    return [
+        service.to_response(s, latest.get(s.id), finished.get(s.id), failures.get(s.id, 0), now)
+        for s in sources
+    ]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=SourceResponse)
@@ -45,7 +52,7 @@ def create_source(body: SourceCreate, db: DbSession) -> SourceResponse | JSONRes
     except service.SourceConflict as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     db.commit()
-    return service.to_response(source, None)
+    return service.to_response(source, None, None, 0, service.utcnow())
 
 
 @router.put("/{source_id}", response_model=SourceResponse)
@@ -63,7 +70,10 @@ def update_source(
             },
         )
     db.commit()
-    return service.to_response(source, service.latest_runs(db).get(source.id))
+    finished_status, failures = service.health_for(db, source)
+    return service.to_response(
+        source, service.latest_runs(db).get(source.id), finished_status, failures, service.utcnow()
+    )
 
 
 @router.post("/sync")

@@ -1,24 +1,43 @@
 """The source registry (ADR-008 §1): list, add, rename/enable, and run history."""
 
 import uuid
+from collections.abc import Sequence
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, selectinload
 
-from app.enums import IngestionSourceKind, SourceScope
+from app.enums import IngestionRunStatus, IngestionSourceKind, SourceScope
 from app.ingestion.adapters import ashby, greenhouse, lever
 from app.models import IngestionRun, IngestionSource
 from app.schemas.sources import RunResponse, SourceCreate, SourceResponse, SourceUpdate
+from app.services.source_health import derive_health
 
 
 class SourceConflict(Exception):
     """The same provider board/site is already configured."""
 
 
-def to_response(source: IngestionSource, latest: IngestionRun | None) -> SourceResponse:
+def to_response(
+    source: IngestionSource,
+    latest: IngestionRun | None,
+    latest_finished_status: IngestionRunStatus | None,
+    consecutive_failures: int,
+    now: datetime,
+) -> SourceResponse:
     response = SourceResponse.model_validate(source)
     response.latest_run = RunResponse.model_validate(latest) if latest else None
+    health = derive_health(
+        enabled=source.enabled,
+        latest_finished_status=latest_finished_status,
+        last_success_at=source.last_success_at,
+        consecutive_failures=consecutive_failures,
+        now=now,
+    )
+    response.health = health.health
+    response.consecutive_failures = health.consecutive_failures
+    response.last_success_age_hours = health.last_success_age_hours
     return response
 
 
@@ -30,6 +49,63 @@ def latest_runs(db: Session) -> dict[uuid.UUID, IngestionRun]:
         .order_by(IngestionRun.source_id, IngestionRun.started_at.desc(), IngestionRun.id.desc())
     ).all()
     return {run.source_id: run for run in rows}
+
+
+def latest_finished_statuses(
+    db: Session, source_ids: Sequence[uuid.UUID] | None = None
+) -> dict[uuid.UUID, IngestionRunStatus]:
+    """The newest non-RUNNING run's status per source (health is judged by the latest *finished*
+    run, not a run still in progress). One query for every source given, never a per-source
+    loop."""
+    stmt = (
+        select(IngestionRun.source_id, IngestionRun.status)
+        .ext(distinct_on(IngestionRun.source_id))
+        .where(IngestionRun.status != IngestionRunStatus.RUNNING)
+    )
+    if source_ids is not None:
+        stmt = stmt.where(IngestionRun.source_id.in_(source_ids))
+    stmt = stmt.order_by(
+        IngestionRun.source_id, IngestionRun.started_at.desc(), IngestionRun.id.desc()
+    )
+    return dict(db.execute(stmt).all())
+
+
+def consecutive_failure_counts(
+    db: Session, source_ids: Sequence[uuid.UUID] | None = None
+) -> dict[uuid.UUID, int]:
+    """FAILED/PARTIAL runs newer than each source's `last_success_at` (or all of them, if it has
+    never succeeded). Every run newer than the last success is, by definition, not a success
+    (a success would have moved that boundary), so this is just a count — one query across every
+    source given, never a per-source loop."""
+    stmt = (
+        select(IngestionRun.source_id, func.count())
+        .join(IngestionSource, IngestionSource.id == IngestionRun.source_id)
+        .where(
+            IngestionRun.status.in_((IngestionRunStatus.FAILED, IngestionRunStatus.PARTIAL)),
+            or_(
+                IngestionSource.last_success_at.is_(None),
+                IngestionRun.started_at > IngestionSource.last_success_at,
+            ),
+        )
+    )
+    if source_ids is not None:
+        stmt = stmt.where(IngestionRun.source_id.in_(source_ids))
+    stmt = stmt.group_by(IngestionRun.source_id)
+    return dict(db.execute(stmt).all())
+
+
+def health_for(db: Session, source: IngestionSource) -> tuple[IngestionRunStatus | None, int]:
+    """The two health inputs for a single source (create/update responses); `list_sources`
+    computes these for every source at once instead."""
+    ids = [source.id]
+    return (
+        latest_finished_statuses(db, ids).get(source.id),
+        consecutive_failure_counts(db, ids).get(source.id, 0),
+    )
+
+
+def utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 def list_sources(db: Session) -> list[IngestionSource]:

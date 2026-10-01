@@ -94,3 +94,7 @@ class SourceResponse(BaseModel):
     last_attempted_at: datetime | None
     last_success_at: datetime | None
     latest_run: RunResponse | None = None
+    # Derived health (ADR-012 §11), never stored; set by app.services.sources.to_response.
+    health: Literal["never_run", "healthy", "warning", "stale", "failing", "disabled"] = "never_run"
+    consecutive_failures: int = 0
+    last_success_age_hours: float | None = None
