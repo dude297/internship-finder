@@ -39,8 +39,14 @@ from app.schemas.profile_source import AcceptItem, ReviewRequest
 from app.services.discovery import Filters, list_page
 from app.services.match_profile import save_match_profile
 from app.services.profile_sources import create_source, get_source, review_source
+from app.services.requirement_candidates import scan_catalog
 
 OPPORTUNITIES = 1_100
+# A fraction of postings carry extractable sentences, exercising the requirement extractor.
+REQUIREMENT_SENTENCES = (
+    " You must be at least 18. Must be a U.S. citizen. Must be authorized to work in the"
+    " United States."
+)
 VOCABULARY = (
     "python sql machine learning robotics data science sensors embedded c++ javascript react "
     "research lab analysis statistics cloud kubernetes testing hardware firmware circuits "
@@ -71,7 +77,7 @@ def seed(db: Session) -> None:
             Opportunity(
                 title=f"Synthetic {WORDS[n % len(WORDS)].title()} Intern {n}",
                 organization=f"Example Org {n % 40}",
-                description=description(n),
+                description=description(n) + (REQUIREMENT_SENTENCES if n % 5 == 0 else ""),
                 opportunity_type=OpportunityType.INTERNSHIP,
                 application_url=f"https://example.org/jobs/{n}" if n % 3 else None,
                 location=f"Example City {n % 12}",
@@ -170,6 +176,9 @@ def main() -> None:
             f"review batch ({len(detail.facts)} accepted)",
             lambda: review_source(db, source, batch).evaluated_opportunities,
         )
+
+        timed(db, "scan_catalog (cold, ~1/5 extractable)", lambda: scan_catalog(db))
+        timed(db, "scan_catalog (idempotent rerun)", lambda: scan_catalog(db))
 
 
 if __name__ == "__main__":

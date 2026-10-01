@@ -73,9 +73,10 @@ def refresh_candidates(db: Session, opportunity: Opportunity) -> RefreshOutcome:
         proposed_keys.add(key)
         existing = existing_by_key.get(key)
         if existing is None:
-            db.add(
+            # Appended through the relationship (not `db.add`), so `opportunity.requirement_
+            # candidates` stays accurate if this function runs again on the same instance.
+            opportunity.requirement_candidates.append(
                 OpportunityRequirementCandidate(
-                    opportunity_id=opportunity.id,
                     semantic_key=key,
                     requirement_type=proposal.requirement_type,
                     value=proposal.value,
@@ -101,7 +102,7 @@ def refresh_candidates(db: Session, opportunity: Opportunity) -> RefreshOutcome:
         if key in proposed_keys:
             continue
         if candidate.review_state == FactReviewState.PENDING:
-            db.delete(candidate)
+            opportunity.requirement_candidates.remove(candidate)  # cascade: delete-orphan
         else:
             candidate.is_current = False  # reviewed decisions are kept, just marked stale
 
