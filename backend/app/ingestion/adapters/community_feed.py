@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.enums import OpportunitySourceType, OpportunityType, RemoteMode
+from app.enums import OpportunitySourceType, RemoteMode
 from app.ingestion.adapters import Adapter, SourceConfig, normalize_each, top_level
 from app.ingestion.normalize import (
     GREENHOUSE,
@@ -22,6 +22,7 @@ from app.ingestion.normalize import (
     NormalizedOpportunity,
     Snapshot,
     SnapshotError,
+    classify_opportunity_type,
     parse_timestamp,
     url_identifier,
 )
@@ -78,10 +79,6 @@ def provider_identity(item_id: str, url: str | None) -> Identifier | None:
     return None
 
 
-def _opportunity_type(program: str | None) -> OpportunityType:
-    return OpportunityType.INTERNSHIP if program == "Internship" else OpportunityType.OTHER
-
-
 def _normalize(raw: dict[str, Any]) -> NormalizedOpportunity:
     item = _Item.model_validate(raw)
     posted = parse_timestamp(item.posted_at)
@@ -95,7 +92,9 @@ def _normalize(raw: dict[str, Any]) -> NormalizedOpportunity:
         identifiers=tuple(identifiers),
         title=item.title,
         organization=item.company,
-        opportunity_type=_opportunity_type(item.program),
+        opportunity_type=classify_opportunity_type(
+            item.title, structured_intern=item.program == "Internship"
+        ),
         application_url=item.url,
         location=item.location,
         # `remote: false` doesn't say on-site; only `true` is unambiguous.
