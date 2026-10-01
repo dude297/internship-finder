@@ -5,11 +5,12 @@ import { describedBy, issueFor } from '../lib/forms'
 import { buttonClass, fieldsetClass, inputClass, legendClass } from '../lib/styles'
 import { ErrorMessage, Field } from './ui'
 
-type Provider = 'greenhouse' | 'lever'
+type Provider = 'greenhouse' | 'lever' | 'ashby'
 
 const boardHints: Record<Provider, string> = {
   greenhouse: 'For example https://job-boards.greenhouse.io/exampleboard',
   lever: 'For example https://jobs.lever.co/examplesite',
+  ashby: 'For example https://jobs.ashbyhq.com/exampleboard, or just the board name',
 }
 
 export const SCOPE_HINT =
@@ -69,6 +70,7 @@ export function AddSourceForm({ onAdded }: { onAdded: (source: Source) => void }
           >
             <option value="greenhouse">Greenhouse</option>
             <option value="lever">Lever</option>
+            <option value="ashby">Ashby</option>
           </select>
         </Field>
         <Field id="source-name" label="Organization name" error={nameError}>

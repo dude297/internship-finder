@@ -4,11 +4,39 @@ import { sourceScopes, type Run, type Source, type SourceScope } from '../api/sc
 import { AddSourceForm } from '../components/AddSourceForm'
 import { RunSummary } from '../components/RunSummary'
 import { ErrorMessage, SuccessMessage } from '../components/ui'
-import { formatDateTime, sourceKindLabels, sourceScopeLabels } from '../lib/labels'
+import {
+  formatDateTime,
+  sourceHealthLabels,
+  sourceKindLabels,
+  sourceScopeLabels,
+} from '../lib/labels'
 import { buttonClass, secondaryButtonClass } from '../lib/styles'
 
 function message(caught: unknown, fallback: string): string {
   return caught instanceof Error ? caught.message : fallback
+}
+
+// Text labels, never color alone (ADR-012 §11): failing/stale also get a border and an
+// exclamation mark so they're obvious without relying on hue.
+const healthStyles: Record<Source['health'], string> = {
+  never_run: 'bg-slate-100 text-slate-700',
+  healthy: 'bg-green-100 text-green-800',
+  warning: 'border border-amber-400 bg-amber-100 text-amber-900',
+  stale: 'border border-amber-400 bg-amber-100 text-amber-900',
+  failing: 'border border-red-400 bg-red-100 text-red-800',
+  disabled: 'bg-slate-100 text-slate-500',
+}
+
+function HealthBadge({ source }: { source: Source }) {
+  const urgent = source.health === 'failing' || source.health === 'stale'
+  return (
+    <span
+      className={`rounded px-2 py-0.5 text-xs font-medium ${healthStyles[source.health]}`}
+    >
+      {urgent && '! '}
+      {sourceHealthLabels[source.health]}
+    </span>
+  )
 }
 
 export function SourcesPage() {
@@ -133,7 +161,10 @@ export function SourcesPage() {
           <li key={source.id} className="space-y-3 rounded border border-slate-200 p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h2 className="font-medium">{source.display_name}</h2>
+                <h2 className="flex flex-wrap items-center gap-2 font-medium">
+                  {source.display_name}
+                  <HealthBadge source={source} />
+                </h2>
                 <p className="text-sm text-slate-600">
                   {sourceKindLabels[source.kind]}
                   {!source.builtin && ` · ${source.identifier}`}
@@ -169,6 +200,12 @@ export function SourcesPage() {
                   {source.last_success_at
                     ? formatDateTime(source.last_success_at)
                     : 'never'}
+                  {source.last_success_age_hours !== null &&
+                    ` (${Math.round(source.last_success_age_hours)}h ago)`}
+                  {source.consecutive_failures > 0 &&
+                    ` · ${source.consecutive_failures} failed sync${
+                      source.consecutive_failures === 1 ? '' : 's'
+                    } in a row`}
                 </p>
               </div>
               <div className="flex gap-2">
