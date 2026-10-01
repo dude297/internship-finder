@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, selectinload
 
 from app.enums import IngestionSourceKind, SourceScope
-from app.ingestion.adapters import greenhouse, lever
+from app.ingestion.adapters import ashby, greenhouse, lever
 from app.models import IngestionRun, IngestionSource
 from app.schemas.sources import RunResponse, SourceCreate, SourceResponse, SourceUpdate
 
@@ -47,6 +47,10 @@ def create_source(db: Session, body: SourceCreate) -> IngestionSource:
         if body.region is not None:
             raise ValueError("Greenhouse boards don't have a region.")
         identifier = greenhouse.parse_board_reference(body.board)
+    elif body.kind is IngestionSourceKind.ASHBY:
+        if body.region is not None:
+            raise ValueError("Ashby boards don't have a region.")
+        identifier = ashby.parse_board_reference(body.board)
     else:
         identifier, region = lever.parse_site_reference(body.board, body.region)
     duplicate = db.scalars(

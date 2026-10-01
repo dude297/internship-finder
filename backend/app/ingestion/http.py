@@ -23,7 +23,13 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 ALLOWED_HOSTS = frozenset(
-    {"zshah101.github.io", "boards-api.greenhouse.io", "api.lever.co", "api.eu.lever.co"}
+    {
+        "zshah101.github.io",
+        "boards-api.greenhouse.io",
+        "api.lever.co",
+        "api.eu.lever.co",
+        "api.ashbyhq.com",
+    }
 )
 USER_AGENT = (
     "PersonalInternshipFinder/0.1 (single-user; +https://github.com/dude297/internship-finder)"
