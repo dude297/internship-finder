@@ -10,26 +10,33 @@ credentials, as one line from standard input (--password-stdin). Never as an arg
 
 Source sync (ADR-008), the same pipeline the API uses:
 
-    python -m app.cli sync-sources            # every enabled source
-    python -m app.cli sync-source SOURCE      # one source, by ID or key (e.g. greenhouse:board)
+    python -m app.cli sync-sources             # every enabled source
+    python -m app.cli sync-sources --scheduled # same, labeled for the scheduled GH Actions run
+    python -m app.cli sync-source SOURCE       # one source, by ID or key (e.g. greenhouse:board)
 
-Prints run counts only (never payloads). Exits 1 if a requested sync failed.
+Prints run counts and elapsed time only (never payloads, headers, or the database URL).
+
+Exit codes: 0 every attempted source finished success/no_change/partial; 1 at least one source
+failed; 2 an operational error (the database is unreachable or misconfigured) before any source
+could be attempted.
 
 Requirement candidate catalog scan (ADR-012 §9):
 
     python -m app.cli scan-requirements [--batch-size N]
 
 Idempotent; never accepts, rejects, changes an assessment status, or evaluates. Prints counts
-only. Exits 1 only on an operational error (never on an individual extractor failure).
+only. Exits 2 on an operational (database) error, never on an individual extractor failure.
 """
 
 import argparse
 import getpass
 import sys
+import time
 import uuid
 from collections.abc import Callable, Sequence
 
 from sqlalchemy import select
+from sqlalchemy.exc import ArgumentError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_engine
@@ -39,6 +46,10 @@ from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_so
 from app.models import AuthUser, IngestionRun, IngestionSource
 from app.services import auth
 from app.services.requirement_candidates import CATALOG_SCAN_BATCH_SIZE, scan_catalog
+
+# Never the exception text or the URL it may embed (ADR-009 §9): a connection failure or a
+# malformed DATABASE_URL both print this fixed, safe line instead.
+DB_ERROR_MESSAGE = "error: couldn't reach or use the configured database."
 
 
 def _read_password(from_stdin: bool) -> str:
@@ -58,6 +69,12 @@ def _find_source(db: Session, reference: str) -> IngestionSource | None:
         return next((s for s in sources if s.key == reference.lower()), None)
 
 
+def _elapsed(run: IngestionRun) -> str:
+    if run.finished_at is None:
+        return "?"
+    return f"{(run.finished_at - run.started_at).total_seconds():.1f}s"
+
+
 def _summary(run: IngestionRun) -> str:
     counts = ", ".join(
         f"{name} {getattr(run, f'{name}_count')}"
@@ -73,32 +90,62 @@ def _summary(run: IngestionRun) -> str:
             "error",
         )
     )
-    line = f"{run.source.key}: {run.status.value} ({counts})"
+    line = f"{run.source.key}: {run.status.value} ({counts}, elapsed {_elapsed(run)})"
     return f"{line}: {run.error_summary}" if run.error_summary else line
 
 
-def _sync(reference: str | None) -> int:
-    with Session(get_engine(), expire_on_commit=False) as db:
-        if reference is None:
-            runs = sync_enabled_sources(db, transport=configured_transport())
-        else:
+def _sync_source(reference: str) -> int:
+    try:
+        with Session(get_engine(), expire_on_commit=False) as db:
             source = _find_source(db, reference)
             if source is None:
                 print(f"error: no source {reference!r}", file=sys.stderr)
                 return 1
             try:
-                runs = [sync_source(db, source, transport=configured_transport())]
+                run = sync_source(db, source, transport=configured_transport())
             except SyncInProgress as error:
                 print(f"error: {error}", file=sys.stderr)
                 return 1
-        for run in runs:
             print(_summary(run))
-    return 1 if any(r.status is IngestionRunStatus.FAILED for r in runs) else 0
+            return 1 if run.status is IngestionRunStatus.FAILED else 0
+    except (OperationalError, ArgumentError, RuntimeError):
+        print(DB_ERROR_MESSAGE, file=sys.stderr)
+        return 2
+
+
+def _sync_sources(*, scheduled: bool) -> int:
+    started = time.monotonic()
+    skipped: list[str] = []
+    try:
+        with Session(get_engine(), expire_on_commit=False) as db:
+            runs = sync_enabled_sources(
+                db,
+                transport=configured_transport(),
+                on_skip=lambda source: skipped.append(source.key),
+            )
+    except (OperationalError, ArgumentError, RuntimeError):
+        print(DB_ERROR_MESSAGE, file=sys.stderr)
+        return 2
+    for run in runs:
+        print(_summary(run))
+    for key in skipped:
+        print(f"{key}: skipped (already syncing)")
+    failed = sum(1 for r in runs if r.status is IngestionRunStatus.FAILED)
+    label = "scheduled sync" if scheduled else "sync"
+    print(
+        f"{label}: {len(runs)} run, {len(skipped)} skipped, {failed} failed,"
+        f" elapsed {time.monotonic() - started:.1f}s"
+    )
+    return 1 if failed else 0
 
 
 def _scan_requirements(batch_size: int) -> int:
-    with Session(get_engine(), expire_on_commit=False) as db:
-        result = scan_catalog(db, batch_size=batch_size)
+    try:
+        with Session(get_engine(), expire_on_commit=False) as db:
+            result = scan_catalog(db, batch_size=batch_size)
+    except (OperationalError, ArgumentError, RuntimeError):
+        print(DB_ERROR_MESSAGE, file=sys.stderr)
+        return 2
     print(
         f"scanned {result.scanned}, refreshed {result.refreshed}, unchanged {result.unchanged},"
         f" failed {result.failed}, candidates_created {result.candidates_created}"
@@ -122,7 +169,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             action="store_true",
             help="read the password from standard input (automation with test credentials)",
         )
-    commands.add_parser("sync-sources", help="sync every enabled opportunity source")
+    all_sources = commands.add_parser("sync-sources", help="sync every enabled opportunity source")
+    all_sources.add_argument(
+        "--scheduled",
+        action="store_true",
+        help="label this run as the scheduled GitHub Actions sync (ADR-012 §10)",
+    )
     one = commands.add_parser("sync-source", help="sync one opportunity source")
     one.add_argument("source", help="source ID or key, e.g. greenhouse:exampleboard")
     scan = commands.add_parser(
@@ -132,9 +184,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "sync-sources":
-        return _sync(None)
+        return _sync_sources(scheduled=args.scheduled)
     if args.command == "sync-source":
-        return _sync(args.source)
+        return _sync_source(args.source)
     if args.command == "scan-requirements":
         return _scan_requirements(args.batch_size)
 

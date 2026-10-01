@@ -1,0 +1,68 @@
+name: Scheduled source sync
+
+# ADR-012 §10 / ADR-009 amendment (docs/decisions/ADR-009-amendment-draft.md): syncs the
+# production sources twice a day against Neon. Schedule and workflow_dispatch only — never
+# pull_request, pull_request_target, or push, since those can run from a fork and this job
+# carries a production database secret. GitHub only runs `schedule` on the base repository's
+# default branch, and never on a fork, so that boundary is also enforced by GitHub itself; the
+# `if:` guard below is defense in depth against a manual dispatch on the wrong repo or branch.
+on:
+  schedule:
+    # 06:17 and 18:17 America/Los_Angeles. The `timezone` key (GitHub Actions, 2024+) resolves
+    # the IANA zone to UTC per run, so this already accounts for the PDT/PST shift twice a year
+    # without a second cron line.
+    - cron: "17 6 * * *"
+      timezone: "America/Los_Angeles"
+    - cron: "17 18 * * *"
+      timezone: "America/Los_Angeles"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # One in-flight scheduled sync at a time; never cancel one partway through (sources commit
+  # their own run bookkeeping as they go). The per-source "one running run" database index
+  # remains the real concurrency guard (ADR-008 §4) — this just avoids queuing redundant runs.
+  group: production-source-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # Belt-and-suspenders: only the upstream repository's default branch, even on manual dispatch.
+    if: github.repository == 'dude297/internship-finder' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # A GitHub Environment named "production" must exist with PRODUCTION_DATABASE_URL set as an
+    # environment secret (ideally with required reviewers / deployment protection rules). This
+    # scopes the secret so it's never readable by a workflow run outside this environment.
+    environment: production
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Install backend
+        run: python -m venv .venv && .venv/bin/python -m pip install .
+
+      - name: Check the database secret is configured
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL is empty; configure it on the production environment."
+            exit 1
+          fi
+
+      - name: Sync every enabled source
+        env:
+          # Scoped to this step only: never a job- or workflow-level env, and never logged.
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: .venv/bin/python -m app.cli sync-sources --scheduled
