@@ -18,6 +18,9 @@ LEVER_SITE = "exampleinstitute"
 LEVER_URL = f"https://api.lever.co/v0/postings/{LEVER_SITE}?mode=json"
 LEVER_EU_URL = f"https://api.eu.lever.co/v0/postings/{LEVER_SITE}?mode=json"
 LEVER_POSTING_ID = "0a1b2c3d-0000-4000-8000-000000000001"
+ASHBY_BOARD = "example-board"
+ASHBY_URL = f"https://api.ashbyhq.com/posting-api/job-board/{ASHBY_BOARD}?includeCompensation=false"
+ASHBY_JOB_ID = "1b2c3d4e-0000-4000-8000-000000000001"
 
 
 def feed_job(
@@ -109,6 +112,33 @@ def lever_posting(posting_id: str = LEVER_POSTING_ID, **changes: Any) -> dict[st
         "applyUrl": f"https://jobs.lever.co/{LEVER_SITE}/{posting_id}/apply",
     }
     return posting | changes
+
+
+def ashby_job(job_id: str = ASHBY_JOB_ID, **changes: Any) -> dict[str, Any]:
+    job: dict[str, Any] = {
+        "id": job_id,
+        "title": "Synthetic Data Science Intern",
+        "department": "Engineering",
+        "team": "Synthetic Lab",
+        "employmentType": "Intern",
+        "location": "Example City",
+        "secondaryLocations": [{"location": "Remote - Example Country"}],
+        "isRemote": False,
+        "workplaceType": "Hybrid",
+        "address": {"postalAddress": {"addressLocality": "Example City"}},
+        "publishedAt": "2040-09-05T09:00:00.000+00:00",
+        "isListed": True,
+        "jobUrl": f"https://jobs.ashbyhq.com/{ASHBY_BOARD}/{job_id}",
+        "applyUrl": f"https://jobs.ashbyhq.com/{ASHBY_BOARD}/{job_id}/application",
+        "descriptionHtml": "<p>Build <b>synthetic</b> data pipelines.</p><ul><li>Python</li></ul>",
+        "descriptionPlain": "Build synthetic data pipelines.\n- Python",
+    }
+    return job | changes
+
+
+def ashby_board(*jobs: Any, **changes: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {"apiVersion": "1", "jobs": list(jobs)}
+    return body | changes
 
 
 class FakeSource:
