@@ -11,6 +11,7 @@ import multiprocessing
 import re
 import sys
 import threading
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from multiprocessing.connection import Connection
@@ -348,11 +349,18 @@ def _split_list_items(line: str, category: FactCategory) -> list[Candidate]:
     return items
 
 
+def canonical_name(name: str) -> str:
+    """NFKC-normalize, casefold, and collapse whitespace. Two names are "the same original
+    candidate" exactly when their canonical form matches: this is both the parser's own dedupe
+    key and (M5.1) the basis of a candidate's stable identity in app.services.profile_sources."""
+    return " ".join(unicodedata.normalize("NFKC", name).casefold().split())
+
+
 def _dedupe(candidates: list[Candidate]) -> list[Candidate]:
     seen: set[tuple[FactCategory, str]] = set()
     result: list[Candidate] = []
     for candidate in candidates:
-        key = (candidate.category, candidate.name.casefold())
+        key = (candidate.category, canonical_name(candidate.name))
         if key in seen:
             continue
         seen.add(key)

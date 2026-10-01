@@ -3,6 +3,7 @@ sources. Routes commit; this module only flushes, so a route's whole request is 
 """
 
 import hashlib
+import re
 import unicodedata
 import uuid
 from typing import Any, cast
@@ -17,6 +18,7 @@ from app.profile.resume_parser import (
     PARSER_NAME,
     PARSER_VERSION,
     Candidate,
+    canonical_name,
     parse_document,
 )
 from app.repositories import FIT_FACT_CATEGORIES, get_profile
@@ -32,6 +34,13 @@ from app.schemas.profile_source import (
 from app.services.opportunities import evaluate_all
 
 FACT_KEY_PREFIX = "resume."
+# M5.1: a candidate's fact_key is `resume.` + 24 hex chars of SHA-256 over (category, canonical
+# original name) -- a stable identity for the *original parsed candidate*, independent of parser
+# version and of any later edit to the accepted/rejected value (ADR-011 §7, M5.1 note). Rows from
+# before M5.1 instead have a legacy `resume.NNN` positional key; this pattern recognizes those so
+# reparse can keep applying the old by-value skip rule to them.
+_LEGACY_FACT_KEY_RE = re.compile(r"^resume\.\d{3}$")  # the old zero-padded index, e.g. resume.007
+_FACT_KEY_HASH_LEN = 24
 NO_DESCRIPTION_CATEGORIES = (FactCategory.SKILL, FactCategory.COURSE)
 NAME_LIMITS = {FactCategory.SKILL: 100, FactCategory.COURSE: 150}
 DEFAULT_NAME_LIMIT = 150
@@ -137,10 +146,13 @@ def _fact_to_imported(fact: ProfileFact) -> ImportedFact:
 
 def source_detail(db: Session, source: ProfileSource) -> ProfileSourceDetail:
     counts = _counts(db, [source.id])[source.id]
+    # M5.1: fact_key is now a content hash, so it no longer doubles as a parse-order sort key
+    # (it used to be a zero-padded position). created_at/id is stable (not parse order, since a
+    # whole upload or reparse call is one transaction and so shares one created_at).
     facts = db.scalars(
         select(ProfileFact)
         .where(ProfileFact.profile_source_id == source.id)
-        .order_by(ProfileFact.fact_key)
+        .order_by(ProfileFact.created_at, ProfileFact.id)
     ).all()
     return ProfileSourceDetail(
         **_summary(source, counts).model_dump(), facts=[_fact_to_imported(f) for f in facts]
@@ -171,6 +183,19 @@ def _candidate_value(candidate: Candidate) -> dict[str, Any]:
     if candidate.category in (FactCategory.SKILL, FactCategory.COURSE):
         return {"name": candidate.name}
     return {"name": candidate.name, "description": candidate.description}
+
+
+def _candidate_fact_key(category: FactCategory, name: str) -> str:
+    """The stable identity (M5.1) of a parsed candidate: deterministic, and independent of the
+    parser version and of any edit made after the owner accepts or rejects it."""
+    digest = hashlib.sha256(f"{category.value}\x00{canonical_name(name)}".encode()).hexdigest()
+    return f"{FACT_KEY_PREFIX}{digest[:_FACT_KEY_HASH_LEN]}"
+
+
+def _is_legacy_fact_key(fact_key: str) -> bool:
+    """True for a pre-M5.1 `resume.NNN` positional key, which carries no identity of its own and
+    must keep falling back to a by-value skip rule on reparse."""
+    return bool(_LEGACY_FACT_KEY_RE.match(fact_key))
 
 
 def _fact_row(
@@ -249,10 +274,11 @@ def create_source(db: Session, data: bytes, filename: str | None) -> ProfileSour
     db.add(ProfileSourceArtifact(profile_source_id=source.id, content=data))
 
     skip = _accepted_names(db, profile.id)
-    for index, candidate in enumerate(parsed.candidates):
+    for candidate in parsed.candidates:
         if (candidate.category, candidate.name.casefold()) in skip:
             continue
-        db.add(_fact_row(profile, source, candidate, f"{FACT_KEY_PREFIX}{index:03d}"))
+        fact_key = _candidate_fact_key(candidate.category, candidate.name)
+        db.add(_fact_row(profile, source, candidate, fact_key))
 
     db.flush()
     return source_detail(db, source)
@@ -369,31 +395,36 @@ def reparse_source(db: Session, source: ProfileSource) -> ProfileSourceDetail:
 
     profile = get_profile(db)
     assert profile is not None
+    # Only accepted/rejected facts remain (pending ones were just deleted above).
     remaining = db.scalars(
         select(ProfileFact).where(ProfileFact.profile_source_id == source.id)
     ).all()
-    own_keys: set[tuple[FactCategory, str]] = set()
-    for fact in remaining:
-        value = _as_value(fact.value)
-        name = value.get("name")
-        if isinstance(name, str):
-            own_keys.add((fact.category, name.casefold()))
-    skip = _accepted_names(db, profile.id) | own_keys
 
-    next_index = 1 + max(
-        (
-            int(f.fact_key[len(FACT_KEY_PREFIX) :])
-            for f in remaining
-            if f.fact_key.startswith(FACT_KEY_PREFIX)
-            and f.fact_key[len(FACT_KEY_PREFIX) :].isdigit()
-        ),
-        default=-1,
-    )
-    for candidate in parsed.candidates:
-        if (candidate.category, candidate.name.casefold()) in skip:
+    # M5.1 identity rule: a candidate whose fact_key (computed from its original category and
+    # name, never from an edit) matches a remaining reviewed fact's fact_key is the same original
+    # candidate the owner already decided on -- skip it even if the owner edited its value.
+    reviewed_keys = {f.fact_key for f in remaining}
+
+    # Legacy by-value fallback (pre-M5.1 `resume.NNN` keys carry no identity of their own): keep
+    # skipping by current value for those, as reparse always has.
+    legacy_value_keys: set[tuple[FactCategory, str]] = set()
+    for fact in remaining:
+        if not _is_legacy_fact_key(fact.fact_key):
             continue
-        db.add(_fact_row(profile, source, candidate, f"{FACT_KEY_PREFIX}{next_index:03d}"))
-        next_index += 1
+        name = _as_value(fact.value).get("name")
+        if isinstance(name, str):
+            legacy_value_keys.add((fact.category, name.casefold()))
+
+    # Cross-source accepted-name skip (ADR-011 §7), unchanged by M5.1.
+    skip_by_value = _accepted_names(db, profile.id) | legacy_value_keys
+
+    for candidate in parsed.candidates:
+        fact_key = _candidate_fact_key(candidate.category, candidate.name)
+        if fact_key in reviewed_keys:
+            continue
+        if (candidate.category, candidate.name.casefold()) in skip_by_value:
+            continue
+        db.add(_fact_row(profile, source, candidate, fact_key))
 
     source.parser_name = PARSER_NAME
     source.parser_version = PARSER_VERSION

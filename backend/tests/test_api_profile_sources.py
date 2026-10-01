@@ -137,7 +137,9 @@ def test_upload_creates_pending_facts_with_provenance(client: TestClient, db: Se
     assert body["accepted_count"] == 0
     assert body["rejected_count"] == 0
     names = [f["name"] for f in body["facts"]]
-    assert names == ["Synthetic Skill", "Another Skill"]
+    # Order is not asserted here: fact_key is a content hash (M5.1), not a position, so display
+    # order no longer follows parse order (see test_detail_lists_all_facts_once below).
+    assert set(names) == {"Synthetic Skill", "Another Skill"}
     assert all(f["review_state"] == "pending" for f in body["facts"])
 
     facts = db.scalars(select(ProfileFact).order_by(ProfileFact.fact_key)).all()
@@ -167,11 +169,13 @@ def test_list_has_counts_and_no_facts_or_content(client: TestClient) -> None:
     assert "content" not in summary
 
 
-def test_detail_returns_facts_ordered_by_fact_key(client: TestClient) -> None:
+def test_detail_lists_all_facts_once(client: TestClient) -> None:
+    # fact_key is a content hash (M5.1), not a position, so this no longer checks a specific
+    # order -- only that both facts are present exactly once.
     created = upload_ok(client, data=resume_bytes("B Skill", "A Skill"))
     source_id = created["id"]
     detail = client.get(f"{SOURCES}/{source_id}").json()
-    assert [f["name"] for f in detail["facts"]] == ["B Skill", "A Skill"]  # parser order, not name
+    assert sorted(f["name"] for f in detail["facts"]) == ["A Skill", "B Skill"]
 
 
 def test_response_never_echoes_raw_text_beyond_fact_names(client: TestClient) -> None:
@@ -540,6 +544,89 @@ def test_reparse_is_idempotent_and_preserves_reviewed_facts(
         .order_by(ProfileFact.fact_key)
     ).all()
     assert len(fact_keys) == len(set(fact_keys))
+
+
+# --- Reparse identity (M5.1): fact_key identifies the original candidate, not its value --------
+
+
+def test_reparse_preserves_an_edited_accepted_fact(client: TestClient) -> None:
+    """Accepting a candidate and then editing its name must not make reparse treat the edited
+    value as a new, different candidate: identity is the original parsed candidate (M5.1)."""
+    created = upload_ok(client, data=resume_bytes("Original Skill"))
+    fact_id = _fact_id(created, "Original Skill")
+    client.post(
+        f"{SOURCES}/{created['id']}/review",
+        json={"accept": [{"id": fact_id, "name": "Edited Skill"}], "reject": []},
+    )
+
+    reparsed = client.post(f"{SOURCES}/{created['id']}/reparse")
+    assert reparsed.status_code == 200, reparsed.text
+    detail = reparsed.json()
+    assert len(detail["facts"]) == 1
+    [fact] = detail["facts"]
+    assert fact["name"] == "Edited Skill"
+    assert fact["review_state"] == "accepted"
+
+
+def test_reparse_does_not_resurrect_a_rejected_fact(client: TestClient) -> None:
+    created = upload_ok(client, data=resume_bytes("Rejected Skill"))
+    fact_id = _fact_id(created, "Rejected Skill")
+    client.post(f"{SOURCES}/{created['id']}/review", json={"accept": [], "reject": [fact_id]})
+
+    reparsed = client.post(f"{SOURCES}/{created['id']}/reparse")
+    assert reparsed.status_code == 200, reparsed.text
+    detail = reparsed.json()
+    assert len(detail["facts"]) == 1
+    [fact] = detail["facts"]
+    assert fact["review_state"] == "rejected"
+
+
+def test_reparse_refreshes_a_pending_candidate_without_duplicating_it(client: TestClient) -> None:
+    created = upload_ok(client, data=resume_bytes("Still Pending Skill"))
+    reparsed = client.post(f"{SOURCES}/{created['id']}/reparse")
+    assert reparsed.status_code == 200, reparsed.text
+    detail = reparsed.json()
+    assert len(detail["facts"]) == 1
+    [fact] = detail["facts"]
+    assert fact["name"] == "Still Pending Skill"
+    assert fact["review_state"] == "pending"
+
+
+def test_reparse_leaves_manual_match_profile_facts_alone(client: TestClient, db: Session) -> None:
+    put_match(client, skills=["Manual Skill"])
+    created = upload_ok(client, data=resume_bytes("Resume Skill"))
+    before = {
+        f.id
+        for f in db.scalars(
+            select(ProfileFact).where(ProfileFact.profile_source_id.is_(None))
+        ).all()
+    }
+    assert len(before) > 0
+
+    reparsed = client.post(f"{SOURCES}/{created['id']}/reparse")
+    assert reparsed.status_code == 200, reparsed.text
+
+    after = {
+        f.id
+        for f in db.scalars(
+            select(ProfileFact).where(ProfileFact.profile_source_id.is_(None))
+        ).all()
+    }
+    assert after == before  # manual (profile_source_id NULL) facts are untouched
+
+
+def test_candidate_identity_is_deterministic_and_ignores_edits() -> None:
+    from app.services.profile_sources import (
+        _candidate_fact_key,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    key_a = _candidate_fact_key(FactCategory.SKILL, "Original Skill")
+    key_b = _candidate_fact_key(FactCategory.SKILL, "Original Skill")
+    assert key_a == key_b
+    assert key_a.startswith("resume.")
+    # The key is only ever computed from the original parsed name; a different original name
+    # naturally yields a different key, but nothing here is computed from an edited value.
+    assert key_a != _candidate_fact_key(FactCategory.SKILL, "Edited Skill")
 
 
 def test_reparse_error_maps_to_422(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
