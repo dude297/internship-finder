@@ -27,6 +27,7 @@ MAX_IDENTIFIER_CHARS = 1024
 ZSHAH = "zshah"
 GREENHOUSE = "greenhouse"
 LEVER = "lever"
+ASHBY = "ashby"
 URL = "url"
 
 # Board tokens and site slugs as they appear in provider URLs. Lowercased on both sides.
@@ -173,6 +174,18 @@ _INTERNSHIP_TITLE = re.compile(
 def is_internship_title(title: str) -> bool:
     text = " ".join(unicodedata.normalize("NFKC", title).casefold().split())
     return _INTERNSHIP_TITLE.search(text) is not None
+
+
+def classify_opportunity_type(
+    title: str, *, structured_intern: bool | None = None
+) -> OpportunityType:
+    """One canonical matcher (ADR-012 §13): a structured provider field that says intern wins;
+    otherwise the whole-word title matcher; otherwise `other`. Type isn't eligibility."""
+    if structured_intern:
+        return OpportunityType.INTERNSHIP
+    if is_internship_title(title):
+        return OpportunityType.INTERNSHIP
+    return OpportunityType.OTHER
 
 
 def canonical_url(value: str | None) -> str | None:

@@ -8,7 +8,7 @@ from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from app.enums import OpportunitySourceType, OpportunityType, RemoteMode, SourceRegion
+from app.enums import OpportunitySourceType, RemoteMode, SourceRegion
 from app.ingestion.adapters import Adapter, SourceConfig, normalize_each, top_level
 from app.ingestion.normalize import (
     LEVER,
@@ -16,6 +16,7 @@ from app.ingestion.normalize import (
     Identifier,
     NormalizedOpportunity,
     Snapshot,
+    classify_opportunity_type,
     html_to_text,
     parse_timestamp,
     url_identifier,
@@ -115,9 +116,9 @@ def _normalize(raw: dict[str, Any], source: SourceConfig) -> NormalizedOpportuni
         organization=source.display_name,
         description=_description(posting),
         # A structured commitment field, not prose: "Intern" / "Internship".
-        opportunity_type=OpportunityType.INTERNSHIP
-        if "intern" in commitment
-        else (OpportunityType.OTHER),
+        opportunity_type=classify_opportunity_type(
+            posting.text, structured_intern="intern" in commitment
+        ),
         application_url=posting.hostedUrl,
         location=" · ".join(locations) or None,
         remote_mode=_WORKPLACE.get((posting.workplaceType or "").lower()),
