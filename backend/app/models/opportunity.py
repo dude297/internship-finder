@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, IdMixin, TimestampMixin, str_enum
 from app.enums import (
     ExtractionMethod,
+    FactReviewState,
     OpportunitySourceType,
     OpportunityType,
     RemoteMode,
@@ -47,6 +48,11 @@ class Opportunity(IdMixin, TimestampMixin, Base):
             name="end_not_before_start",
         ),
         CheckConstraint("last_seen_at >= first_seen_at", name="last_seen_not_before_first"),
+        CheckConstraint(
+            "requirement_extraction_fingerprint IS NULL"
+            " OR length(requirement_extraction_fingerprint) = 64",
+            name="requirement_extraction_fingerprint_length",
+        ),
     )
 
     title: Mapped[str] = mapped_column(String(300))
@@ -75,6 +81,12 @@ class Opportunity(IdMixin, TimestampMixin, Base):
     # Set when the owner creates or edits it through the API. Sync never overwrites the canonical
     # fields or requirements of a curated opportunity (ADR-008 §8).
     manually_curated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # ADR-012 §6: set when a source update materially changed the posting text after the owner
+    # had reviewed its requirements; cleared by the owner's next review. Display + filter only.
+    requirements_stale_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # ADR-012 §4: SHA-256 of (extractor name, version, extraction inputs) at the last candidate
+    # extraction. NULL = never extracted. The catalog scan skips rows whose value is current.
+    requirement_extraction_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
     source_records: Mapped[list["OpportunitySourceRecord"]] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
@@ -83,6 +95,9 @@ class Opportunity(IdMixin, TimestampMixin, Base):
         back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
     )
     requirements: Mapped[list["OpportunityRequirement"]] = relationship(
+        back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
+    )
+    requirement_candidates: Mapped[list["OpportunityRequirementCandidate"]] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True
     )
     application: Mapped["Application | None"] = relationship(
@@ -198,3 +213,58 @@ class OpportunityRequirement(IdMixin, TimestampMixin, Base):
     confidence: Mapped[float | None] = mapped_column(Float)
 
     opportunity: Mapped[Opportunity] = relationship(back_populates="requirements")
+
+
+class OpportunityRequirementCandidate(IdMixin, TimestampMixin, Base):
+    """A deterministic requirement proposal awaiting (or past) owner review (ADR-012).
+
+    Never read by eligibility: only canonical `opportunity_requirements` are. Identity is the
+    semantic key (type, normalized value, applies_at, reference_date), never position, source
+    text, or IDs, so re-extraction can't resurrect a rejected or duplicate an accepted proposal.
+    The row keeps the original proposal even when the owner edits the value on accept; the
+    edited value lives only on the linked canonical requirement."""
+
+    __tablename__ = "opportunity_requirement_candidates"
+    __table_args__ = (
+        UniqueConstraint("opportunity_id", "semantic_key"),
+        CheckConstraint("length(semantic_key) = 64", name="semantic_key_length"),
+        CheckConstraint(
+            "(applies_at = 'explicit_date' AND reference_date IS NOT NULL)"
+            " OR (applies_at <> 'explicit_date' AND reference_date IS NULL)",
+            name="reference_date_iff_explicit",
+        ),
+        CheckConstraint(
+            "accepted_requirement_id IS NULL OR review_state = 'accepted'",
+            name="linked_only_when_accepted",
+        ),
+    )
+
+    # Indexed by the (opportunity_id, semantic_key) unique constraint.
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("opportunities.id", ondelete="CASCADE")
+    )
+    semantic_key: Mapped[str] = mapped_column(String(64))
+    requirement_type: Mapped[RequirementType] = mapped_column(
+        str_enum(RequirementType, "candidate_requirement_type")
+    )
+    value: Mapped[dict[str, Any]] = mapped_column(JSON)
+    applies_at: Mapped[RequirementAppliesAt] = mapped_column(
+        str_enum(RequirementAppliesAt, "candidate_applies_at")
+    )
+    reference_date: Mapped[date | None]
+    # Bounded evidence excerpt (ADR-012 §5). Plain text; rendered only as text.
+    source_text: Mapped[str] = mapped_column(String(500))
+    extractor_name: Mapped[str] = mapped_column(String(100))
+    extractor_version: Mapped[str] = mapped_column(String(50))
+    review_state: Mapped[FactReviewState] = mapped_column(
+        str_enum(FactReviewState, "candidate_review_state")
+    )
+    # Whether the latest extraction of the current posting text proposed it. Pending candidates
+    # that stop being proposed are deleted; reviewed ones are kept with is_current = false.
+    is_current: Mapped[bool] = mapped_column(default=True, server_default=true())
+    # The canonical requirement created on accept. SET NULL if the owner later deletes it.
+    accepted_requirement_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("opportunity_requirements.id", ondelete="SET NULL"), index=True
+    )
+
+    opportunity: Mapped[Opportunity] = relationship(back_populates="requirement_candidates")

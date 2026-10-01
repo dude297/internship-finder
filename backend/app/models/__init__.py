@@ -9,6 +9,7 @@ from app.models.opportunity import (
     Opportunity,
     OpportunityIdentifier,
     OpportunityRequirement,
+    OpportunityRequirementCandidate,
     OpportunitySourceRecord,
 )
 from app.models.profile import Profile, ProfileFact, ProfileSource, ProfileSourceArtifact
@@ -26,6 +27,7 @@ __all__ = [
     "OpportunityEvaluation",
     "OpportunityIdentifier",
     "OpportunityRequirement",
+    "OpportunityRequirementCandidate",
     "OpportunitySourceRecord",
     "Profile",
     "ProfileFact",

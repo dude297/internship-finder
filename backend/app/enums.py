@@ -53,7 +53,9 @@ class FactCategory(StrEnum):
 
 
 class FactReviewState(StrEnum):
-    """Owner review of a profile fact (ADR-011). Only accepted facts feed fit scoring."""
+    """Owner review of a deterministic proposal: a profile fact (ADR-011; only accepted facts
+    feed fit scoring) or an opportunity requirement candidate (ADR-012; only accepted candidates
+    become canonical requirements)."""
 
     PENDING = "pending"
     ACCEPTED = "accepted"
@@ -148,6 +150,7 @@ class IngestionSourceKind(StrEnum):
     COMMUNITY_FEED = "community_feed"
     GREENHOUSE = "greenhouse"
     LEVER = "lever"
+    ASHBY = "ashby"
 
 
 class SourceRegion(StrEnum):
