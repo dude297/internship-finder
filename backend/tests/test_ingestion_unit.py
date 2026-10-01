@@ -682,7 +682,13 @@ def test_ashby_isremote_fallback_without_workplace_type() -> None:
 
 def test_ashby_unlisted_jobs_are_excluded() -> None:
     snapshot = ashby.parse(
-        ashby_board(ashby_job("a", isListed=True), ashby_job("b", isListed=False)), ASHBY_SOURCE
+        ashby_board(
+            ashby_job("a", isListed=True),
+            ashby_job("b", isListed=False),
+            ashby_job("c", isListed="false"),
+            ashby_job("d", isListed=None),
+        ),
+        ASHBY_SOURCE,
     )
     [item] = only_items(snapshot.items)
     assert item.external_id == "a"
