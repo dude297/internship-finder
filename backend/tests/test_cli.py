@@ -1,16 +1,18 @@
 """Owner bootstrap and source-sync CLI against PostgreSQL. Synthetic data only."""
 
 import io
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app import cli
-from app.models import AuthSession, AuthUser, IngestionSource, Opportunity
+from app.enums import IngestionRunStatus, IngestionSourceKind
+from app.ingestion.pipeline import ABANDONED_AFTER
+from app.models import AuthSession, AuthUser, IngestionRun, IngestionSource, Opportunity
 from app.services import auth
-from tests.ingestion_fixtures import FEED_URL, FakeSource, feed, feed_job
+from tests.ingestion_fixtures import FEED_URL, GREENHOUSE_BOARD, FakeSource, feed, feed_job
 
 pytestmark = pytest.mark.postgres
 
@@ -182,3 +184,110 @@ def test_sync_sources_runs_every_enabled_source(
 def test_sync_unknown_source(monkeypatch: pytest.MonkeyPatch) -> None:
     use_fake_network(monkeypatch, FakeSource())
     assert cli.main(["sync-source", "greenhouse:nothing"]) == 1
+
+
+def test_disabled_source_is_not_synced(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    web = FakeSource()
+    web.json(FEED_URL, feed(feed_job("a")))
+    use_fake_network(monkeypatch, web)
+    builtin = db.scalars(select(IngestionSource)).one()
+    builtin.enabled = False
+    db.commit()
+
+    code = cli.main(["sync-sources"])
+
+    out = capsys.readouterr().out
+    assert code == 0  # nothing attempted, nothing failed
+    assert builtin.key not in out
+    assert "0 run, 0 skipped, 0 failed" in out
+
+
+def test_one_source_fails_others_continue_and_exit_code_is_one(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    web = FakeSource()
+    web.json(FEED_URL, feed(feed_job("a")))  # the feed succeeds; greenhouse (unseeded) 404s
+    use_fake_network(monkeypatch, web)
+    db.add(
+        IngestionSource(
+            kind=IngestionSourceKind.GREENHOUSE,
+            identifier=GREENHOUSE_BOARD,
+            display_name="Example Robotics",
+        )
+    )
+    db.commit()
+
+    code = cli.main(["sync-sources", "--scheduled"])
+
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "community_feed:zshah-tech-internships: success" in out
+    assert f"greenhouse:{GREENHOUSE_BOARD}: failed" in out
+    assert "scheduled sync: 2 run, 0 skipped, 1 failed" in out
+
+
+def test_a_source_already_running_is_skipped_and_reported(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    use_fake_network(monkeypatch, FakeSource())
+    builtin = db.scalars(select(IngestionSource)).one()
+    db.add(
+        IngestionRun(
+            source=builtin, status=IngestionRunStatus.RUNNING, started_at=datetime.now(UTC)
+        )
+    )
+    db.commit()
+
+    code = cli.main(["sync-sources"])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert f"{builtin.key}: skipped (already syncing)" in out
+    assert "0 run, 1 skipped, 0 failed" in out
+
+
+def test_an_abandoned_running_run_is_repaired_and_the_source_still_syncs(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    web = FakeSource()
+    web.json(FEED_URL, feed(feed_job("a")))
+    use_fake_network(monkeypatch, web)
+    builtin = db.scalars(select(IngestionSource)).one()
+    stale = IngestionRun(
+        source=builtin,
+        status=IngestionRunStatus.RUNNING,
+        started_at=datetime.now(UTC) - ABANDONED_AFTER - timedelta(minutes=1),
+    )
+    db.add(stale)
+    db.commit()
+
+    code = cli.main(["sync-sources"])
+
+    db.expire_all()
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "already syncing" not in out  # the stale run was repaired, not treated as in progress
+    assert "1 run, 0 skipped, 0 failed" in out
+    assert stale.status is IngestionRunStatus.FAILED
+
+
+def test_database_unreachable_exits_two_without_leaking_the_url(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    password = "synthetic-unreachable-password"  # test-only, never a real credential
+    broken = create_engine(
+        f"postgresql+psycopg://synthetic_user:{password}@127.0.0.1:1/if_m6_unreachable"
+        "?connect_timeout=2"
+    )
+    monkeypatch.setattr(cli, "get_engine", lambda: broken)
+
+    code = cli.main(["sync-sources"])
+
+    out = capsys.readouterr()
+    assert code == 2
+    combined = out.out + out.err
+    assert password not in combined
+    assert "if_m6_unreachable" not in combined
+    assert combined.strip() == cli.DB_ERROR_MESSAGE

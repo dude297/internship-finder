@@ -9,6 +9,7 @@ and committed at the end. A failed or partial run never closes unseen records.
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -488,10 +489,13 @@ def _sync(
 
 
 def sync_enabled_sources(
-    db: Session, *, transport: httpx2.BaseTransport | None = None
+    db: Session,
+    *,
+    transport: httpx2.BaseTransport | None = None,
+    on_skip: Callable[[IngestionSource], None] | None = None,
 ) -> list[IngestionRun]:
     """Sync every enabled source in turn. One source failing doesn't stop the others; a source
-    that is already syncing is skipped."""
+    that is already syncing is skipped (reported through `on_skip`, when given)."""
     runs: list[IngestionRun] = []
     sources = db.scalars(
         select(IngestionSource)
@@ -502,5 +506,7 @@ def sync_enabled_sources(
         try:
             runs.append(sync_source(db, source, transport=transport))
         except SyncInProgress:
+            if on_skip is not None:
+                on_skip(source)
             continue
     return runs
