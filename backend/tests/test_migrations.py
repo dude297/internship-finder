@@ -30,13 +30,16 @@ MILESTONE_1_TABLES = {
 MILESTONE_1_REVISION = "3b9c6b57bb60"
 MILESTONE_2_REVISION = "7d7f4f8b9a3c"
 MILESTONE_2_TABLES = MILESTONE_1_TABLES | {"auth_users", "auth_sessions", "applications"}
-TABLES = MILESTONE_2_TABLES | {
+MILESTONE_5_TABLES = MILESTONE_2_TABLES | {
     "ingestion_sources",
     "ingestion_runs",
     "ingestion_run_errors",
     "opportunity_identifiers",
     "profile_source_artifacts",
 }
+TABLES = MILESTONE_5_TABLES | {"opportunity_requirement_candidates"}
+MILESTONE_5_REVISION = "c5a1e0f3d7b2"
+MILESTONE_6_REVISION = "e6d1a4b8c2f9"
 GRADUATION_CHECK = "ck_profiles_graduation_after_status_as_of"
 MILESTONE_3_REVISION = "726372d627b8"
 RUNNING_INDEX = "uq_ingestion_runs_one_running_per_source"
@@ -74,6 +77,9 @@ def test_upgrade_downgrade_upgrade(pg_engine: Engine, pg_url: str) -> None:
     assert tables(pg_engine) == TABLES  # pg_engine migrated to head
     assert GRADUATION_CHECK in profile_checks(pg_engine)
     assert running_index_definition(pg_engine) is not None
+
+    command.downgrade(config, MILESTONE_5_REVISION)
+    assert tables(pg_engine) == MILESTONE_5_TABLES
 
     command.downgrade(config, MILESTONE_3_REVISION)
     # Asymmetric on purpose: the index belongs to 726372d627b8's intended schema.
@@ -627,3 +633,88 @@ def test_m4_fit_filter_survives_the_migration(pg_engine: Engine, pg_url: str) ->
     assert expected_courses == ("Algorithms",)
     assert expected_projects == ["Tracker", "Bot"]
     assert expected_research == ["Vision"]
+
+
+# --- Milestone 6: requirement candidates, staleness, and Ashby (ADR-012) -----------------------
+
+CANDIDATES_TABLE = "opportunity_requirement_candidates"
+OPPORTUNITY_ID = "00000000-0000-4000-8000-000000000008"
+ASHBY_SOURCE_ID = "00000000-0000-4000-8000-000000000009"
+
+
+def test_milestone_6_migration_round_trip(pg_engine: Engine, pg_url: str) -> None:
+    config = alembic_config(pg_url)
+    assert CANDIDATES_TABLE in tables(pg_engine)
+    assert {"requirements_stale_since", "requirement_extraction_fingerprint"} <= columns(
+        pg_engine, "opportunities"
+    )
+
+    with pg_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO opportunities (id, title, organization, opportunity_type)"
+                f" VALUES ('{OPPORTUNITY_ID}', 'Synthetic Robotics Intern', 'Example Robotics',"
+                " 'internship')"
+            )
+        )
+
+    # 'ashby' is rejected before the upgrade.
+    command.downgrade(config, MILESTONE_5_REVISION)
+    assert CANDIDATES_TABLE not in tables(pg_engine)
+    assert not {"requirements_stale_since", "requirement_extraction_fingerprint"} & columns(
+        pg_engine, "opportunities"
+    )
+    with pg_engine.connect() as connection, connection.begin() as transaction:
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                text(
+                    "INSERT INTO ingestion_sources (id, kind, identifier, display_name, scope)"
+                    f" VALUES ('{ASHBY_SOURCE_ID}', 'ashby', 'exampleboard', 'Example Board',"
+                    " 'internships_only')"
+                )
+            )
+        transaction.rollback()
+
+    try:
+        # Upgrading preserves the pre-existing opportunity row and now accepts 'ashby'.
+        command.upgrade(config, MILESTONE_6_REVISION)
+        assert CANDIDATES_TABLE in tables(pg_engine)
+        with pg_engine.begin() as connection:
+            title = connection.scalar(
+                text("SELECT title FROM opportunities WHERE id = :id"), {"id": OPPORTUNITY_ID}
+            )
+            assert title == "Synthetic Robotics Intern"
+            connection.execute(
+                text(
+                    "INSERT INTO ingestion_sources (id, kind, identifier, display_name, scope)"
+                    f" VALUES ('{ASHBY_SOURCE_ID}', 'ashby', 'exampleboard', 'Example Board',"
+                    " 'internships_only')"
+                )
+            )
+
+        # The downgrade refuses while the Ashby source exists...
+        with pytest.raises(RuntimeError, match="Ashby source"):
+            command.downgrade(config, MILESTONE_5_REVISION)
+        assert CANDIDATES_TABLE in tables(pg_engine)
+
+        # ...and succeeds once it's gone, still preserving the opportunity row.
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM ingestion_sources WHERE id = :id"), {"id": ASHBY_SOURCE_ID}
+            )
+        command.downgrade(config, MILESTONE_5_REVISION)
+        assert CANDIDATES_TABLE not in tables(pg_engine)
+        with pg_engine.begin() as connection:
+            title = connection.scalar(
+                text("SELECT title FROM opportunities WHERE id = :id"), {"id": OPPORTUNITY_ID}
+            )
+            assert title == "Synthetic Robotics Intern"
+    finally:
+        command.upgrade(config, "head")
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM opportunities WHERE id = :id"), {"id": OPPORTUNITY_ID}
+            )
+            connection.execute(
+                text("DELETE FROM ingestion_sources WHERE id = :id"), {"id": ASHBY_SOURCE_ID}
+            )
