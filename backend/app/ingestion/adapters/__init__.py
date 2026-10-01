@@ -64,10 +64,11 @@ def normalize_each(
 
 
 def adapter_for(kind: IngestionSourceKind) -> Adapter:
-    from app.ingestion.adapters import community_feed, greenhouse, lever
+    from app.ingestion.adapters import ashby, community_feed, greenhouse, lever
 
     return {
         IngestionSourceKind.COMMUNITY_FEED: community_feed.ADAPTER,
         IngestionSourceKind.GREENHOUSE: greenhouse.ADAPTER,
         IngestionSourceKind.LEVER: lever.ADAPTER,
+        IngestionSourceKind.ASHBY: ashby.ADAPTER,
     }[kind]
