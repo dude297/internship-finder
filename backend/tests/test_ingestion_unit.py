@@ -17,13 +17,14 @@ from app.enums import (
     SourceRegion,
 )
 from app.ingestion import http
-from app.ingestion.adapters import SourceConfig, community_feed, greenhouse, lever
+from app.ingestion.adapters import SourceConfig, ashby, community_feed, greenhouse, lever
 from app.ingestion.http import FetchError, check_url, fetch_json
 from app.ingestion.normalize import (
     ItemError,
     NormalizedOpportunity,
     SnapshotError,
     canonical_url,
+    classify_opportunity_type,
     html_to_text,
     is_internship_title,
     parse_timestamp,
@@ -31,12 +32,16 @@ from app.ingestion.normalize import (
 from app.opportunities.eligibility.schemas import OpportunityInput, ProfileInput, RequirementInput
 from app.repositories import eligibility_fingerprint
 from tests.ingestion_fixtures import (
+    ASHBY_BOARD,
+    ASHBY_JOB_ID,
     FEED_URL,
     GREENHOUSE_BOARD,
     GREENHOUSE_URL,
     LEVER_POSTING_ID,
     LEVER_SITE,
     FakeSource,
+    ashby_board,
+    ashby_job,
     feed,
     feed_job,
     greenhouse_board,
@@ -51,6 +56,7 @@ GH_SOURCE = SourceConfig(IngestionSourceKind.GREENHOUSE, GREENHOUSE_BOARD, None,
 LEVER_SOURCE = SourceConfig(
     IngestionSourceKind.LEVER, LEVER_SITE, SourceRegion.GLOBAL, "Example Institute"
 )
+ASHBY_SOURCE = SourceConfig(IngestionSourceKind.ASHBY, ASHBY_BOARD, None, "Example Board Inc.")
 
 
 def fetch(source: FakeSource, url: str = FEED_URL, **kwargs: Any) -> http.Fetched:
@@ -377,17 +383,34 @@ def test_feed_provider_identity_only_when_exact(
 
 
 def test_feed_program_and_remote_are_mapped_only_when_unambiguous() -> None:
+    # Titles deliberately don't say "intern" here: this test is about the *program* field being
+    # ambiguous, not the title-fallback matcher (covered separately below).
     items = only_items(
         community_feed.parse(
             feed(
-                feed_job("a", program="Co-op", remote=False),
-                feed_job("b", program="Internship / Co-op", remote=None),
+                feed_job("a", title="Synthetic Engineering Analyst", program="Co-op", remote=False),
+                feed_job(
+                    "b",
+                    title="Synthetic Engineering Analyst",
+                    program="Internship / Co-op",
+                    remote=None,
+                ),
             ),
             FEED_SOURCE,
         ).items
     )
     assert [i.opportunity_type for i in items] == [OpportunityType.OTHER, OpportunityType.OTHER]
     assert [i.remote_mode for i in items] == [None, None]
+
+
+def test_feed_falls_back_to_title_when_program_isnt_structured_intern() -> None:
+    [item] = only_items(
+        community_feed.parse(
+            feed(feed_job("c", title="Synthetic Engineering Intern", program="Co-op")),
+            FEED_SOURCE,
+        ).items
+    )
+    assert item.opportunity_type is OpportunityType.INTERNSHIP
 
 
 def test_feed_bad_items_are_item_errors_not_snapshot_failures() -> None:
@@ -439,12 +462,21 @@ def test_greenhouse_mapping() -> None:
     assert item.organization == "Example Robotics"  # the configured organization
     assert item.description == "Build synthetic robots.\n\n• Python"  # script dropped
     assert item.location == "Example City"
-    assert item.opportunity_type is OpportunityType.OTHER
+    assert item.opportunity_type is OpportunityType.INTERNSHIP  # title-based: "...Robotics Intern"
     assert item.posted_at == item.source_published_at
     assert item.source_updated_at is not None and item.source_updated_at != item.posted_at
     assert ("greenhouse", "examplerobotics:1001") in {
         (i.namespace, i.value) for i in item.identifiers
     }
+
+
+def test_greenhouse_non_intern_title_is_other() -> None:
+    [item] = only_items(
+        greenhouse.parse(
+            greenhouse_board(greenhouse_job(title="Synthetic Robotics Engineer")), GH_SOURCE
+        ).items
+    )
+    assert item.opportunity_type is OpportunityType.OTHER
 
 
 def test_greenhouse_incomplete_board_fails() -> None:
@@ -512,12 +544,28 @@ def test_lever_mapping() -> None:
 def test_lever_unknown_workplace_and_commitment() -> None:
     [item] = only_items(
         lever.parse(
-            [lever_posting(workplaceType="unspecified", categories={"commitment": "Full-time"})],
+            [
+                lever_posting(
+                    text="Synthetic Research Associate",
+                    workplaceType="unspecified",
+                    categories={"commitment": "Full-time"},
+                )
+            ],
             LEVER_SOURCE,
         ).items
     )
     assert item.remote_mode is None
     assert item.opportunity_type is OpportunityType.OTHER
+
+
+def test_lever_falls_back_to_title_when_commitment_isnt_structured_intern() -> None:
+    [item] = only_items(
+        lever.parse(
+            [lever_posting(text="Synthetic Internship, Hardware", categories={"commitment": ""})],
+            LEVER_SOURCE,
+        ).items
+    )
+    assert item.opportunity_type is OpportunityType.INTERNSHIP
 
 
 def test_lever_top_level_must_be_a_list() -> None:
@@ -559,6 +607,170 @@ def test_lever_site_reference(
 def test_lever_site_reference_rejects(value: str, region: SourceRegion | None) -> None:
     with pytest.raises(ValueError):
         lever.parse_site_reference(value, region)
+
+
+# --- Ashby ---------------------------------------------------------------------------------------
+
+
+def test_ashby_mapping() -> None:
+    [item] = only_items(ashby.parse(ashby_board(ashby_job()), ASHBY_SOURCE).items)
+
+    assert item.external_id == ASHBY_JOB_ID
+    assert item.organization == "Example Board Inc."
+    assert item.opportunity_type is OpportunityType.INTERNSHIP  # structured: employmentType
+    assert item.remote_mode is RemoteMode.HYBRID
+    assert item.location == "Example City · Remote - Example Country"
+    assert item.description == "Build synthetic data pipelines.\n- Python"  # descriptionPlain wins
+    assert item.application_url == f"https://jobs.ashbyhq.com/{ASHBY_BOARD}/{ASHBY_JOB_ID}"
+    assert item.posted_at == datetime(2040, 9, 5, 9, tzinfo=UTC)
+    assert ("ashby", f"{ASHBY_BOARD}:{ASHBY_JOB_ID}") in {
+        (i.namespace, i.value) for i in item.identifiers
+    }
+    assert ("url", f"https://jobs.ashbyhq.com/{ASHBY_BOARD}/{ASHBY_JOB_ID}") in {
+        (i.namespace, i.value) for i in item.identifiers
+    }
+
+
+def test_ashby_description_falls_back_to_html_when_plain_is_missing() -> None:
+    [item] = only_items(
+        ashby.parse(
+            ashby_board(
+                ashby_job(
+                    descriptionPlain=None,
+                    descriptionHtml="<p>Build <b>robots</b>.</p><script>bad()</script>",
+                )
+            ),
+            ASHBY_SOURCE,
+        ).items
+    )
+    assert item.description == "Build robots."
+
+
+def test_ashby_non_intern_title_is_other() -> None:
+    [item] = only_items(
+        ashby.parse(
+            ashby_board(ashby_job(employmentType="FullTime", title="Synthetic Data Engineer")),
+            ASHBY_SOURCE,
+        ).items
+    )
+    assert item.opportunity_type is OpportunityType.OTHER
+
+
+def test_ashby_falls_back_to_title_when_employment_type_isnt_structured_intern() -> None:
+    [item] = only_items(
+        ashby.parse(
+            ashby_board(ashby_job(employmentType="FullTime", title="Synthetic Summer Intern")),
+            ASHBY_SOURCE,
+        ).items
+    )
+    assert item.opportunity_type is OpportunityType.INTERNSHIP
+
+
+def test_ashby_isremote_fallback_without_workplace_type() -> None:
+    [on, off] = only_items(
+        ashby.parse(
+            ashby_board(
+                ashby_job("a", workplaceType=None, isRemote=True),
+                ashby_job("b", workplaceType=None, isRemote=False),
+            ),
+            ASHBY_SOURCE,
+        ).items
+    )
+    assert on.remote_mode is RemoteMode.REMOTE
+    assert off.remote_mode is None  # isRemote: false doesn't mean on-site
+
+
+def test_ashby_unlisted_jobs_are_excluded() -> None:
+    snapshot = ashby.parse(
+        ashby_board(ashby_job("a", isListed=True), ashby_job("b", isListed=False)), ASHBY_SOURCE
+    )
+    [item] = only_items(snapshot.items)
+    assert item.external_id == "a"
+
+
+def test_ashby_missing_islisted_is_treated_as_listed() -> None:
+    job = ashby_job()
+    del job["isListed"]
+    [item] = only_items(ashby.parse(ashby_board(job), ASHBY_SOURCE).items)
+    assert item.external_id == ASHBY_JOB_ID
+
+
+def test_ashby_bad_items_are_item_errors_not_snapshot_failures() -> None:
+    snapshot = ashby.parse(
+        ashby_board(ashby_job(), ashby_job("no-title", title=None), "not an object"), ASHBY_SOURCE
+    )
+    kinds = [type(i).__name__ for i in snapshot.items]
+    assert kinds == ["NormalizedOpportunity", "ItemError", "ItemError"]
+    errors = [i for i in snapshot.items if isinstance(i, ItemError)]
+    assert errors[0].external_id == "no-title"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [[], {"jobs": "nope"}, {"items": []}, "text", None],
+)
+def test_ashby_top_level_mismatch(payload: Any) -> None:
+    with pytest.raises(SnapshotError) as error:
+        ashby.parse(payload, ASHBY_SOURCE)
+    assert error.value.code == "schema_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("value", "name"),
+    [
+        ("example-board", "example-board"),
+        ("Example-Board", "example-board"),  # case-insensitive at the provider: lowered
+        ("https://jobs.ashbyhq.com/Example-Board", "example-board"),
+        (f"https://jobs.ashbyhq.com/example-board/{ASHBY_JOB_ID}", "example-board"),
+        ("jobs.ashbyhq.com/example-board", "example-board"),
+    ],
+)
+def test_ashby_board_reference(value: str, name: str) -> None:
+    assert ashby.parse_board_reference(value) == name
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https://example.com/example-board",
+        "https://jobs.ashbyhq.com/",
+        "https://jobs.ashbyhq.com.evil.test/example-board",  # lookalike host
+        "https://evil-ashbyhq.com/example-board",  # lookalike host
+        "http://169.254.169.254/latest",
+        "bad board!",
+        "",
+        "https://api.ashbyhq.com/posting-api/job-board/example-board",
+        "https://user:pw@jobs.ashbyhq.com/example-board",
+        "https://user@jobs.ashbyhq.com/example-board",
+        "https://jobs.ashbyhq.com:8443/example-board",
+        "https://jobs.ashbyhq.com:443/example-board",
+        "https://jobs.ashbyhq.com:bad/example-board",
+        "https://jobs.ashbyhq.com/%2e%2e%2fadmin",  # encoded traversal still rejected by SLUG
+        "https://jobs.ashbyhq.com/example board",  # whitespace in the segment
+        "a" * 65,  # too long for the identifier column
+    ],
+)
+def test_ashby_board_reference_rejects(value: str) -> None:
+    with pytest.raises(ValueError):
+        ashby.parse_board_reference(value)
+
+
+# --- Classification -------------------------------------------------------------------------------
+
+
+def test_classify_opportunity_type_structured_signal_wins() -> None:
+    assert (
+        classify_opportunity_type("Software Engineer", structured_intern=True)
+        is OpportunityType.INTERNSHIP
+    )
+
+
+def test_classify_opportunity_type_falls_back_to_title() -> None:
+    assert (
+        classify_opportunity_type("Software Engineering Intern", structured_intern=False)
+        is OpportunityType.INTERNSHIP
+    )
+    assert classify_opportunity_type("Senior Software Engineer") is OpportunityType.OTHER
 
 
 # --- Evaluation fingerprint ---------------------------------------------------------------------

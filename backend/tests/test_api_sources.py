@@ -14,6 +14,7 @@ from app.ingestion.adapters.community_feed import BUILTIN_IDENTIFIER
 from app.ingestion.http import configured_transport
 from app.models import IngestionRun, IngestionSource, OpportunityEvaluation
 from tests.ingestion_fixtures import (
+    ASHBY_BOARD,
     FEED_URL,
     GREENHOUSE_BOARD,
     GREENHOUSE_URL,
@@ -89,6 +90,12 @@ def test_the_builtin_feed_is_listed(client: TestClient) -> None:
         ({"kind": "lever", "board": f"https://jobs.eu.lever.co/{LEVER_SITE}"}, LEVER_SITE, "eu"),
         ({"kind": "lever", "board": LEVER_SITE}, LEVER_SITE, "global"),
         ({"kind": "lever", "board": LEVER_SITE, "region": "eu"}, LEVER_SITE, "eu"),
+        (
+            {"kind": "ashby", "board": f"https://jobs.ashbyhq.com/{ASHBY_BOARD}"},
+            ASHBY_BOARD,
+            None,
+        ),
+        ({"kind": "ashby", "board": ASHBY_BOARD.upper()}, ASHBY_BOARD, None),  # case-insensitive
     ],
 )
 def test_sources_are_added_from_provider_links(
@@ -117,6 +124,10 @@ def test_sources_are_added_from_provider_links(
         {"kind": "community_feed", "board": "anything"},
         {"kind": "greenhouse", "board": ""},
         {"kind": "greenhouse", "board": "examplerobotics", "url": "https://x.example"},
+        {"kind": "ashby", "board": ASHBY_BOARD, "region": "eu"},  # Ashby has no region
+        {"kind": "ashby", "board": "https://evil.example/" + ASHBY_BOARD},
+        {"kind": "ashby", "board": "not a slug"},
+        {"kind": "ashby", "board": ""},
     ],
 )
 def test_unsafe_or_invalid_sources_are_rejected(client: TestClient, body: dict[str, Any]) -> None:
@@ -140,6 +151,31 @@ def test_duplicate_sources_are_rejected(client: TestClient) -> None:
 
     assert response.status_code == 409
     assert response.json() == {"detail": "Example Robotics is already configured."}
+
+
+def test_ashby_source_defaults_to_internships_only_and_rejects_duplicates(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/sources",
+        json={"kind": "ashby", "display_name": "Example Board Inc.", "board": ASHBY_BOARD},
+    )
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert (created["identifier"], created["region"]) == (ASHBY_BOARD, None)
+    assert created["scope"] == "internships_only"
+
+    # Case-insensitive at the provider: a differently-cased board name is the same duplicate.
+    duplicate = client.post(
+        "/api/sources",
+        json={
+            "kind": "ashby",
+            "display_name": "Again",
+            "board": ASHBY_BOARD.upper(),
+        },
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {"detail": "Example Board Inc. is already configured."}
 
 
 def test_sources_can_be_renamed_and_disabled_but_not_repointed(client: TestClient) -> None:

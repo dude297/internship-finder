@@ -41,6 +41,9 @@ from app.repositories import latest_evaluation
 from app.schemas.sources import SourceUpdate
 from app.services.sources import update_source
 from tests.ingestion_fixtures import (
+    ASHBY_BOARD,
+    ASHBY_JOB_ID,
+    ASHBY_URL,
     FEED_URL,
     GREENHOUSE_BOARD,
     GREENHOUSE_URL,
@@ -48,6 +51,8 @@ from tests.ingestion_fixtures import (
     LEVER_SITE,
     LEVER_URL,
     FakeSource,
+    ashby_board,
+    ashby_job,
     feed,
     feed_job,
     greenhouse_board,
@@ -93,6 +98,18 @@ def lever_source(db: Session) -> IngestionSource:
         identifier=LEVER_SITE,
         region=SourceRegion.GLOBAL,
         display_name="Example Institute",
+    )
+    db.add(source)
+    db.commit()
+    return source
+
+
+@pytest.fixture
+def ashby_source(db: Session) -> IngestionSource:
+    source = IngestionSource(
+        kind=IngestionSourceKind.ASHBY,
+        identifier=ASHBY_BOARD,
+        display_name="Example Board Inc.",
     )
     db.add(source)
     db.commit()
@@ -877,13 +894,17 @@ def set_scope(db: Session, source: IngestionSource, scope: SourceScope | None) -
 
 
 def test_ats_sources_default_to_internships_only(
-    db: Session, gh_source: IngestionSource, lever_source: IngestionSource
+    db: Session,
+    gh_source: IngestionSource,
+    lever_source: IngestionSource,
+    ashby_source: IngestionSource,
 ) -> None:
     feed = db.scalars(
         select(IngestionSource).where(IngestionSource.kind == IngestionSourceKind.COMMUNITY_FEED)
     ).one()
     assert gh_source.scope is SourceScope.INTERNSHIPS_ONLY
     assert lever_source.scope is SourceScope.INTERNSHIPS_ONLY
+    assert ashby_source.scope is SourceScope.INTERNSHIPS_ONLY
     assert feed.scope is SourceScope.ALL
 
 
@@ -969,3 +990,83 @@ def test_filtered_items_do_not_evaluate(
     run = sync(db, gh_source, web)
     assert counts(run) == {"fetched": 1, "filtered": 1}
     assert count(db, OpportunityEvaluation) == 0
+
+
+# --- Ashby (ADR-012 §12) -------------------------------------------------------------------------
+
+
+def test_ashby_created_then_unchanged(
+    db: Session, ashby_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(ASHBY_URL, ashby_board(ashby_job()))
+
+    run = sync(db, ashby_source, web)
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert counts(run) == {"fetched": 1, "created": 1}
+    assert [o.title for o in db.scalars(select(Opportunity))] == ["Synthetic Data Science Intern"]
+
+    again = sync(db, ashby_source, web)
+    assert counts(again) == {"fetched": 1, "unchanged": 1}
+
+
+def test_ashby_removed_posting_closes_on_a_complete_snapshot(
+    db: Session, ashby_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(ASHBY_URL, ashby_board(ashby_job("a"), ashby_job("b")))
+    sync(db, ashby_source, web)
+
+    web.json(ASHBY_URL, ashby_board(ashby_job("a")))
+    run = sync(db, ashby_source, web)
+
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert counts(run) == {"fetched": 1, "unchanged": 1, "closed": 1}
+    closed = record(db, ashby_source, "b")
+    assert not closed.is_active and closed.closed_at is not None
+    assert count(db, Opportunity) == 2  # closed, never deleted
+
+
+def test_ashby_one_invalid_item_is_partial_and_closes_nothing(
+    db: Session, ashby_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(ASHBY_URL, ashby_board(ashby_job("a"), ashby_job("b")))
+    sync(db, ashby_source, web)
+
+    bad = ashby_job("c", title=None)
+    web.json(ASHBY_URL, ashby_board(ashby_job("a"), bad))
+    run = sync(db, ashby_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert counts(run) == {"fetched": 2, "unchanged": 1, "invalid": 1}
+    db.expire_all()
+    # "b" wasn't in this (partial) snapshot at all, but a partial run never closes anything.
+    assert record(db, ashby_source, "b").is_active
+
+
+def test_ashby_posting_becoming_unlisted_closes_like_a_removed_posting(
+    db: Session, ashby_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(ASHBY_URL, ashby_board(ashby_job()))
+    sync(db, ashby_source, web)
+
+    web.json(ASHBY_URL, ashby_board(ashby_job(isListed=False)))
+    run = sync(db, ashby_source, web)
+
+    assert run.status is IngestionRunStatus.SUCCESS
+    assert run.closed_count == 1
+    db.expire_all()
+    closed = record(db, ashby_source, ASHBY_JOB_ID)
+    assert not closed.is_active and closed.closed_at is not None
+
+
+def test_ashby_internships_only_filters_by_title(
+    db: Session, ashby_source: IngestionSource, web: FakeSource
+) -> None:
+    full_time = ashby_job(
+        "full-time",
+        title="Synthetic Staff Engineer",
+        employmentType="FullTime",
+    )
+    web.json(ASHBY_URL, ashby_board(ashby_job(), full_time))
+    run = sync(db, ashby_source, web)
+    assert counts(run) == {"fetched": 2, "filtered": 1, "created": 1}
+    assert [o.title for o in db.scalars(select(Opportunity))] == ["Synthetic Data Science Intern"]
