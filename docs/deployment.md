@@ -2,14 +2,14 @@
 
 Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md). This file is the runbook. It never contains secrets: no `DATABASE_URL`, proxy secret, password, hash, session or CSRF token.
 
-## Status (2026-09-30)
+## Status (2026-10-01)
 
 | Part | State |
 |---|---|
-| Neon | **Provisioned.** Migrated to `b41e7c9d2f60` (verified by read-only query 2026-09-30). Owner created (CLI, `getpass`). 1,055 opportunities. |
-| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy of `ca9b91b` live (finished 2026-09-29 06:21 UTC). Auto-deploy off, branch `main`. |
-| Vercel | **Deployed** (production, `Ready`, aliased to `internship-finder-pi.vercel.app`; created 2026-09-29 07:39 UTC from `main` via CLI). |
-| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); `/api/health` through Vercel `200` on 2026-09-30. |
+| Neon | **Provisioned.** Migrated to `c5a1e0f3d7b2` on 2026-10-01 (`alembic check` clean). Owner created (CLI, `getpass`). 1,055 opportunities. |
+| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-dautc2gjo6nc73ehekag` of `639e447` live (finished 2026-10-01 03:41 UTC). Auto-deploy off, branch `main`. The only Render service (the stray `internship-finder` was deleted 2026-10-01). |
+| Vercel | **Deployed** (production `dpl_8jfYs2Ychc77wiH7JbWCMjroEwUF`, `Ready`, aliased to `internship-finder-pi.vercel.app`; created 2026-10-01 03:52 UTC from a clean checkout of `639e447` via CLI). |
+| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)). |
 
 ## Topology
 
@@ -103,9 +103,9 @@ Milestone 4 was released without the branch-swap step: PR #9 merged into `main` 
 
 The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `.gitignore` and writes an `.env.local` (a short-lived OIDC token), so the deployment reports `gitDirty`. Both stay out of the build; delete `.env.local` and the checkout afterwards.
 
-### Milestone 5 release (after PR #11 approval)
+### Milestone 5 release (2026-10-01)
 
-Prepared, **not executed**. Production stays on Milestone 4 (`b41e7c9d2f60`) until the owner approves and merges [PR #11](https://github.com/dude297/internship-finder/pull/11) ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)).
+**Executed 2026-10-01** following the procedure below: [PR #11](https://github.com/dude297/internship-finder/pull/11) ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)) rebase-merged at the approved head `12bb4cc`; resulting `main` `639e447`, post-merge CI green; Neon migrated `b41e7c9d2f60` → `c5a1e0f3d7b2`; Render deploy `dep-dautc2gjo6nc73ehekag`; Vercel production `dpl_8jfYs2Ychc77wiH7JbWCMjroEwUF`. Results: [Milestone 5 hosted smoke](#milestone-5-hosted-smoke-2026-10-01). The procedure is kept as the runbook for the next migrating release.
 
 `c5a1e0f3d7b2` gives `profile_facts.review_state` a database default of `'accepted'` (kept after the migration, not dropped once applied). Milestone 4's Match Profile save creates `profile_facts` without naming `review_state`; manual facts are semantically accepted, and the default gives them exactly that value, so Milestone 4 code keeps working unmodified on the migrated schema. The CHECK `ck_profile_facts_review_state_matches_verified` (`extraction_method = 'manual' OR (review_state = 'accepted') = verified_by_user`) still rejects an unverified non-manual fact that omits `review_state` — only manual inserts benefit from the default. Consequence: there is no ordering hazard between the migration and the Render deploy, and a Render code rollback to the Milestone 4 release after the migration remains possible for existing Milestone 4 functionality (see [Rollback](#rollback)). Neon itself is still never downgraded. The Milestone 4 app simply ignores the new table and columns it doesn't know about; Milestone-5-only data (uploaded sources, imported facts) is invisible to it but untouched. Pending or rejected imported facts are unverified, so Milestone 4's fit filter (`verified_by_user OR manual`) ignores them as before; accepted imported facts are verified, so Milestone 4 would score them too, consistent with Milestone 5's behavior.
 
@@ -216,7 +216,35 @@ Run by the owner against production after the release (Neon migrated to `b41e7c9
 
 Final Neon counts (read-only, 2026-09-30): 1,055 opportunities; 1,055 source records; 4,220 evaluations (2,110 with fit); 1,055 current evaluations, all with fit score and scoring version `v1`; 1 ingestion source; 2 ingestion runs (both 2026-09-29 00:37 UTC, before the smoke); 1 profile; 0 profile sources; 10 profile facts; 1 owner account; 18 MB database size. All 1,055 current evaluations are `needs_verification` (imported requirements are unassessed), fit range 2–22; cross-bucket dominance is covered by deterministic backend/E2E tests, not by this production data. The hosted Match Profile used for the smoke is still the synthetic one; it is left in place deliberately (clearing it would add another 1,055 evaluation rows) until the owner replaces it with the real Match Profile through the app.
 
-Cleanup debt: a stray Render web service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`, Free) exists from earlier setup; its only deploy of `ca9b91b` failed to build (2026-09-29 06:17 UTC), auto-deploy is off (verified 2026-09-30), and it serves no traffic. To be deleted later by the owner.
+Cleanup (done 2026-10-01): the stray Render web service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`, Free) was deleted after verifying it wasn't `internship-finder-api`, every deploy had `build_failed` (never live), auto-deploy was off, and its URL served nothing. `internship-finder-api` stayed healthy afterwards.
+
+### Milestone 5 hosted smoke (2026-10-01)
+
+Run through the Vercel URL as the owner (password via `getpass`; the session held in memory only and logged out at the end) with **fabricated** files only: a 237-byte text résumé and small text PDFs. No real résumé, and no hostile PDF against production (the flate bomb is covered by Linux CI/container tests). All PASS.
+
+| Check | Result |
+|---|---|
+| Pre-migration baseline (read-only) | `b41e7c9d2f60`; 1,055 opportunities and source records; 4,220 evaluations (2,110 with fit); 0 profile sources; 10 facts; 1 profile; 1 owner; 18 MB |
+| Migration | `c5a1e0f3d7b2`, `alembic check` clean; `profile_source_artifacts` exists; `profile_sources` has `content_type`, `byte_size`, `parser_name`, `parser_version`; `review_state` NOT NULL, default `'accepted'`; `ck_profile_facts_fact_review_state` and `ck_profile_facts_review_state_matches_verified` present; 10/10 facts `accepted`; 0 sources/artifacts; 4,220 evaluations (no rescore) |
+| Milestone 4 app on migrated schema | `/api/health` `200`, dummy-cookie session lookup `200` unauthenticated, profile API `401` |
+| Render direct after deploy | `/api/health` `200`; `/docs`, `/openapi.json` `404`; dummy-cookie session `200` unauthenticated; `/api/profile/sources` `401` (was `404` on Milestone 4); clean startup log |
+| Vercel routing | `/api/health` `200` JSON; `/login`, `/profile/sources`, `/opportunities`, unknown SPA path → `index.html`; `/api/nope` and `/api/health/` → JSON `404`, no `Location`; no Render hostname in responses or bundle; bundle contains the Imported Profile UI |
+| Source list before smoke | empty |
+| Text upload | `201`; parser `resume-sections` v1; 4 pending facts (skill, course, project, activity; candidates already accepted in the Match Profile were skipped by design); duplicate → `409` |
+| Download | byte-identical; `attachment`, `nosniff`, `no-store` |
+| Review batch (accept 1 skill with an edited name, 1 course, 1 project; reject 1 activity) | `200`; exactly one catalog pass, 1,055 evaluated; accepted 3, rejected 1; edit applied |
+| Persistence | Separate second login: same review state |
+| Re-parse | `200`; no duplicates; decided facts kept; rejected fact not resurrected; the edited skill's original name returned as one new pending fact (see [PROJECT_STATE.md](../PROJECT_STATE.md) limitations) |
+| PDF upload | `201`; 3 pending facts; `/api/health` `200` right after |
+| > 2 MB upload | `413` |
+| Two different benign PDFs at once | `201` + `503` with `Retry-After: 5` (one extraction child per process) |
+| Delete text source | `200`; one catalog pass, 1,055 evaluated (accepted fit facts removed) |
+| Delete PDF sources | `200`; no catalog pass (pending facts only) |
+| After deletes | source and download `404`; source list empty; Match Profile identical to before (response digest) |
+
+Evaluation arithmetic: 4,220 before the smoke + 1,055 (accept) + 1,055 (delete) = **6,330** after; history is append-only by design. Final counts (read-only): 0 profile sources, 0 artifacts, 10 profile facts (all manual, `accepted`), 1,055 latest evaluations all with fit and scoring version `v1`, 4,220 evaluations with fit, 23 MB. The hosted Match Profile is still the synthetic one, left in place for the owner to replace through the app.
+
+PDF safety in production: Render runs 1 instance and 1 uvicorn worker; extraction runs in a spawned child with a 15 s time limit and a 256 MB address-space limit (Linux), and at most one child per process (a second concurrent PDF gets `503`, `Retry-After: 5`).
 
 ## Cold Starts
 

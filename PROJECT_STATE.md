@@ -2,10 +2,10 @@
 
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
-Last Updated: 2026-09-30
-Current Milestone: **Milestone 5 — Private Profile Source Ingestion + Review, implemented; [PR #11](https://github.com/dude297/internship-finder/pull/11) in review** ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)); not merged, not deployed. Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) and released from `main` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
-Current Production Version: `main` at `ca9b91b` on https://internship-finder-pi.vercel.app (Render deploy finished 2026-09-29 06:21 UTC; Vercel production deployment created 2026-09-29 07:39 UTC from `main` via CLI; both verified 2026-09-30)
-Active Development Branch: `main`. Remote: https://github.com/dude297/internship-finder. Milestone 5 is on `feature/profile-source-ingestion` (PR #11).
+Last Updated: 2026-10-01
+Current Milestone: **Milestone 5 — Private Profile Source Ingestion + Review complete; merged via [PR #11](https://github.com/dude297/internship-finder/pull/11) and released from `main`** ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). Milestone 6 not started (proposal only). Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) and released from `main` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Production Version: `main` at `639e447` on https://internship-finder-pi.vercel.app (Neon `c5a1e0f3d7b2`; Render deploy `dep-dautc2gjo6nc73ehekag` live 2026-10-01 03:41 UTC; Vercel production deployment `dpl_8jfYs2Ychc77wiH7JbWCMjroEwUF` created 2026-10-01 03:52 UTC from a clean checkout of `639e447` via CLI; hosted smoke passed 2026-10-01)
+Active Development Branch: `main`. Remote: https://github.com/dude297/internship-finder.
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 4 is released. Milestone 5 — Private Profile Source Ingestion + Review is implemented on `feature/profile-source-ingestion` and in review ([PR #11](https://github.com/dude297/internship-finder/pull/11)); production stays on Milestone 4 until it's approved.
+Milestone 5 is released (2026-10-01). Milestone 6 is at the proposal stage only; nothing is implemented.
 
 ## Status Summary
 
@@ -28,7 +28,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Area | Status |
 |---|---|
 | Technology stack | **Selected** ([ADR-004](docs/decisions/ADR-004-technology-stack.md)); hosting per [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md). **Provisioned and deployed** (Vercel Hobby → Render Free → Neon Free) from `main`. |
-| Source/profile strategy | **Selected** ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Opportunity ingestion implemented (ADR-008). No profile parsers. |
+| Source/profile strategy | **Selected** ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Opportunity ingestion implemented (ADR-008). Résumé parser `resume-sections` v1 (ADR-011). |
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
 | Opportunity ingestion | **Implemented, manual sync only** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`); internships-only board scope on the Milestone 4 branch |
@@ -38,7 +38,8 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local and hosted) |
-| Next milestone | Milestone 5 in review (PR #11; not merged, not deployed). Milestone 6 not started |
+| Profile source ingestion | **Implemented and deployed** ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md), migration `c5a1e0f3d7b2`, applied to Neon 2026-10-01) |
+| Next milestone | Milestone 6 (proposal only, not started) |
 
 ### Selected stack
 
@@ -48,7 +49,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Frontend hosting | Vercel Hobby | — | **Yes** (project `internship-finder`, `internship-finder-pi.vercel.app`) |
 | Backend | Python 3.12+, FastAPI, Pydantic, pwdlib (Argon2id), httpx2 (ingestion HTTP) | Yes (`backend/`) | — |
 | Backend hosting | Render Free Web Service | — | **Yes** (`internship-finder-api`, Oregon, connected to Neon, auto-deploy off) |
-| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (5 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `b41e7c9d2f60`, owner created, 1,055 opportunities) |
+| Database | Neon PostgreSQL Free (SQLAlchemy 2.x, Alembic, psycopg) | Yes (6 migrations; local PostgreSQL 18 via `compose.yaml`; tested on ephemeral PostgreSQL 18) | Yes (Neon Free, migrated to `c5a1e0f3d7b2`, owner created, 1,055 opportunities) |
 | CI | GitHub Actions (included free usage) | Yes (`.github/workflows/ci.yml`: frontend, backend, e2e jobs; PR/push only; no scheduled jobs) | Running on GitHub |
 | End-to-end | Playwright (Chromium) | Yes (`frontend/e2e/`) | — |
 
@@ -61,6 +62,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 - Milestone 3: Automated Opportunity Discovery and Ingestion ([PR #6](https://github.com/dude297/internship-finder/pull/6)).
 - Milestone 3.5: Hosted Deployment Foundation ([PR #7](https://github.com/dude297/internship-finder/pull/7)).
 - Milestone 4: Profile Intelligence + Fit Ranking v1 ([PR #9](https://github.com/dude297/internship-finder/pull/9)).
+- Milestone 5: Private Profile Source Ingestion + Review ([PR #11](https://github.com/dude297/internship-finder/pull/11)).
 
 ## Milestone 3 (complete; merged via PR #6)
 
@@ -97,7 +99,7 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 5 review ([PR #11](https://github.com/dude297/internship-finder/pull/11), section below). Production is unchanged (Milestone 4).
+Nothing. Milestone 6 is a proposal only.
 
 ## Milestone 4 (complete; merged via PR #9)
 
@@ -160,7 +162,6 @@ None open. Fixed during hosted validation (2026-09-29):
 - Catalog re-evaluation (profile or Match Profile save) is synchronous in the request. Milestone 4 batches it and skips unchanged pairs (~2 s for 1,100 opportunities locally when everything changes; hosted, measured 2026-09-29 against 1,055 real opportunities: 6.36 s scoring everything, 2.0 s when nothing changed — see [operations.md](docs/operations.md#evaluation-history-and-re-evaluation-implemented-not-scheduled)). A much larger catalog would need background re-evaluation.
 - Fit v1 is lexical: synonyms outside the alias table don't match, and a skill that's also a common word (e.g. `Go`) can match unrelated text. Location matching is plain text. Activities and experience don't score ([scoring.md](docs/scoring.md#known-limitations-v1)).
 - All 1,055 current evaluations are `needs_verification` (imported requirements are unassessed); fit scores range 2–22. Cross-bucket dominance is exercised by deterministic tests, not by current production data.
-- A stray Render web service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`, Free) exists from earlier setup; its only deploy of `ca9b91b` failed to build (2026-09-29 06:17 UTC), auto-deploy is off (verified 2026-09-30), and it serves no traffic. To be deleted later by the owner.
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
 - Render Free cold starts take about 1–3 minutes (measured 73 s and ~3 min); Vercel either holds the request or returns `502`, which the UI shows as the waking state. Sessions survive the restart.
 - No database backups beyond Neon Free's short restore window.
@@ -187,11 +188,11 @@ None open. Fixed during hosted validation (2026-09-29):
 
 ## Database State
 
-Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `b41e7c9d2f60` (`alembic check` clean), holds the owner account, and holds 1,055 opportunities. Schema head: migration `b41e7c9d2f60` (Milestone 4: `profiles` fit preferences; nullable fit columns on `opportunity_evaluations`; `ingestion_sources.scope`; `ingestion_runs.filtered_count`; additive only, no new tables) on top of `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`), the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair.
+Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `c5a1e0f3d7b2` (2026-10-01, `alembic check` clean), holds the owner account, and holds 1,055 opportunities. Final counts after the Milestone 5 smoke (2026-10-01, aggregates only): 1,055 opportunities and source records; 6,330 evaluations (4,220 with fit); 1,055 latest evaluations, all with fit and scoring version `v1`; 0 profile sources; 0 profile source artifacts; 10 profile facts (all manual, all `accepted`); 1 profile; 1 owner; 1 ingestion source; 2 runs; 23 MB. Schema head: migration `c5a1e0f3d7b2` (Milestone 5: `profile_source_artifacts`; `profile_sources` upload metadata; `profile_facts.review_state`) on top of `b41e7c9d2f60` (Milestone 4: `profiles` fit preferences; nullable fit columns on `opportunity_evaluations`; `ingestion_sources.scope`; `ingestion_runs.filtered_count`; additive only, no new tables) on top of `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`), the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair.
 
 Final Neon counts (read-only, 2026-09-30): 1,055 opportunities; 1,055 source records; 4,220 evaluations (2,110 with fit); 1,055 current (latest per opportunity) evaluations, all with a non-null fit score and scoring version `v1`; 1 ingestion source (scope `all`); 2 ingestion runs (both 2026-09-29 00:37 UTC — no sync happened during the release smoke); 1 profile; 0 profile sources; 10 profile facts; 1 owner account; database size 18 MB. Evaluation arithmetic: 2,110 pre-smoke (0 with fit) + 1,055 first Match Profile save + 0 unchanged save + 1,055 changed save = 4,220 total, 2,110 with fit — matches exactly.
 
-Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8`, `92a17353e5a8`, and `b41e7c9d2f60`, repairing the graduation constraint and the running-run index if needed.
+Local development uses the Compose database (private data in the `pgdata` volume); `alembic upgrade head` there applies `726372d627b8`, `92a17353e5a8`, `b41e7c9d2f60`, and `c5a1e0f3d7b2`, repairing the graduation constraint and the running-run index if needed.
 
 ## Current Scoring Version
 
@@ -201,13 +202,13 @@ Local development uses the Compose database (private data in the `pgdata` volume
 
 `v1`, implemented 2026-09-25 ([docs/eligibility.md](docs/eligibility.md)). Unchanged by Milestones 2 and 3 (only when evaluations run changed).
 
-## Milestone 5 (implemented; PR open, in review)
+## Milestone 5 (complete; merged via PR #11)
 
-Private Profile Source Ingestion + Review on `feature/profile-source-ingestion` ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). **Not merged, not deployed; production Neon is not migrated** (still `b41e7c9d2f60`). The release closeout, after approval, is in [deployment.md](docs/deployment.md#milestone-5-release-after-pr-11-approval).
+Private Profile Source Ingestion + Review ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). Released 2026-10-01; release record in [deployment.md](docs/deployment.md#milestone-5-release-2026-10-01).
 
 Implemented:
 
-- migration `c5a1e0f3d7b2`: `profile_source_artifacts` (original bytes, BYTEA, 1:1, cascade); `profile_sources` upload metadata (`content_type`, `byte_size`, `parser_name`, `parser_version`, UNIQUE `(profile_id, content_sha256)`); `profile_facts.review_state` (pending/accepted/rejected, no default; backfill matches the Milestone 4 fit filter exactly, so no fit input or fingerprint changes on upgrade; CHECK: a non-manual fact is accepted exactly when verified)
+- migration `c5a1e0f3d7b2`: `profile_source_artifacts` (original bytes, BYTEA, 1:1, cascade); `profile_sources` upload metadata (`content_type`, `byte_size`, `parser_name`, `parser_version`, UNIQUE `(profile_id, content_sha256)`); `profile_facts.review_state` (pending/accepted/rejected, NOT NULL, database default `accepted` kept so Milestone 4 manual inserts keep working; backfill matches the Milestone 4 fit filter exactly, so no fit input or fingerprint changes on upgrade; CHECK: a non-manual fact is accepted exactly when verified)
 - fit reads only accepted facts (`fit_profile_input`)
 - deterministic parser `resume-sections` v1: plain text (strict UTF-8) and text-based PDF (pypdf, first 20 pages, 100,000 characters), content sniffing only, section alias table, list and entry sections, dedupe, 200 candidates; PDF text extraction in a spawned child process (15 s limit, 256 MB address space on Linux), and at most one such child per application process at a time (a process-local lock; a second concurrent PDF upload or re-parse gets `503` with `Retry-After: 5` instead of queueing, since the per-child memory ceiling alone doesn't protect a 512 MB Render Free host from two children at once)
 - private API `/api/profile/sources`: list, upload (2 MB, Content-Length checked before form parsing, one file part only, 409 duplicate / 411 / 413 / 415 / 422 / 503), detail, download (attachment, `nosniff`, `no-store`), review batch (accept / edit + accept / reject; at most one catalog pass, only when an accepted fit fact changed), re-parse (replaces only pending facts; never resurrects decided ones; 503 if a PDF is already being extracted), delete (artifact and facts by cascade; Match Profile facts untouched; one pass if it had accepted fit facts)
@@ -217,6 +218,8 @@ Implemented:
 
 Validation (2026-09-30, local): backend 702 tests (368 unit + 334 PostgreSQL), frontend 74 Vitest tests, Playwright 6 tests (all specs) passing twice on the same reused database, ruff/format/pyright/ESLint/Prettier/tsc/build clean, migration base → head, `alembic check`, head → `b41e7c9d2f60` → head. Performance (1,100 synthetic, machine under parallel load): a 44-fact review batch runs one catalog pass, 1,100 evaluated, 32 SQL statements, 3.5 s (the Match Profile save measured 3.3–3.7 s in the same run). Security review: a 0.2 MB flate-bomb PDF reached 2.6 GB in-process; fixed by the isolated extraction (now rejected at the time limit, or by the memory limit on Linux, with the event loop still serving requests). Follow-up fix: two concurrent PDF extractions could still OOM the 512 MB Render Free host even with the per-child memory cap, so extraction is now limited to one child per application process at a time (`503`/`Retry-After: 5` on a second concurrent PDF upload or re-parse) — see ADR-011 §2. Linux container smoke (python:3.12-slim, 1 GB): while a flate-bomb PDF was extracting, `/api/health` answered `200` in 5 ms, a second PDF got `503` with `Retry-After: 5`, a plain-text upload got `201`, and the peak was 1 extraction child; the hostile PDF ended `422` at 4.5 s (memory limit), leaving 0 children, and a later normal PDF got `201` in 0.66 s. A final adversarial review of the gate found only two LOW issues (pipe left open on a failed spawn; a garbled child reply surfaced as `500`), both fixed with tests. Backward compatibility: `profile_facts.review_state` has the database default `accepted`, so the Milestone 4 app (whose manual Match Profile inserts don't name it) keeps working on the migrated schema; the CHECK still rejects an unverified non-manual fact that omits it, and Milestone 5 code always sets it explicitly. Covered by migration tests (M4-style insert at head, rejected unverified parser insert, fit input identical before and after the migration) and reviewed independently (no blocker/high/medium).
 
+Release (2026-10-01): PR #11 rebase-merged at the approved head `12bb4cc` (CI `36771548316`); resulting `main` `639e447`, post-merge CI `36811148911` green (backend, frontend, e2e). Neon read-only baseline matched (`b41e7c9d2f60`; 1,055 opportunities; 4,220 evaluations, 2,110 with fit; 0 profile sources; 10 facts), then `alembic upgrade head` → `c5a1e0f3d7b2`, `alembic check` clean: 10/10 facts `accepted`, `review_state` NOT NULL with default `'accepted'`, both review CHECKs present, 0 sources/artifacts, evaluations unchanged (no rescore). The Milestone 4 app stayed healthy on the migrated schema (health, session lookup, profile API) until Render deployed `639e447` (`dep-dautc2gjo6nc73ehekag`); Vercel production `dpl_8jfYs2Ychc77wiH7JbWCMjroEwUF` from a clean checkout of `639e447`. Hosted smoke with synthetic files only, all checks passed ([deployment.md](docs/deployment.md#milestone-5-release-2026-10-01)). Evaluation history: 4,220 before; +1,055 on accept (one pass); +1,055 on deleting the source with accepted fit facts; 6,330 after (append-only by design). The stray Render service `internship-finder` was deleted.
+
 Known limitations and debt:
 
 - Headings outside the alias table and the stop list (e.g. "Certifications") don't end the previous section, so their lines join it; unusual layouts parse poorly. The owner reviews everything before it counts.
@@ -224,6 +227,7 @@ Known limitations and debt:
 - Deleted artifacts leave PostgreSQL pages until autovacuum (logical, not immediate, erasure).
 - DOCX, OCR, transcripts, course lists, and AI enrichment aren't supported.
 - Accepted imported facts appear on Imported Profile, not in the Match Profile editor; both feed fit.
+- Duplicate suppression is by (category, name). Accepting a fact under an edited name means a later re-parse proposes the original parsed name again as a new **pending** fact (seen in the hosted smoke). Pending facts never score; the owner rejects it once.
 
 ## Active Opportunity Sources
 
@@ -242,15 +246,16 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Deferred Work
 
-- Scheduled source sync (needs a hosted database) and deployment workflows.
-- Ashby and early-college/research-program sources (layer 3).
+- Scheduled source sync and deployment workflows (the hosted database now exists; Milestone 6 proposal).
+- Ashby and early-college/research-program sources (layer 3; Milestone 6 proposal).
 
 ## Next Planned Task
 
-Review Milestone 5 ([PR #11](https://github.com/dude297/internship-finder/pull/11)). After approval: migrate Neon to `c5a1e0f3d7b2` (the `review_state` default keeps the Milestone 4 app working on the migrated schema, so there's no deploy-ordering hazard), then deploy Render, then Vercel, then the hosted synthetic résumé smoke ([deployment.md](docs/deployment.md#milestone-5-release-after-pr-11-approval)). Cleanup debt: delete the stray Render service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`) and replace the hosted synthetic Match Profile with the owner's real one through the app.
+Owner: replace the hosted synthetic Match Profile with the real one through the app (never from Git, logs, or fixtures). Then review the Milestone 6 proposal (expanded opportunity discovery + controlled automation); no Milestone 6 work has started.
 
 ## Recent Important Decisions
 
+- 2026-10-01: Milestone 5 released. PR #11 rebase-merged at approved head `12bb4cc`; production `main` is `639e447` (post-merge CI green). Neon migrated `b41e7c9d2f60` → `c5a1e0f3d7b2`; Render and Vercel production redeployed from `639e447`; hosted synthetic TXT and PDF smoke passed; stray Render service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`) deleted. Details: Milestone 5 section above and [deployment.md](docs/deployment.md#milestone-5-release-2026-10-01).
 - 2026-09-29/2026-09-30: Milestone 4 released. PR #9 merged (2026-09-29); production `main` is `ca9b91b`. Neon migrated to `b41e7c9d2f60`; Render and Vercel production redeployed from `main`; hosted smoke passed (see the Milestone 4 section above and [deployment.md](docs/deployment.md#production-verification)).
 - 2026-09-29: ADR-010 accepted: fit scoring v1 (deterministic, weights 35/20/15/10/10/10, missing evidence scores 0 with coverage, one canonical config), eligibility-first ranking, Match Profile on `profile_facts` + `profiles` preference columns, fit fingerprints, a synchronous batched catalog pass (no queue), and an internships-only title scope for Greenhouse/Lever boards (default; validators cleared on scope change). Migration `b41e7c9d2f60`.
 
