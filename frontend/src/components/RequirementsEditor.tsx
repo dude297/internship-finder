@@ -19,6 +19,133 @@ import { newRequirementRow } from '../lib/requirements'
 // Only age and education rules use a reference date; the others ignore "applies at".
 const DATED: RequirementType[] = ['minimum_age', 'education']
 
+/** The value fields for one requirement row, specific to its type (age/education/citizenship/
+ * work authorization/other) plus the shared "applies at" date fields. Shared by the full
+ * requirements editor and the requirement review panel's edit-and-accept form, so both stay in
+ * sync on what each type needs. `idPrefix` makes element ids unique per row. */
+export function RequirementValueFields({
+  row,
+  onChange,
+  idPrefix,
+}: {
+  row: RequirementRow
+  onChange: (changes: Partial<RequirementRow>) => void
+  idPrefix: string
+}) {
+  const id = (name: string) => `${idPrefix}-${name}`
+  return (
+    <>
+      {row.type === 'minimum_age' && (
+        <Field id={id('years')} label="Minimum age (years)">
+          <input
+            id={id('years')}
+            type="number"
+            min={0}
+            max={120}
+            value={row.years}
+            onChange={(e) => onChange({ years: e.target.value })}
+            className={inputClass}
+          />
+        </Field>
+      )}
+
+      {row.type === 'education' && (
+        <>
+          <fieldset>
+            <legend className="text-sm font-medium">Accepted level(s)</legend>
+            {educationLevels.map((level: EducationLevel) => (
+              <label key={level} className="mr-4 inline-flex items-center gap-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={row.levels.includes(level)}
+                  onChange={(e) =>
+                    onChange({
+                      levels: e.target.checked
+                        ? [...row.levels, level]
+                        : row.levels.filter((l) => l !== level),
+                    })
+                  }
+                />
+                {educationLevelLabels[level]}
+              </label>
+            ))}
+          </fieldset>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={row.acceptsIncoming}
+              onChange={(e) => onChange({ acceptsIncoming: e.target.checked })}
+            />
+            Incoming students accepted (finished the previous level, about to start)
+          </label>
+        </>
+      )}
+
+      {row.type === 'citizenship' && (
+        <Field
+          id={id('countries')}
+          label="Accepted citizenship(s)"
+          hint="Two-letter country codes separated by commas, for example: US"
+        >
+          <input
+            id={id('countries')}
+            value={row.countries}
+            onChange={(e) => onChange({ countries: e.target.value })}
+            aria-describedby={`${id('countries')}-hint`}
+            className={inputClass}
+          />
+        </Field>
+      )}
+
+      {(row.type === 'work_authorization' || row.type === 'other') && (
+        <Field
+          id={id('description')}
+          label="Description"
+          hint="Stored for reference. It isn't checked automatically and always needs verification."
+        >
+          <textarea
+            id={id('description')}
+            value={row.description}
+            onChange={(e) => onChange({ description: e.target.value })}
+            aria-describedby={`${id('description')}-hint`}
+            className={inputClass}
+          />
+        </Field>
+      )}
+
+      {DATED.includes(row.type) && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Field id={id('applies')} label="Applies">
+            <select
+              id={id('applies')}
+              value={row.appliesAt}
+              onChange={(e) => onChange({ appliesAt: e.target.value as AppliesAt })}
+              className={inputClass}
+            >
+              {appliesAtValues.map((value) => (
+                <option key={value} value={value}>
+                  {appliesAtLabels[value]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {row.appliesAt === 'explicit_date' && (
+            <Field id={id('date')} label="Date">
+              <input
+                id={id('date')}
+                type="date"
+                value={row.referenceDate}
+                onChange={(e) => onChange({ referenceDate: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
 export function RequirementsEditor({
   rows,
   onChange,
@@ -59,120 +186,11 @@ export function RequirementsEditor({
               </select>
             </Field>
 
-            {row.type === 'minimum_age' && (
-              <Field id={id('years')} label="Minimum age (years)">
-                <input
-                  id={id('years')}
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={row.years}
-                  onChange={(e) => update(row.key, { years: e.target.value })}
-                  className={inputClass}
-                />
-              </Field>
-            )}
-
-            {row.type === 'education' && (
-              <>
-                <fieldset>
-                  <legend className="text-sm font-medium">Accepted level(s)</legend>
-                  {educationLevels.map((level: EducationLevel) => (
-                    <label
-                      key={level}
-                      className="mr-4 inline-flex items-center gap-1 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={row.levels.includes(level)}
-                        onChange={(e) =>
-                          update(row.key, {
-                            levels: e.target.checked
-                              ? [...row.levels, level]
-                              : row.levels.filter((l) => l !== level),
-                          })
-                        }
-                      />
-                      {educationLevelLabels[level]}
-                    </label>
-                  ))}
-                </fieldset>
-                <label className="inline-flex items-center gap-1 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={row.acceptsIncoming}
-                    onChange={(e) =>
-                      update(row.key, { acceptsIncoming: e.target.checked })
-                    }
-                  />
-                  Incoming students accepted (finished the previous level, about to start)
-                </label>
-              </>
-            )}
-
-            {row.type === 'citizenship' && (
-              <Field
-                id={id('countries')}
-                label="Accepted citizenship(s)"
-                hint="Two-letter country codes separated by commas, for example: US"
-              >
-                <input
-                  id={id('countries')}
-                  value={row.countries}
-                  onChange={(e) => update(row.key, { countries: e.target.value })}
-                  aria-describedby={`${id('countries')}-hint`}
-                  className={inputClass}
-                />
-              </Field>
-            )}
-
-            {(row.type === 'work_authorization' || row.type === 'other') && (
-              <Field
-                id={id('description')}
-                label="Description"
-                hint="Stored for reference. It isn't checked automatically and always needs verification."
-              >
-                <textarea
-                  id={id('description')}
-                  value={row.description}
-                  onChange={(e) => update(row.key, { description: e.target.value })}
-                  aria-describedby={`${id('description')}-hint`}
-                  className={inputClass}
-                />
-              </Field>
-            )}
-
-            {DATED.includes(row.type) && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Field id={id('applies')} label="Applies">
-                  <select
-                    id={id('applies')}
-                    value={row.appliesAt}
-                    onChange={(e) =>
-                      update(row.key, { appliesAt: e.target.value as AppliesAt })
-                    }
-                    className={inputClass}
-                  >
-                    {appliesAtValues.map((value) => (
-                      <option key={value} value={value}>
-                        {appliesAtLabels[value]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                {row.appliesAt === 'explicit_date' && (
-                  <Field id={id('date')} label="Date">
-                    <input
-                      id={id('date')}
-                      type="date"
-                      value={row.referenceDate}
-                      onChange={(e) => update(row.key, { referenceDate: e.target.value })}
-                      className={inputClass}
-                    />
-                  </Field>
-                )}
-              </div>
-            )}
+            <RequirementValueFields
+              row={row}
+              onChange={(changes) => update(row.key, changes)}
+              idPrefix={`req-${row.key}`}
+            />
 
             <Field id={id('source')} label="Text from the posting (optional)">
               <input
