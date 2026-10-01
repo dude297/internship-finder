@@ -6,6 +6,7 @@ import { EligibilityBadge } from '../components/EligibilityBadge'
 import { FitBadge } from '../components/FitBadge'
 import { OpportunityFilters, type FilterName } from '../components/OpportunityFilters'
 import { ErrorMessage } from '../components/ui'
+import { isClosingSoon, isDeadlinePassed, localToday } from '../lib/deadlines'
 import {
   applicationStatusLabels,
   assessmentLabels,
@@ -24,6 +25,9 @@ const FILTERS: FilterName[] = [
   'application_status',
   'remote_mode',
   'sort',
+  'requirements_assessment_status',
+  'requirement_review',
+  'deadline_within',
 ]
 
 function where(o: OpportunitySummary): string {
@@ -48,6 +52,36 @@ function Provenance({ o }: { o: OpportunitySummary }) {
           ? `Posted ${formatDay(o.posted_at)}`
           : `Found ${formatDay(o.first_seen_at)}`}
       </span>
+    </p>
+  )
+}
+
+/** Deadline and requirement-review badges (ADR-012 §8, §14): text labels, never color alone. */
+function ReviewBadges({ o, today }: { o: OpportunitySummary; today: string }) {
+  const deadline = o.application_deadline
+  return (
+    <p className="flex flex-wrap gap-1 text-xs">
+      {isDeadlinePassed(deadline, today) && (
+        <span className="rounded bg-slate-700 px-1.5 py-0.5 text-white">
+          Deadline passed
+        </span>
+      )}
+      {isClosingSoon(deadline, today) && (
+        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-900">
+          Closing soon
+        </span>
+      )}
+      {o.pending_requirement_count > 0 && (
+        <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-900">
+          {o.pending_requirement_count} suggestion
+          {o.pending_requirement_count === 1 ? '' : 's'}
+        </span>
+      )}
+      {o.requirements_stale && (
+        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-900">
+          Review needed
+        </span>
+      )}
     </p>
   )
 }
@@ -89,14 +123,29 @@ export function OpportunityListPage() {
     // Ignore responses that arrive after unmount or a newer query, so a slow response can't
     // overwrite the page the user is now looking at.
     let active = true
-    const { availability, sort, ...rest } = JSON.parse(query) as typeof values & {
+    const { availability, sort, deadline_within, ...rest } = JSON.parse(
+      query,
+    ) as typeof values & {
       offset: number
     }
+    // The single "Deadline" select carries either a day count or "has a deadline"; both need
+    // the browser's local date so the backend's day math matches what the badges show.
+    const deadlineParams =
+      deadline_within === 'has_deadline'
+        ? { has_deadline: 'true' as const, today: localToday() }
+        : deadline_within
+          ? { deadline_within: deadline_within as '7' | '14' | '30', today: localToday() }
+          : sort === 'deadline'
+            ? { today: localToday() }
+            : {}
     api
       .listOpportunities({
         ...rest,
+        ...deadlineParams,
         availability: availability as 'open' | 'closed' | 'all',
-        sort: sort as 'recommended' | 'newest',
+        sort: sort as 'recommended' | 'newest' | 'deadline',
+        requirement_review: (rest.requirement_review || undefined) as
+          'pending' | 'stale' | 'needs_review' | undefined,
         limit: PAGE_SIZE,
       })
       .then((p) => active && setResult({ query, page: p, error: null }))
@@ -128,6 +177,7 @@ export function OpportunityListPage() {
     (name) => name !== 'availability' && name !== 'sort' && values[name],
   )
   const items = page?.items
+  const today = localToday()
 
   return (
     <section className="space-y-4">
@@ -173,6 +223,7 @@ export function OpportunityListPage() {
                       {o.organization} · {opportunityTypeLabels[o.opportunity_type]}
                     </p>
                     <Provenance o={o} />
+                    <ReviewBadges o={o} today={today} />
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <FitBadge score={o.fit_score} coverage={o.fit_coverage} />

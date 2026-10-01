@@ -11,6 +11,7 @@ import type {
   RemotePreference,
   RequirementType,
   RunStatus,
+  SourceHealth,
   SourceKind,
   SourceScope,
 } from '../api/schemas'
@@ -90,6 +91,16 @@ export const sourceKindLabels: Record<SourceKind, string> = {
   community_feed: 'Discovery feed (built in)',
   greenhouse: 'Greenhouse',
   lever: 'Lever',
+  ashby: 'Ashby',
+}
+
+export const sourceHealthLabels: Record<SourceHealth, string> = {
+  never_run: 'Never run',
+  healthy: 'Healthy',
+  warning: 'Warning',
+  stale: 'Stale',
+  failing: 'Failing',
+  disabled: 'Disabled',
 }
 
 export const sourceScopeLabels: Record<SourceScope, string> = {

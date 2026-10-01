@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import {
   applicationStatuses,
+  assessmentStatuses,
   eligibilityStatuses,
   remoteModes,
   type Source,
 } from '../api/schemas'
 import {
   applicationStatusLabels,
+  assessmentLabels,
   eligibilityLabels,
   remoteModeLabels,
 } from '../lib/labels'
@@ -20,6 +22,9 @@ export type FilterName =
   | 'application_status'
   | 'remote_mode'
   | 'sort'
+  | 'requirements_assessment_status'
+  | 'requirement_review'
+  | 'deadline_within'
 
 interface Props {
   values: Record<FilterName, string>
@@ -99,6 +104,7 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
           options={[
             ['recommended', 'Recommended'],
             ['newest', 'Newest'],
+            ['deadline', 'Deadline (soonest first)'],
           ]}
         />
         <Select
@@ -160,6 +166,41 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
           options={[
             ['', 'Any'],
             ...remoteModes.map((m): [string, string] => [m, remoteModeLabels[m]]),
+          ]}
+        />
+        <Select
+          id="filter-requirements"
+          label="Requirements"
+          value={values.requirements_assessment_status}
+          onChange={(v) => onChange('requirements_assessment_status', v)}
+          options={[
+            ['', 'Any'],
+            ...assessmentStatuses.map((s): [string, string] => [s, assessmentLabels[s]]),
+          ]}
+        />
+        <Select
+          id="filter-requirement-review"
+          label="Requirement suggestions"
+          value={values.requirement_review}
+          onChange={(v) => onChange('requirement_review', v)}
+          options={[
+            ['', 'Any'],
+            ['pending', 'Has pending suggestions'],
+            ['stale', 'Posting changed'],
+            ['needs_review', 'Needs review'],
+          ]}
+        />
+        <Select
+          id="filter-deadline"
+          label="Deadline"
+          value={values.deadline_within}
+          onChange={(v) => onChange('deadline_within', v)}
+          options={[
+            ['', 'Any'],
+            ['7', 'Closing within 7 days'],
+            ['14', 'Closing within 14 days'],
+            ['30', 'Closing within 30 days'],
+            ['has_deadline', 'Has a deadline'],
           ]}
         />
       </div>
