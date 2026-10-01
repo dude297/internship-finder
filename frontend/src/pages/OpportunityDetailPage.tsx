@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import type { OpportunityDetail } from '../api/schemas'
 import { ApplicationTracker } from '../components/ApplicationTracker'
 import { EligibilityPanel } from '../components/EligibilityPanel'
+import { RequirementReviewPanel } from '../components/RequirementReviewPanel'
 import { SourceProvenance } from '../components/SourceProvenance'
 import { WhyThisMatch } from '../components/WhyThisMatch'
 import { ErrorMessage } from '../components/ui'
@@ -17,17 +18,8 @@ import {
   remoteModeLabels,
   requirementTypeLabels,
 } from '../lib/labels'
+import { describeValue } from '../lib/requirements'
 import { buttonClass, dangerButtonClass, secondaryButtonClass } from '../lib/styles'
-
-function describeValue(value: Record<string, unknown>): string {
-  if (typeof value.years === 'number') return `at least ${value.years} years old`
-  if (Array.isArray(value.levels)) {
-    const levels = value.levels.join(' or ').replaceAll('_', ' ')
-    return value.accepts_incoming ? `${levels} (incoming students accepted)` : levels
-  }
-  if (Array.isArray(value.countries)) return value.countries.join(', ')
-  return typeof value.description === 'string' ? value.description : ''
-}
 
 export function OpportunityDetailPage() {
   const { id = '' } = useParams()
@@ -206,6 +198,12 @@ export function OpportunityDetailPage() {
           </ul>
         )}
       </section>
+
+      <RequirementReviewPanel
+        key={o.id}
+        opportunityId={o.id}
+        onReviewed={() => api.getOpportunity(id).then(setOpportunity)}
+      />
 
       <SourceProvenance opportunity={o} />
 

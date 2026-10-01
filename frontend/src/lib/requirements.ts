@@ -1,11 +1,20 @@
 import type {
   AppliesAt,
   EducationLevel,
-  Requirement,
   RequirementInput,
   RequirementType,
 } from '../api/schemas'
 import { orNull, parseCountries } from './forms'
+
+// A canonical Requirement and a RequirementCandidate share this shape; toRow() accepts either.
+interface RequirementLike {
+  id: string
+  requirement_type: RequirementType
+  value: Record<string, unknown>
+  applies_at: AppliesAt
+  reference_date: string | null
+  source_text: string | null
+}
 
 /** Editable form state for one structured requirement (the API's value shapes, flattened). */
 export interface RequirementRow {
@@ -39,7 +48,7 @@ export function newRequirementRow(type: RequirementType = 'minimum_age'): Requir
   }
 }
 
-export function toRow(requirement: Requirement): RequirementRow {
+export function toRow(requirement: RequirementLike): RequirementRow {
   const value = requirement.value
   const row = newRequirementRow(requirement.requirement_type)
   return {
@@ -80,4 +89,23 @@ export function toRequirementInput(row: RequirementRow): RequirementInput {
     reference_date: appliesAt === 'explicit_date' ? orNull(row.referenceDate) : null,
     source_text: orNull(row.sourceText),
   }
+}
+
+/** The edited value/applies_at/reference_date for a requirement-review CandidateAccept (the
+ * requirement type can't change, so it's never included here). */
+export function toCandidateEdit(row: RequirementRow) {
+  const { value, applies_at, reference_date } = toRequirementInput(row)
+  return { value, applies_at, reference_date }
+}
+
+/** Human-readable structured value, for display only — never raw JSON. Shared by the
+ * requirements list and the requirement review panel. */
+export function describeValue(value: Record<string, unknown>): string {
+  if (typeof value.years === 'number') return `at least ${value.years} years old`
+  if (Array.isArray(value.levels)) {
+    const levels = value.levels.join(' or ').replaceAll('_', ' ')
+    return value.accepts_incoming ? `${levels} (incoming students accepted)` : levels
+  }
+  if (Array.isArray(value.countries)) return value.countries.join(', ')
+  return typeof value.description === 'string' ? value.description : ''
 }
