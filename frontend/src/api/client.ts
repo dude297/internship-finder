@@ -12,6 +12,8 @@ import {
   profileSourceDetailSchema,
   profileSourceReviewResultSchema,
   profileSourceSummarySchema,
+  requirementReviewResponseSchema,
+  requirementReviewResultSchema,
   runSchema,
   sessionSchema,
   sourceSchema,
@@ -21,6 +23,7 @@ import {
   type OpportunityQuery,
   type ProfileInput,
   type ProfileSourceReviewInput,
+  type RequirementReviewInput,
   type SourceInput,
   type SourceScope,
 } from './schemas'
@@ -188,6 +191,26 @@ export const api = {
       'POST',
       `/opportunities/${encodeURIComponent(id)}/evaluate`,
       evaluationSchema,
+    ),
+
+  getRequirementReview: (id: string) =>
+    request(
+      'GET',
+      `/opportunities/${encodeURIComponent(id)}/requirement-review`,
+      requirementReviewResponseSchema,
+    ),
+  refreshRequirementReview: (id: string) =>
+    request(
+      'POST',
+      `/opportunities/${encodeURIComponent(id)}/requirement-review/refresh`,
+      requirementReviewResponseSchema,
+    ),
+  reviewRequirements: (id: string, body: RequirementReviewInput) =>
+    request(
+      'POST',
+      `/opportunities/${encodeURIComponent(id)}/requirement-review`,
+      requirementReviewResultSchema,
+      body,
     ),
 
   saveApplication: (opportunityId: string, body: ApplicationInput) =>

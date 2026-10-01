@@ -96,6 +96,8 @@ export const summary = (changes: Record<string, unknown> = {}) => ({
   origin: 'manual',
   availability: 'manual',
   source_names: ['Manual entry'],
+  pending_requirement_count: 0,
+  requirements_stale: false,
   ...changes,
 })
 
@@ -165,6 +167,9 @@ export const source = (changes: Record<string, unknown> = {}) => ({
   last_attempted_at: null,
   last_success_at: null,
   latest_run: null,
+  health: 'never_run',
+  consecutive_failures: 0,
+  last_success_age_hours: null,
   ...changes,
 })
 
@@ -198,6 +203,33 @@ export const profileSourceDetail = (changes: Record<string, unknown> = {}) => ({
   ...changes,
 })
 
+export const candidate = (changes: Record<string, unknown> = {}) => ({
+  id: 'cand-1',
+  requirement_type: 'minimum_age',
+  value: { years: 16 },
+  applies_at: 'program_start',
+  reference_date: null,
+  source_text: 'Applicants must be at least 16 years old.',
+  extractor_name: 'requirements-rules',
+  extractor_version: '1',
+  review_state: 'pending',
+  is_current: true,
+  accepted_requirement_id: null,
+  created_at: '2040-10-01T12:00:00Z',
+  updated_at: '2040-10-01T12:00:00Z',
+  ...changes,
+})
+
+export const requirementReview = (changes: Record<string, unknown> = {}) => ({
+  opportunity_id: 'opp-1',
+  requirements_assessment_status: 'unassessed',
+  requirements_stale_since: null,
+  manually_curated: false,
+  candidates: [candidate()],
+  requirements: [],
+  ...changes,
+})
+
 const projectedEducation = {
   rule_id: 'ELIG-EDU-001',
   requirement_id: 'req-2',
@@ -219,6 +251,7 @@ export const detail = (changes: Record<string, unknown> = {}) => ({
   description: 'Synthetic description.',
   application_url: 'https://example.org/apply',
   end_date: '2041-08-01',
+  requirements_stale_since: null,
   created_at: '2040-10-01T12:00:00Z',
   updated_at: '2040-10-01T12:00:00Z',
   last_seen_at: '2040-10-01T12:00:00Z',
@@ -233,6 +266,8 @@ export const detail = (changes: Record<string, unknown> = {}) => ({
       reference_date: null,
       source_text: null,
       extraction_method: 'manual',
+      extractor_name: null,
+      extractor_version: null,
     },
     {
       id: 'req-2',
@@ -242,6 +277,8 @@ export const detail = (changes: Record<string, unknown> = {}) => ({
       reference_date: null,
       source_text: null,
       extraction_method: 'manual',
+      extractor_name: null,
+      extractor_version: null,
     },
   ],
   application: null,

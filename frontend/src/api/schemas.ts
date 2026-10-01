@@ -50,7 +50,7 @@ export type ApplicationStatus = (typeof applicationStatuses)[number]
 
 export const origins = ['imported', 'manual'] as const
 export const availabilities = ['open', 'closed', 'manual'] as const
-export const sourceKinds = ['community_feed', 'greenhouse', 'lever'] as const
+export const sourceKinds = ['community_feed', 'greenhouse', 'lever', 'ashby'] as const
 export const regions = ['global', 'eu'] as const
 export const runStatuses = [
   'running',
@@ -60,6 +60,15 @@ export const runStatuses = [
   'no_change',
 ] as const
 export const sourceScopes = ['internships_only', 'all'] as const
+export const sourceHealths = [
+  'never_run',
+  'healthy',
+  'warning',
+  'stale',
+  'failing',
+  'disabled',
+] as const
+export type SourceHealth = (typeof sourceHealths)[number]
 export const remotePreferences = [
   'no_preference',
   'remote_preferred',
@@ -125,6 +134,8 @@ export const requirementSchema = z.object({
   reference_date: nullableDate,
   source_text: z.string().nullable(),
   extraction_method: z.string(),
+  extractor_name: z.string().nullable(),
+  extractor_version: z.string().nullable(),
 })
 export type Requirement = z.infer<typeof requirementSchema>
 
@@ -214,6 +225,8 @@ export const opportunitySummarySchema = z.object({
   origin: z.enum(origins),
   availability: z.enum(availabilities),
   source_names: z.array(z.string()),
+  pending_requirement_count: z.number().int(),
+  requirements_stale: z.boolean(),
 })
 export type OpportunitySummary = z.infer<typeof opportunitySummarySchema>
 
@@ -252,6 +265,8 @@ export const opportunityDetailSchema = z.object({
   start_date: nullableDate,
   end_date: nullableDate,
   requirements_assessment_status: z.enum(assessmentStatuses),
+  requirements_stale_since: z.string().nullable(),
+  pending_requirement_count: z.number().int(),
   created_at: z.string(),
   updated_at: z.string(),
   posted_at: z.string().nullable(),
@@ -334,11 +349,14 @@ export const sourceSchema = z.object({
   last_attempted_at: z.string().nullable(),
   last_success_at: z.string().nullable(),
   latest_run: runSchema.nullable(),
+  health: z.enum(sourceHealths),
+  consecutive_failures: z.number().int(),
+  last_success_age_hours: z.number().nullable(),
 })
 export type Source = z.infer<typeof sourceSchema>
 
 export interface SourceInput {
-  kind: 'greenhouse' | 'lever'
+  kind: 'greenhouse' | 'lever' | 'ashby'
   display_name: string
   board: string
   region: Region | null
@@ -454,5 +472,60 @@ export interface OpportunityQuery {
   eligibility?: string
   application_status?: string
   remote_mode?: string
-  sort?: 'recommended' | 'newest'
+  sort?: 'recommended' | 'newest' | 'deadline'
+  requirements_assessment_status?: string
+  requirement_review?: 'pending' | 'stale' | 'needs_review'
+  deadline_within?: '7' | '14' | '30'
+  has_deadline?: 'true'
+  // The browser's local date (YYYY-MM-DD); sent whenever a deadline filter is used (ADR-012 §14).
+  today?: string
+}
+
+// Requirement candidate review (ADR-012 §7). Candidates are deterministic extractor proposals;
+// they never affect eligibility until accepted into a canonical requirement.
+
+export const requirementCandidateSchema = z.object({
+  id: z.string(),
+  requirement_type: z.enum(requirementTypes),
+  value: z.record(z.string(), z.unknown()),
+  applies_at: z.enum(appliesAtValues),
+  reference_date: nullableDate,
+  source_text: z.string(),
+  extractor_name: z.string(),
+  extractor_version: z.string(),
+  review_state: z.enum(reviewStates),
+  is_current: z.boolean(),
+  accepted_requirement_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+export type RequirementCandidate = z.infer<typeof requirementCandidateSchema>
+
+export const requirementReviewResponseSchema = z.object({
+  opportunity_id: z.string(),
+  requirements_assessment_status: z.enum(assessmentStatuses),
+  requirements_stale_since: z.string().nullable(),
+  manually_curated: z.boolean(),
+  candidates: z.array(requirementCandidateSchema),
+  requirements: z.array(requirementSchema),
+})
+export type RequirementReviewResponse = z.infer<typeof requirementReviewResponseSchema>
+
+export const requirementReviewResultSchema = z.object({
+  review: requirementReviewResponseSchema,
+  evaluated: z.boolean(),
+})
+export type RequirementReviewResult = z.infer<typeof requirementReviewResultSchema>
+
+export interface CandidateAcceptInput {
+  id: string
+  value?: Record<string, unknown>
+  applies_at?: AppliesAt
+  reference_date?: string | null
+}
+
+export interface RequirementReviewInput {
+  accept: CandidateAcceptInput[]
+  reject: string[]
+  assessment_status?: AssessmentStatus
 }
