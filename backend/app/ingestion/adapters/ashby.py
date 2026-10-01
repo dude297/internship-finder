@@ -136,7 +136,8 @@ def parse(payload: Any, source: SourceConfig) -> Snapshot:
     # snapshot closes them exactly like a removed posting (ADR-012 §12); they don't count as
     # "filtered" since that counter is reserved for the internships_only scope filter.
     def _listed(job: Any) -> bool:
-        return not isinstance(job, dict) or cast(dict[str, Any], job).get("isListed", True)
+        # Exactly `true` (or absent): a string like "false" must never import a hidden posting.
+        return not isinstance(job, dict) or cast(dict[str, Any], job).get("isListed", True) is True
 
     listed: list[Any] = [job for job in board.jobs if _listed(job)]
     return Snapshot(
