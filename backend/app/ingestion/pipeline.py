@@ -37,12 +37,14 @@ from app.models import (
     OpportunitySourceRecord,
 )
 from app.models.ingestion import RUNNING_RUN_INDEX
+from app.opportunities.requirements.identity import ExtractionInput, extraction_input_fingerprint
 from app.repositories import (
     EvaluationContext,
     evaluate_and_save,
     evaluate_if_changed,
     evaluation_context,
 )
+from app.services.requirement_candidates import invalidate_after_source_change, refresh_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -251,8 +253,16 @@ def _apply(
         opportunity.last_seen_at = now
         _register_identifiers(db, opportunity, item, claimed)
         if outcome.updated and opportunity.manually_curated_at is None:
+            before = extraction_input_fingerprint(ExtractionInput.model_validate(opportunity))
             _write_canonical(opportunity, item)
             db.flush()
+            after = extraction_input_fingerprint(ExtractionInput.model_validate(opportunity))
+            if before != after:
+                # ADR-012 §6 "Source change after review": invalidate (if the owner had reviewed)
+                # before refreshing candidates, and both before the evaluation below (step 5 reads
+                # the assessment status invalidation may have just downgraded).
+                invalidate_after_source_change(db, opportunity, now)
+                refresh_candidates(db, opportunity)
             if context is not None:
                 evaluate_if_changed(db, context.profile, opportunity, context)
         db.flush()
@@ -296,6 +306,8 @@ def _apply(
     db.add(new_record)
     _register_identifiers(db, opportunity, item, claimed)
     db.flush()
+    if outcome.created:
+        refresh_candidates(db, opportunity)
     if outcome.created and context is not None:
         # A new opportunity has no evaluation yet.
         evaluate_and_save(db, context.profile, opportunity, context)

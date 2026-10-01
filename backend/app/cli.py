@@ -14,6 +14,13 @@ Source sync (ADR-008), the same pipeline the API uses:
     python -m app.cli sync-source SOURCE      # one source, by ID or key (e.g. greenhouse:board)
 
 Prints run counts only (never payloads). Exits 1 if a requested sync failed.
+
+Requirement candidate catalog scan (ADR-012 §9):
+
+    python -m app.cli scan-requirements [--batch-size N]
+
+Idempotent; never accepts, rejects, changes an assessment status, or evaluates. Prints counts
+only. Exits 1 only on an operational error (never on an individual extractor failure).
 """
 
 import argparse
@@ -31,6 +38,7 @@ from app.ingestion.http import configured_transport
 from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_source
 from app.models import AuthUser, IngestionRun, IngestionSource
 from app.services import auth
+from app.services.requirement_candidates import CATALOG_SCAN_BATCH_SIZE, scan_catalog
 
 
 def _read_password(from_stdin: bool) -> str:
@@ -88,6 +96,16 @@ def _sync(reference: str | None) -> int:
     return 1 if any(r.status is IngestionRunStatus.FAILED for r in runs) else 0
 
 
+def _scan_requirements(batch_size: int) -> int:
+    with Session(get_engine(), expire_on_commit=False) as db:
+        result = scan_catalog(db, batch_size=batch_size)
+    print(
+        f"scanned {result.scanned}, refreshed {result.refreshed}, unchanged {result.unchanged},"
+        f" failed {result.failed}, candidates_created {result.candidates_created}"
+    )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m app.cli", description="Owner account and source administration."
@@ -107,12 +125,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands.add_parser("sync-sources", help="sync every enabled opportunity source")
     one = commands.add_parser("sync-source", help="sync one opportunity source")
     one.add_argument("source", help="source ID or key, e.g. greenhouse:exampleboard")
+    scan = commands.add_parser(
+        "scan-requirements", help="refresh requirement candidates catalog-wide (ADR-012 §9)"
+    )
+    scan.add_argument("--batch-size", type=int, default=CATALOG_SCAN_BATCH_SIZE)
     args = parser.parse_args(argv)
 
     if args.command == "sync-sources":
         return _sync(None)
     if args.command == "sync-source":
         return _sync(args.source)
+    if args.command == "scan-requirements":
+        return _scan_requirements(args.batch_size)
 
     action: Callable[[Session, str, str], AuthUser] = (
         auth.create_owner if args.command == "create-owner" else auth.set_password

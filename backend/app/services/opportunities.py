@@ -32,6 +32,7 @@ from app.repositories import (
 )
 from app.schemas.application import ApplicationBody
 from app.schemas.opportunity import OpportunityBody, RequirementBody
+from app.services.requirement_candidates import refresh_candidates
 
 MANUAL_SOURCE_NAME = "manual"
 
@@ -99,6 +100,7 @@ def create_opportunity(db: Session, body: OpportunityBody) -> Opportunity:
     )
     db.add(opportunity)
     db.flush()
+    refresh_candidates(db, opportunity)  # ADR-012 §6: refresh on manual create, no invalidation
     evaluate_automatically(db, opportunity)
     return opportunity
 
@@ -114,6 +116,7 @@ def update_opportunity(db: Session, opportunity: Opportunity, body: OpportunityB
     opportunity.requirements = [_requirement(r) for r in body.requirements]
     opportunity.manually_curated_at = datetime.now(UTC)
     db.flush()
+    refresh_candidates(db, opportunity)  # ADR-012 §6: refresh on manual edit, no invalidation
     evaluate_automatically(db, opportunity)
 
 
