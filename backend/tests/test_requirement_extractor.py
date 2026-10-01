@@ -40,12 +40,17 @@ def test_must_be_at_least_proposes_minimum_age() -> None:
     assert proposal.applies_at is RequirementAppliesAt.PROGRAM_START
 
 
+def _key(proposal: Proposal) -> str:
+    return semantic_key(
+        proposal.requirement_type, proposal.value, proposal.applies_at, proposal.reference_date
+    )
+
+
 def test_rephrased_minimum_age_shares_semantic_key() -> None:
     (a,) = extract("Applicants must be at least 16 years old.")
     (b,) = extract("Minimum age: 16.")
     assert a.value == b.value == {"years": 16}
-    key = lambda p: semantic_key(p.requirement_type, p.value, p.applies_at, p.reference_date)  # noqa: E731
-    assert key(a) == key(b)
+    assert _key(a) == _key(b)
 
 
 def test_out_of_range_ages_propose_nothing() -> None:
