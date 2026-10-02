@@ -21,7 +21,7 @@ Sources sync when the owner asks: **Sync now** / **Sync all** on the Sources pag
 
 Milestone 6 adds `.github/workflows/sync-production.yml`: `python -m app.cli sync-sources --scheduled` against Neon at 06:17 and 18:17 America/Los_Angeles, and on manual dispatch. It connects to Neon directly with the `PRODUCTION_DATABASE_URL` secret of the GitHub `production` environment (not through Render, so it doesn't wake Render), only on `main` of `dude297/internship-finder`, and never for pull requests or pushes ([ADR-009 amendment](decisions/ADR-009-hosted-deployment-architecture.md#amendment-2026-10-01-scheduled-source-sync-milestone-6)). **It does nothing until that environment secret exists**: until then each run fails fast with "PRODUCTION_DATABASE_URL is empty". Local development has no scheduler.
 
-- **CLI exit codes** (`sync-sources`, `sync-source`): `0` every attempted source finished `success`, `no_change`, or `partial`; `1` at least one `failed` (turns the workflow run red); `2` the database was unreachable or misconfigured (a fixed message, never the URL or the exception text). A source skipped because it was already syncing gets its own line and isn't a failure. Output is per-source counts and elapsed time plus one aggregate line.
+- **CLI exit codes** (`sync-sources`, `sync-source`): `0` every attempted source finished `success`, `no_change`, or `partial`; `1` at least one `failed` (turns the workflow run red); `2` the database was unreachable or misconfigured (a fixed message, never the URL or the exception text), or, with `--scheduled`, its schema isn't at the code's migration head. A source skipped because it was already syncing gets its own line and isn't a failure. Output is per-source counts and elapsed time plus one aggregate line.
 - **Inactivity.** GitHub disables scheduled workflows in a public repository after 60 days without repository activity. Nothing alerts; Source Health turns `stale` after 36 h. Recovery: re-enable the workflow on the Actions tab (or `gh workflow enable sync-production.yml`) and dispatch it once.
 - **Concurrency.** A scheduled run and a manual sync of the same source are arbitrated by the per-source running-run index, exactly like two manual syncs. The workflow's `concurrency` group only stops overlapping workflow runs.
 
@@ -40,7 +40,7 @@ The Sources page and `GET /api/sources` report `health`, `consecutive_failures`,
 | `stale` | Last success more than 36 h ago |
 | `failing` | The latest finished run `failed`, or it has never succeeded |
 
-24/36 h gives one missed twice-daily cycle of slack before escalating past `warning`. `consecutive_failures` counts `failed`/`partial` runs since the last success; a success resets it. A run still `running` is judged by the run that finished before it. No alerts, email, or push.
+24/36 h gives one missed twice-daily cycle of slack before escalating past `warning`. `consecutive_failures` counts `failed`/`partial` runs since the last success; a success resets it. A run still `running` is judged by the run that finished before it. No alerts, email, or push. A source whose every run ends `partial` (for example a persistent identity conflict) never refreshes `last_success_at`, so it drifts to `stale` (or `failing` if it never succeeded) and its failure count keeps growing: that's intended, since a partial run never closes postings and needs attention.
 
 ## Requirement Candidate Scan (implemented, Milestone 6; not run in production yet)
 

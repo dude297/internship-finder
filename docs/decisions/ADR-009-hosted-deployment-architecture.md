@@ -189,6 +189,8 @@ manual edit. (If `timezone` were ever unsupported or unreliable, the fallback is
 e.g. `17 13,1 * * *` for PDT — which would drift by an hour for part of the year until manually
 adjusted for PST; that fallback is not currently needed.)
 
+**Environment branch policy (required).** A `workflow_dispatch` can target any branch, and any workflow file on any branch that names `environment: production` could read the environment secret. The `if:` guard protects only this file. So the `production` environment must restrict deployment branches to `main` (Settings → Environments → production → Deployment branches → Selected branches → `main`); with that, GitHub refuses to expose the secret to a run from any other branch. Only someone with write access can push such a branch, but the policy closes it anyway.
+
 **The fork/PR secret boundary.** `schedule` and `workflow_dispatch` events only ever run using
 the workflow file on the repository's own default branch, and GitHub Actions never runs a
 *fork's* `schedule` event at all (only the upstream repository's schedule fires, and only against
@@ -202,6 +204,8 @@ and the job also re-checks `github.repository == 'dude297/internship-finder' && 
 **Load delays.** GitHub documents that scheduled runs can be delayed under load, especially at the
 top of the hour, and that some queued runs may be dropped; hence minute 17. A dropped run shows up
 only as a stale Source Health (there's no alerting).
+
+**Schema check.** `sync-sources --scheduled` first compares the database's Alembic revision with the code's head and exits `2` (a red run) if they differ, before attempting any source. Without it, merged code on an unmigrated database would fail item by item into `partial` runs that exit `0`.
 
 **Schema order.** The workflow installs the code on `main`. After a release that adds a migration,
 Neon must be migrated before the next scheduled run, or that run fails visibly (exit `1` or `2`, a
