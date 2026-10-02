@@ -123,7 +123,20 @@ def update_opportunity(db: Session, opportunity: Opportunity, body: OpportunityB
         for candidate in opportunity.requirement_candidates
         if candidate.accepted_requirement_id is not None
     }
-    opportunity.requirements = [_requirement(r) for r in body.requirements]
+    # A requirement resubmitted unchanged keeps its provenance: an accepted suggestion's row stays
+    # suggestion-owned, so rejecting that suggestion still removes it, while anything new or
+    # changed is manual and never touched by a review (ADR-012 §7).
+    old_by_key = {requirement_key(r): r for r in opportunity.requirements}
+    new_rows = [_requirement(r) for r in body.requirements]
+    for row in new_rows:
+        kept = old_by_key.get(requirement_key(row))
+        if kept is not None:
+            row.extraction_method = kept.extraction_method
+            row.extractor_name = kept.extractor_name
+            row.extractor_version = kept.extractor_version
+            row.source_text = row.source_text or kept.source_text
+            row.confidence = kept.confidence
+    opportunity.requirements = new_rows
     opportunity.manually_curated_at = datetime.now(UTC)
     db.flush()
     new_by_key = {requirement_key(r): r.id for r in opportunity.requirements}
