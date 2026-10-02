@@ -2,7 +2,7 @@
 
 ## Current
 
-Milestones 0–4 are merged. Milestone 4 (Match Profile, fit scoring v1, eligibility-first ranking, internships-only board scope, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)) is released from `main`. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is deployed from `main`: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
+Milestones 0–4 are merged. Milestone 4 (Match Profile, fit scoring v1, eligibility-first ranking, internships-only board scope, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)) is released from `main`. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is deployed from `main`: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers in released production. Milestone 6 (unreleased, [ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) adds requirement suggestions and review, a GitHub Actions source-sync schedule that talks to Neon directly, derived source health, Ashby boards, shared type classification, and deadline discovery. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
 
 ```text
 Browser ── same origin ──► Vite dev server (localhost:5173)
@@ -18,6 +18,7 @@ Browser ── same origin ──► Vite dev server (localhost:5173)
    │                                  │         │                 zshah101.github.io (discovery feed)
    │                                  ▼         ▼                 boards-api.greenhouse.io
    └───────────────────────── PostgreSQL 18 (Docker Compose)      api.lever.co / api.eu.lever.co
+                                                                  api.ashbyhq.com (Milestone 6)
 ```
 
 ### Backend (`backend/app/`)
@@ -37,6 +38,8 @@ Browser ── same origin ──► Vite dev server (localhost:5173)
 **Transactions.** One database session per request (`db/session.py`). The handler commits once after its service call; if anything raises first, the session closes and everything is rolled back. So "opportunity + manual source record + requirements + evaluation" and "profile update + every resulting re-evaluation" are each atomic. Source sync is the deliberate exception ([ADR-008 §4](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#4-run-history-and-partial-success)): it commits a `running` run first, fetches outside any transaction, writes each item in its own savepoint, and commits the results with the finished run, so one bad item can't discard the rest.
 
 **Ingestion.** `fetch → validate → normalize → identify → upsert → evaluate → close → run summary`. Identity is exact only: same source + external ID, then deterministic identifiers (`zshah`, `greenhouse`, `lever`, canonical `url`). Identifiers that point at two opportunities are an error, never a merge. Only a complete successful snapshot closes postings it no longer lists; closed postings are kept (with their tracking) and reopen if they return. Opportunities the owner has edited (`manually_curated_at`) keep their canonical fields and requirements across syncs. Imported opportunities start `unassessed`.
+
+**Requirement suggestions (Milestone 6).** A new posting, or one whose title/description/dates a sync changed, runs the pure extractor (`opportunities/requirements/extractor.py`) inside its item savepoint and refreshes `opportunity_requirement_candidates` (`services/requirement_candidates.py`). If the owner had reviewed it, the change marks it stale and downgrades `complete` first, so the item's automatic evaluation sees the downgrade. The review API (`services/requirement_review.py`) turns accepted suggestions into canonical requirements in one transaction followed by at most one evaluation of that opportunity. Eligibility never reads suggestions. `python -m app.cli scan-requirements` covers stored opportunities.
 
 **Errors.** FastAPI's standard shape: `{"detail": "message"}` or, for `422`, `{"detail": [{"loc", "msg", "type"}]}` without the echoed input. Integrity conflicts → `409`; anything unexpected → `500 {"detail": "Internal server error."}` (logged server-side). Details: [ADR-007 §9](decisions/ADR-007-single-user-auth-and-private-api.md#9-api-error-model).
 

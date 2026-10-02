@@ -252,7 +252,9 @@ Render Free sleeps after about 15 minutes without traffic. Observed 2026-09-28: 
 
 ## Scheduling
 
-None. Source sync stays manual (Sources page, API, or CLI with `DATABASE_URL` set as in [Deploy Order](#deploy-order)). No GitHub, Render, or Vercel cron, and no keep-alive or uptime pings. A future scheduled sync must keep `DATABASE_URL` in a repository/environment secret and never run for forked pull requests.
+Released production (Milestone 5): none; source sync is manual. Milestone 6 adds the GitHub Actions workflow `.github/workflows/sync-production.yml` (twice daily, 06:17 and 18:17 America/Los_Angeles, plus `workflow_dispatch`). It reads `PRODUCTION_DATABASE_URL` from the GitHub `production` **environment** secret, runs only on `main` of this repository, and never runs for pull requests or pushes ([ADR-009 amendment](decisions/ADR-009-hosted-deployment-architecture.md#amendment-2026-10-01-scheduled-source-sync-milestone-6)). Until that secret is configured during the release, every run fails fast without touching anything. No Render or Vercel cron, and no keep-alive or uptime pings.
+
+Configuring the secret (a release step for the owner only; never in a file, a command-line argument, or chat): GitHub → Settings → Environments → **New environment** `production` (optionally restrict deployment branches to `main` and add yourself as a required reviewer) → **Add environment secret** `PRODUCTION_DATABASE_URL` with the Neon pooled `postgresql+psycopg://…?sslmode=require` URL. Or run `gh secret set PRODUCTION_DATABASE_URL --env production` and paste the value at its prompt.
 
 ## Free-Tier Behavior
 

@@ -51,6 +51,14 @@ Every evaluation appends history; nothing is overwritten. The rules (and `v1`) a
 
 The UI shows `needs_verification` as its own state ("Needs verification") and never folds it into eligible. Opportunities without an evaluation show "Not evaluated". Each rule result gets a plain-language line (e.g. "Education — Eligible: based on your projected status on …: incoming undergraduate") rephrased from the stored status and details, with the stored reason and rule ID under "More detail". When the evaluation's `depends_on_projected_status` is true, the UI shows "This result depends on expected future education dates." with the resolver's explanation.
 
+### Requirement suggestions (Milestone 6)
+
+Imported and manual postings get deterministic requirement **suggestions** (`requirements-rules` v1, [ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). They live in `opportunity_requirement_candidates` and **never affect eligibility**: the engine still reads only `opportunity_requirements` and `requirements_assessment_status`. Accepting a suggestion (optionally edited) creates a canonical requirement with `extraction_method = deterministic_parser`; that, not the suggestion, is what the rules evaluate.
+
+- Extraction never changes `requirements_assessment_status`. Accepting the first requirement while `unassessed` moves it to `partial`. Only the owner's explicit choice makes it `complete` (zero requirements allowed). Rejecting every suggestion never implies `complete`.
+- If a sync later changes a reviewed posting's text, a `complete` assessment is downgraded (to `partial`, or `unassessed` if no canonical requirement remains), the opportunity is flagged "Posting changed since requirement review", accepted requirements are kept, and the opportunity is re-evaluated.
+- An accepted work-authorization suggestion evaluates to `needs_verification` (ELIG-REQ-001) until a work-authorization rule exists.
+
 ## Time-Aware Evaluation
 
 The user's status changes over time. For example, a high-school senior is expected to become an undergraduate after graduation ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Rules evaluate the user's **projected status at the date the requirement applies**, not only their status today.

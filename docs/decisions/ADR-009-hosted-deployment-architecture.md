@@ -104,7 +104,7 @@ All private `/api` responses carry `Cache-Control: no-store` (set by FastAPI and
 
 - **Render:** auto-deploy off; deploys are triggered by hand after migrations. For validating an unmerged branch, the service's branch is switched to it temporarily and then back to `main` (documented in the runbook); `main` stays the review gate.
 - **Vercel:** Git-triggered deployments are disabled in `vercel.json` (`git.deploymentEnabled: false`), so no branch or pull request creates a preview automatically. Production is deployed by hand from a reviewed checkout. Vercel's Standard Deployment Protection (Vercel Authentication on non-production deployments) stays on, and `PROXY_SHARED_SECRET` exists only in the Production environment, so any manually created preview can't present itself as the trusted proxy.
-- **Source sync stays manual** (Sources page, API, CLI). No scheduled cloud sync, GitHub/Render/Vercel cron, keep-alive ping, or uptime monitor. Render cold starts are accepted; the frontend shows a "Server is waking up…" state with retry instead of treating an unavailable backend as logged out.
+- **Source sync stays manual** (Sources page, API, CLI). *(Amended 2026-10-01 for Milestone 6: see [Amendment: Scheduled source sync](#amendment-2026-10-01-scheduled-source-sync-milestone-6).)* No scheduled cloud sync, GitHub/Render/Vercel cron, keep-alive ping, or uptime monitor. Render cold starts are accepted; the frontend shows a "Server is waking up…" state with retry instead of treating an unavailable backend as logged out.
 
 ### 12. Relationship to earlier ADRs
 
@@ -135,3 +135,74 @@ This ADR supersedes only hosted-deployment assumptions; earlier ADRs are not rew
 - **Trusting `X-Forwarded-For` (or uvicorn `--forwarded-allow-ips='*'`) for the limiter.** Direct callers could rotate forged addresses to get unlimited per-client buckets. Rejected in favor of the proxy-secret check. Trusting it even behind the secret was tried and rejected on 2026-09-29 (see the §6 amendment).
 - **Database- or Redis-backed limiter.** More moving parts than one process needs; a restart-reset is acceptable given sleep timing. Revisit if the backend ever runs more than one worker or instance.
 - **Neon Auth / third-party auth.** See §5.
+
+## Amendment (2026-10-01): Scheduled source sync (Milestone 6)
+
+Amends §11 and the Consequences above. Decided by [ADR-012 §10](ADR-012-opportunity-requirement-intelligence-and-automation.md#10-scheduled-source-sync); takes effect only when Milestone 6 is released and the `production` environment secret is configured.
+
+ADR-009 §11 said source sync stays manual and no scheduled cloud sync is enabled. ADR-012 §10
+reopens that: a GitHub Actions workflow (`.github/workflows/sync-production.yml`) now syncs every
+enabled production source twice a day (06:17 and 18:17 America/Los_Angeles) and on manual
+`workflow_dispatch`, by running `python -m app.cli sync-sources --scheduled` — the same CLI the
+owner already uses by hand, calling the same pipeline the API uses.
+
+**Connects directly to Neon, not through Render.** The workflow talks straight to the Neon
+`DATABASE_URL`, the same way a trusted local shell does for migrations (ADR-009 §10). It never
+calls the Render API or the Render URL, so it doesn't keep the free instance awake and adds no
+new path to the FastAPI service. Render's cold starts (ADR-009 §8, §Consequences) are unaffected;
+the first browser request after a scheduled sync still waits for Render to wake, same as today.
+
+**No paid service.** GitHub Actions on a public repository is free, with no payment method on
+file (ADR-009 §2's zero-cost rule). The job is bounded (`timeout-minutes: 20`) and runs at most
+twice a day plus occasional manual dispatches, well inside the free public-repo minutes GitHub
+Actions already doesn't meter.
+
+**The secret.** `PRODUCTION_DATABASE_URL` is a GitHub **environment** secret on an environment
+named `production`, not a repository secret — scoped so only a workflow run that explicitly
+targets that environment can read it, and so protection rules (required reviewers, wait timers)
+can be added later without a code change. It is set only on the one step that needs it
+(`DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}`), never at the job or workflow level, and
+is never echoed, logged, or passed as a command-line argument.
+
+**The per-source running-run constraint is still the authoritative concurrency guard.** The
+workflow's `concurrency: { group: production-source-sync, cancel-in-progress: false }` only
+prevents GitHub from queuing two overlapping scheduled runs of *this workflow*; it is not what
+keeps two syncs of the same source from running at once. That guard is, and remains, the
+database's partial unique index on `ingestion_runs (source_id) WHERE status = 'running'`
+(ADR-008 §4) plus the pipeline's `SyncInProgress` check — the same mechanism that already
+protects the manual Sources-page and CLI paths from each other. A scheduled run and a manual
+sync racing each other are resolved the same way two manual syncs are: one wins the index, the
+other is skipped and reported as such.
+
+**Inactivity auto-disable.** GitHub automatically disables a public repository's scheduled
+workflows after 60 days with no repository activity (commits, issues, PRs — anything, not
+specifically to this workflow). This repository is under active development, so it isn't
+expected to go quiet for 60 days, but if it ever does, the schedule silently stops firing.
+Recovery: re-enable the workflow on the Actions tab (or `gh workflow enable sync-production.yml`),
+then run it once with `workflow_dispatch`. Manual dispatch is also the owner's way to run a sync on demand without waiting for
+the next scheduled slot, or to catch up after exactly this kind of auto-disable.
+
+**DST.** The workflow uses the `schedule.timezone` key (an IANA zone string, documented under
+`on.schedule` in GitHub's workflow syntax reference; verified 2026-10-02) rather than a UTC cron expression, so 06:17/18:17 America/Los_Angeles is
+resolved to the correct UTC offset per run and the twice-yearly PDT/PST transition needs no
+manual edit. (If `timezone` were ever unsupported or unreliable, the fallback is a UTC cron,
+e.g. `17 13,1 * * *` for PDT — which would drift by an hour for part of the year until manually
+adjusted for PST; that fallback is not currently needed.)
+
+**The fork/PR secret boundary.** `schedule` and `workflow_dispatch` events only ever run using
+the workflow file on the repository's own default branch, and GitHub Actions never runs a
+*fork's* `schedule` event at all (only the upstream repository's schedule fires, and only against
+upstream's default-branch code) — so a pull request, including one from a fork, can neither
+trigger this workflow nor see `secrets.PRODUCTION_DATABASE_URL`, regardless of what workflow YAML
+the PR itself contains. This workflow deliberately excludes `pull_request`, `pull_request_target`,
+and `push` triggers so that remains true by construction, not only by GitHub's default behavior,
+and the job also re-checks `github.repository == 'dude297/internship-finder' && github.ref ==
+'refs/heads/main'` as defense in depth against a manual dispatch run from the wrong ref.
+
+**Load delays.** GitHub documents that scheduled runs can be delayed under load, especially at the
+top of the hour, and that some queued runs may be dropped; hence minute 17. A dropped run shows up
+only as a stale Source Health (there's no alerting).
+
+**Schema order.** The workflow installs the code on `main`. After a release that adds a migration,
+Neon must be migrated before the next scheduled run, or that run fails visibly (exit `1` or `2`, a
+red workflow run). The release runbook migrates Neon before configuring the secret.

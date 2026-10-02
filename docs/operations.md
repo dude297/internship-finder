@@ -15,11 +15,36 @@ The app runs locally and, since Milestone 3.5, hosted on Vercel → Render → N
 
 `compose.yaml` runs PostgreSQL 18 on `127.0.0.1:5432` with a named volume `pgdata`. That volume holds the owner's private data: back it up yourself if it matters (for example, `docker compose exec postgres pg_dump -U internship_finder internship_finder > backup.sql`, stored **outside** the repository). `docker compose down -v` deletes it.
 
-## Source Sync (implemented, manual)
+## Source Sync (implemented: manual, plus a scheduled production workflow)
 
-Sources sync only when the owner asks: **Sync now** / **Sync all** on the Sources page, `POST /api/sources/{id}/sync` / `POST /api/sources/sync`, or `python -m app.cli sync-source <id-or-key>` / `sync-sources`. All use the same pipeline ([ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md)). There is **no scheduler**: the database is local, so a hosted runner can't reach it.
+Sources sync when the owner asks: **Sync now** / **Sync all** on the Sources page, `POST /api/sources/{id}/sync` / `POST /api/sources/sync`, or `python -m app.cli sync-source <id-or-key>` / `sync-sources`. All use the same pipeline ([ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md)).
+
+Milestone 6 adds `.github/workflows/sync-production.yml`: `python -m app.cli sync-sources --scheduled` against Neon at 06:17 and 18:17 America/Los_Angeles, and on manual dispatch. It connects to Neon directly with the `PRODUCTION_DATABASE_URL` secret of the GitHub `production` environment (not through Render, so it doesn't wake Render), only on `main` of `dude297/internship-finder`, and never for pull requests or pushes ([ADR-009 amendment](decisions/ADR-009-hosted-deployment-architecture.md#amendment-2026-10-01-scheduled-source-sync-milestone-6)). **It does nothing until that environment secret exists**: until then each run fails fast with "PRODUCTION_DATABASE_URL is empty". Local development has no scheduler.
+
+- **CLI exit codes** (`sync-sources`, `sync-source`): `0` every attempted source finished `success`, `no_change`, or `partial`; `1` at least one `failed` (turns the workflow run red); `2` the database was unreachable or misconfigured (a fixed message, never the URL or the exception text). A source skipped because it was already syncing gets its own line and isn't a failure. Output is per-source counts and elapsed time plus one aggregate line.
+- **Inactivity.** GitHub disables scheduled workflows in a public repository after 60 days without repository activity. Nothing alerts; Source Health turns `stale` after 36 h. Recovery: re-enable the workflow on the Actions tab (or `gh workflow enable sync-production.yml`) and dispatch it once.
+- **Concurrency.** A scheduled run and a manual sync of the same source are arbitrated by the per-source running-run index, exactly like two manual syncs. The workflow's `concurrency` group only stops overlapping workflow runs.
 
 Measured locally on 2026-09-27 against the live discovery feed (disposable database, synthetic profile, Windows + Docker PostgreSQL 18): the first sync of 1,034 postings took about 22 s (including one evaluation per posting); a repeat answered `304` in under 0.5 s; a forced full re-process (validators cleared) found all 1,034 unchanged in under 1 s. A 50-item page of the opportunity list took 30–130 ms at ~1,100 opportunities.
+
+## Source Health (implemented, Milestone 6)
+
+The Sources page and `GET /api/sources` report `health`, `consecutive_failures`, and `last_success_age_hours` per source, derived on every read from `last_success_at` and run history (nothing stored; `app/services/source_health.py`):
+
+| Health | Meaning |
+|---|---|
+| `disabled` | The source is turned off |
+| `never_run` | No finished run yet |
+| `healthy` | Last success (`success` or `no_change`) within 24 h, and the latest finished run wasn't `partial` |
+| `warning` | Last success 24–36 h ago, or the latest finished run was `partial` |
+| `stale` | Last success more than 36 h ago |
+| `failing` | The latest finished run `failed`, or it has never succeeded |
+
+24/36 h gives one missed twice-daily cycle of slack before escalating past `warning`. `consecutive_failures` counts `failed`/`partial` runs since the last success; a success resets it. A run still `running` is judged by the run that finished before it. No alerts, email, or push.
+
+## Requirement Candidate Scan (implemented, Milestone 6; not run in production yet)
+
+`python -m app.cli scan-requirements [--batch-size 200]` runs the deterministic requirement extractor over every stored opportunity whose `requirement_extraction_fingerprint` isn't current, in keyset batches committed one at a time ([ADR-012 §9](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md#9-catalog-scan)). Idempotent and safe to rerun or interrupt: it only creates or refreshes *pending suggestions*. It never accepts, never changes an assessment status, never marks anything stale, and never evaluates. Output is counts only; exit `2` on a database error. Measured on 1,100 synthetic opportunities (local Docker PostgreSQL 18, 2026-10-02): 13.3 s and 1,357 SQL statements cold (623 suggestions), 0.95 s and 37 statements on a rerun. Production runs it only after explicit release approval.
 
 ## Run Summaries (implemented)
 
@@ -88,12 +113,11 @@ For a single-user tool, the minimum is to detect the failure (run summary or err
 
 ## Future Scheduled Jobs (planned)
 
-- Recurring source sync (`python -m app.cli sync-sources`; the command exists, only the schedule is missing, and it needs a hosted database first)
-- Source health checks (e.g. alert on repeated `failed`/`partial` runs)
+- Alerting on repeated `failed`/`partial` runs (scheduled sync and derived source health exist since Milestone 6; nothing alerts yet)
 - Re-evaluation when eligibility rules or scoring version change, or when the user's projected education status crosses a date (graduation, enrollment)
 - In-app alerts/digests (no email/SMS services initially)
 
-Scheduler: GitHub Actions scheduled workflows (selected, not configured), or later a self-hosted runner. No paid scheduler. Workflows only orchestrate Python commands. If free-tier limits (Actions minutes, Neon compute, Render hours) are reached, jobs defer or fail visibly rather than incur charges ([ADR-004](decisions/ADR-004-technology-stack.md)).
+Scheduler: GitHub Actions scheduled workflows (the source sync workflow exists since Milestone 6), or later a self-hosted runner. No paid scheduler. Workflows only orchestrate Python commands. If free-tier limits (Actions minutes, Neon compute, Render hours) are reached, jobs defer or fail visibly rather than incur charges ([ADR-004](decisions/ADR-004-technology-stack.md)).
 
 ## Maintenance
 
