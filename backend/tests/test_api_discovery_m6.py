@@ -136,15 +136,28 @@ def test_deadline_within_defaults_to_server_utc_date(client: TestClient) -> None
     assert created["id"] in within7
 
 
-def test_sort_deadline_orders_ascending_with_nulls_last(client: TestClient) -> None:
-    mid = create(client, title="Mid Deadline", application_deadline="2041-01-15")
+def test_sort_deadline_upcoming_first_then_unknown_then_passed(client: TestClient) -> None:
+    today = FIXED_TODAY
+    mid = create(client, title="Mid", application_deadline=(today + timedelta(days=9)).isoformat())
     none = create(client, title="No Deadline", application_deadline=None)
-    early = create(client, title="Early Deadline", application_deadline="2041-01-01")
+    early = create(client, title="Soon", application_deadline=today.isoformat())
+    passed = create(
+        client, title="Passed", application_deadline=(today - timedelta(days=3)).isoformat()
+    )
 
-    response = client.get("/api/opportunities", params={"sort": "deadline", "limit": 100})
+    response = client.get(
+        "/api/opportunities",
+        params={"sort": "deadline", "today": today.isoformat(), "limit": 100},
+    )
     order = [item["id"] for item in response.json()["items"]]
 
-    assert order.index(early["id"]) < order.index(mid["id"]) < order.index(none["id"])
+    assert order == [early["id"], mid["id"], none["id"], passed["id"]]
+
+
+def test_out_of_range_today_is_rejected_not_a_server_error(client: TestClient) -> None:
+    for today in ("9999-12-31", "0001-01-01"):
+        response = client.get("/api/opportunities", params={"deadline_within": 7, "today": today})
+        assert response.status_code == 422, response.text
 
 
 # --- pagination ------------------------------------------------------------------------------

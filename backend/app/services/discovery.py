@@ -241,11 +241,12 @@ _ELIGIBILITY_RANK = {
 }
 
 
-def _order(stmt: Listing, sort: Sort) -> Listing:
+def _order(stmt: Listing, sort: Sort, today: date) -> Listing:
     """recommended: eligible, needs verification, ineligible, then not evaluated; inside a
     bucket, fit score (highest first, none last). Fit never moves an opportunity to another
-    bucket (ADR-001). Both sorts end with posted date (unknown last), first seen, and ID, so the
-    order is total and stable."""
+    bucket (ADR-001). deadline: upcoming deadlines soonest first, then unknown deadlines, then
+    passed ones (least actionable). Every sort ends with posted date (unknown last), first seen,
+    and ID, so the order is total and stable."""
     freshest = (
         Opportunity.posted_at.desc().nulls_last(),
         Opportunity.first_seen_at.desc(),
@@ -254,7 +255,9 @@ def _order(stmt: Listing, sort: Sort) -> Listing:
     if sort == "newest":
         return stmt.order_by(*freshest)
     if sort == "deadline":
-        return stmt.order_by(Opportunity.application_deadline.asc().nulls_last(), *freshest)
+        deadline = Opportunity.application_deadline
+        group = case((deadline.is_(None), 1), (deadline < today, 2), else_=0)
+        return stmt.order_by(group, deadline.asc(), *freshest)
     columns = stmt.selected_columns
     bucket = case(_ELIGIBILITY_RANK, value=columns.eligibility_status, else_=len(_ELIGIBILITY_RANK))
     return stmt.order_by(bucket, columns.fit_score.desc().nulls_last(), *freshest)
@@ -278,7 +281,7 @@ def list_page(
     stmt = _filtered(db, filters)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.execute(
-        _order(stmt, sort)
+        _order(stmt, sort, filters.today or datetime.now(UTC).date())
         .options(
             selectinload(Opportunity.application),
             selectinload(Opportunity.source_records)
