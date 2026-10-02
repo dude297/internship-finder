@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+## Milestone 6 (released 2026-10-02)
+
+Released 2026-10-02: [PR #13](https://github.com/dude297/internship-finder/pull/13) rebase-merged at the approved head `ff47970`; `main` `80257c5` (post-merge CI `37066645594` green); Neon migrated `c5a1e0f3d7b2` → `e6d1a4b8c2f9`; Render deploy `dep-db03iknavr4c73e10b8g`; Vercel production `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`; scheduled sync configured; production requirement scan run. Record: [deployment.md](docs/deployment.md#milestone-6-release-2026-10-02).
+
 ### Added
 
 - Milestone 6: requirement intelligence and automation ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)).
