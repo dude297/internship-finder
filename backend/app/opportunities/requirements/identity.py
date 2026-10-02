@@ -12,11 +12,15 @@
 import hashlib
 import json
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
 
 from app.enums import RequirementAppliesAt, RequirementType
+
+if TYPE_CHECKING:
+    from app.models import OpportunityRequirement, OpportunityRequirementCandidate
+    from app.schemas.opportunity import RequirementBody
 
 
 def _canonical_json(value: Any) -> str:
@@ -64,6 +68,18 @@ def semantic_key(
     )
 
 
+def requirement_key(
+    requirement: "OpportunityRequirement | OpportunityRequirementCandidate | RequirementBody",
+) -> str:
+    """`semantic_key` of a canonical requirement or a candidate row."""
+    return semantic_key(
+        requirement.requirement_type,
+        requirement.value,
+        requirement.applies_at,
+        requirement.reference_date,
+    )
+
+
 class ExtractionInput(BaseModel):
     """The canonical, source-derived posting fields extraction reads. Never IDs or timestamps."""
 
@@ -76,7 +92,13 @@ class ExtractionInput(BaseModel):
 
 
 def extraction_input_fingerprint(inputs: ExtractionInput) -> str:
-    return _sha256(inputs.model_dump(mode="json"))
+    """Whitespace is collapsed first, so a provider reformatting the same words isn't a material
+    change (ADR-012 §6)."""
+    document = inputs.model_dump(mode="json")
+    for name in ("title", "description"):
+        if isinstance(document[name], str):
+            document[name] = " ".join(document[name].split())
+    return _sha256(document)
 
 
 def extraction_fingerprint(inputs: ExtractionInput, extractor_name: str, version: str) -> str:

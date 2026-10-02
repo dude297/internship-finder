@@ -101,6 +101,11 @@ def refresh_candidates(db: Session, opportunity: Opportunity) -> RefreshOutcome:
             existing.extractor_version = EXTRACTOR_VERSION
 
     for key, candidate in existing_by_key.items():
+        if candidate.review_state == FactReviewState.PENDING and key in canonical_keys:
+            # The owner has since entered this exact requirement (e.g. by hand): accepting the
+            # suggestion would only duplicate it.
+            opportunity.requirement_candidates.remove(candidate)
+            continue
         if key in proposed_keys:
             continue
         if candidate.review_state == FactReviewState.PENDING:
