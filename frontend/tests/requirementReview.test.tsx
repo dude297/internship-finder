@@ -64,6 +64,40 @@ describe('requirement review panel', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows an accepted suggestion with the value the owner accepted, not the original', async () => {
+    mockApi({
+      ...loggedIn,
+      'GET /api/opportunities/opp-1': () => detail(),
+      'GET /api/opportunities/opp-1/requirement-review': () =>
+        requirementReview({
+          candidates: [
+            candidate({
+              review_state: 'accepted',
+              accepted_requirement_id: 'req-edited',
+            }),
+          ],
+          requirements: [
+            {
+              id: 'req-edited',
+              requirement_type: 'minimum_age',
+              value: { years: 19 },
+              applies_at: 'program_start',
+              reference_date: null,
+              source_text: 'Applicants must be at least 16 years old.',
+              extraction_method: 'deterministic_parser',
+              extractor_name: 'requirements-rules',
+              extractor_version: '1',
+            },
+          ],
+        }),
+    })
+    const panel = await openPanel()
+
+    const accepted = within(panel).getByRole('region', { name: 'Accepted' })
+    expect(within(accepted).getByText('at least 19 years old')).toBeInTheDocument()
+    expect(within(accepted).queryByText('at least 16 years old')).not.toBeInTheDocument()
+  })
+
   it('renders the source excerpt as text, never HTML', async () => {
     mockApi({
       ...loggedIn,
