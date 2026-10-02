@@ -148,7 +148,10 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   await openOpportunity(page, titleA)
   await expect(eligibility.getByText('Eligible', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('Education', { exact: false }).first()).toBeVisible()
-  await expect(page.getByText('All hard requirements reviewed')).toBeVisible()
+  // The detail summary and the Requirement Review panel both state the assessment.
+  await expect(
+    page.getByText(/^Assessment: All hard requirements reviewed/).first(),
+  ).toBeVisible()
 
   await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
   await page.getByLabel('Search title or organization').fill(String(run))

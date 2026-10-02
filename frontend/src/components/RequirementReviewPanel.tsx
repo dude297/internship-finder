@@ -49,6 +49,8 @@ function candidateLabel(candidate: RequirementCandidate): string {
     return `${type} (${(value.levels as string[]).join(', ')})`
   if (Array.isArray(value.countries) && value.countries.length)
     return `${type} (${(value.countries as string[]).join(', ')})`
+  if (typeof value.description === 'string' && value.description)
+    return `${type}: ${value.description}`
   return type
 }
 
@@ -186,7 +188,7 @@ function Section({
   actions: Actions
 }) {
   return (
-    <div className="space-y-2">
+    <section aria-label={title} className="space-y-2">
       <h3 className="font-medium">{title}</h3>
       {candidates.length === 0 ? (
         <p className="text-sm text-slate-600">{emptyText}</p>
@@ -206,7 +208,7 @@ function Section({
           ))}
         </ul>
       )}
-    </div>
+    </section>
   )
 }
 
