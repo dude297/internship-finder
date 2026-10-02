@@ -7,11 +7,8 @@ import { ingestionFixtureFile, owner } from './env.ts'
 // filter/sort, Source Health, and adding an Ashby board. Every posting is synthetic and the
 // board name is unique per run, so this is repeatable against a reused E2E database.
 //
-// NOTE for whoever runs this first: the Ashby fixture URL and response shape below follow
-// ADR-012 §12 (the unauthenticated posting-api/job-board/{board} endpoint) as best understood
-// from the adapter's planned contract. If the real app/opportunities/sources/ashby.py adapter
-// expects a different envelope, fix the `ashbyUrl`/`ashbyBoard` below to match it; nothing else
-// in this spec should need to change.
+// The tests share one board, so they run in order (the health test reads the first test's sync).
+test.describe.configure({ mode: 'serial' })
 
 const run = Date.now()
 const board = `examplerobotics${run}`
@@ -21,7 +18,8 @@ const title = `Synthetic Requirements Intern ${run}`
 
 const ashbyBoardName = `examplestudio${run}`
 const ashbyOrganization = `Example Studio ${run}`
-const ashbyUrl = `https://api.ashbyhq.com/posting-api/job-board/${ashbyBoardName}`
+// Exactly the URL the Ashby adapter requests (app/ingestion/adapters/ashby.py).
+const ashbyUrl = `https://api.ashbyhq.com/posting-api/job-board/${ashbyBoardName}?includeCompensation=false`
 
 const manualTitle = `Synthetic Deadline Program ${run}`
 
@@ -40,10 +38,11 @@ function greenhouseJob(id: number, description: string) {
 
 const initialDescription =
   '&lt;p&gt;Applicants must be at least 16 years old. Currently enrolled undergraduate ' +
-  'students only. U.S. citizenship is preferred.&lt;/p&gt;'
+  'students only. U.S. citizenship is preferred. Must have an active security clearance.&lt;/p&gt;'
 const rewrittenDescription =
   '&lt;p&gt;Applicants must be at least 16 years old. Currently enrolled undergraduate ' +
-  'students only. U.S. citizenship is preferred. Must be authorized to work in the ' +
+  'students only. U.S. citizenship is preferred. Must have an active security clearance. ' +
+  'Must be authorized to work in the ' +
   'United States.&lt;/p&gt;'
 
 function publishGreenhouse(description: string) {
@@ -58,6 +57,7 @@ function publishGreenhouse(description: string) {
             title: `Synthetic Ashby Intern ${run}`,
             location: 'Example City',
             employmentType: 'Intern',
+            isListed: true,
             publishedAt: '2040-09-15T10:00:00Z',
             jobUrl: `https://jobs.ashbyhq.com/${ashbyBoardName}/ashby-job-${run}`,
             descriptionHtml: '<p>Build synthetic things.</p>',
@@ -135,10 +135,14 @@ test('requirement intelligence: extraction, review, staleness, and persistence',
   await review.getByRole('button', { name: /Accept minimum age 16/ }).click()
   await review.getByRole('button', { name: /Edit education \(undergraduate\)/ }).click()
   await review.getByLabel(/Incoming students accepted/).check()
+  // A suggestion the owner disagrees with: rejected in the same single batch.
+  await review.getByRole('button', { name: /^Reject other.*security clearance/i }).click()
   await review.getByRole('radio', { name: /All hard requirements reviewed/ }).check()
   await review.getByRole('button', { name: /Apply changes/ }).click()
 
-  await expect(review.getByText('All hard requirements reviewed')).toBeVisible()
+  await expect(
+    review.getByText(/^Assessment: All hard requirements reviewed/),
+  ).toBeVisible()
   await expect(eligibility.getByText('Eligible', { exact: true }).first()).toBeVisible()
 
   // Review state and eligibility survive a logout/login.
@@ -161,10 +165,19 @@ test('requirement intelligence: extraction, review, staleness, and persistence',
       'Posting changed since requirement review. Review requirements again.',
     ),
   ).toBeVisible()
-  await expect(review.getByText('Some requirements recorded')).toBeVisible()
-  await expect(review.getByText('at least 16 years old')).toBeVisible() // kept, in Accepted
+  await expect(review.getByText(/^Assessment: Some requirements recorded/)).toBeVisible()
+  await expect(review.getByText('at least 16 years old', { exact: true })).toBeVisible() // kept, in Accepted
   await expect(
     review.getByRole('button', { name: /Accept work authorization/ }),
+  ).toBeVisible()
+  // The rejected suggestion is still in the rewritten posting but is never re-proposed.
+  const pendingSuggestions = review.getByRole('region', { name: 'Pending suggestions' })
+  await expect(pendingSuggestions.getByText(/security clearance/i)).toHaveCount(0)
+  await expect(
+    review
+      .getByRole('region', { name: 'Rejected' })
+      .getByText(/security clearance/i)
+      .first(),
   ).toBeVisible()
 
   // The "Needs review" list filter finds it.
@@ -175,28 +188,31 @@ test('requirement intelligence: extraction, review, staleness, and persistence',
   await expect(page.getByRole('link', { name: title })).toBeVisible()
 })
 
-test('deadline filter and sort', async ({ page, request }) => {
+test('deadline filter and sort', async ({ page }) => {
   await login(page)
 
-  // A manual opportunity with a deadline a few days out, created directly through the API so
-  // this test doesn't depend on the ingestion flow above.
-  const csrf = await page
-    .context()
-    .cookies()
-    .then((cookies) => cookies.find((c) => c.name === 'csrf_token')?.value)
-  await request.post('/api/opportunities', {
-    headers: csrf ? { 'X-CSRF-Token': csrf } : {},
+  // A manual opportunity whose deadline is 3 local days out, created through the same-origin
+  // API with the browser's session and CSRF token.
+  const soon = new Date()
+  soon.setDate(soon.getDate() + 3)
+  const deadline = [
+    soon.getFullYear(),
+    String(soon.getMonth() + 1).padStart(2, '0'),
+    String(soon.getDate()).padStart(2, '0'),
+  ].join('-')
+  const session = await (await page.request.get('/api/auth/session')).json()
+  const response = await page.request.post('/api/opportunities', {
+    headers: { 'X-CSRF-Token': session.csrf_token },
     data: {
       title: manualTitle,
       organization: `Example Deadline Org ${run}`,
       opportunity_type: 'internship',
-      application_deadline: new Date(Date.now() + 3 * 86_400_000)
-        .toISOString()
-        .slice(0, 10),
+      application_deadline: deadline,
       requirements_assessment_status: 'unassessed',
       requirements: [],
     },
   })
+  expect(response.status()).toBe(201)
 
   await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
   await page.getByLabel('Search title or organization').fill(String(run))
