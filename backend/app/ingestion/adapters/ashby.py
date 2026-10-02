@@ -10,7 +10,7 @@ import re
 from typing import Any, cast
 from urllib.parse import quote, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from app.enums import OpportunitySourceType, RemoteMode
 from app.ingestion.adapters import Adapter, SourceConfig, normalize_each, top_level
@@ -49,10 +49,10 @@ class _Job(BaseModel):
     )
     workplaceType: str | None = None  # noqa: N815
     isRemote: bool | None = None  # noqa: N815
-    # Missing only on malformed/legacy payloads; the live public endpoint always sends it, and
-    # our own manual check confirmed it's always present. Treated as listed to fail open rather
-    # than silently dropping a posting on an unexpected shape (ADR-012 §12).
-    isListed: bool | None = None  # noqa: N815
+    # Required and strictly boolean (ADR-012 §12): a missing or non-boolean value is an item
+    # error, so schema drift makes the run partial (nothing closes) instead of either importing
+    # a hidden posting or closing the board. `false` never reaches here (excluded in `parse`).
+    isListed: StrictBool  # noqa: N815
     publishedAt: str | None = None  # noqa: N815
     jobUrl: str | None = None  # noqa: N815
     applyUrl: str | None = None  # noqa: N815
@@ -132,14 +132,14 @@ def _normalize(raw: dict[str, Any], source: SourceConfig) -> NormalizedOpportuni
 def parse(payload: Any, source: SourceConfig) -> Snapshot:
     board = top_level(_Board, payload, "Ashby job board")
 
-    # Unlisted postings are never imported, and are excluded before normalization so a complete
-    # snapshot closes them exactly like a removed posting (ADR-012 §12); they don't count as
-    # "filtered" since that counter is reserved for the internships_only scope filter.
-    def _listed(job: Any) -> bool:
-        # Exactly `true` (or absent): a string like "false" must never import a hidden posting.
-        return not isinstance(job, dict) or cast(dict[str, Any], job).get("isListed", True) is True
+    # Unlisted (`isListed: false`) postings are never imported, and are excluded before
+    # normalization so a complete snapshot closes them exactly like a removed posting (ADR-012
+    # §12); they don't count as "filtered" since that counter is reserved for internships_only.
+    # Only an exact boolean `false` is excluded; anything else malformed fails validation below.
+    def _unlisted(job: Any) -> bool:
+        return isinstance(job, dict) and cast(dict[str, Any], job).get("isListed") is False
 
-    listed: list[Any] = [job for job in board.jobs if _listed(job)]
+    listed: list[Any] = [job for job in board.jobs if not _unlisted(job)]
     return Snapshot(
         items=normalize_each(listed, lambda job: _normalize(job, source), lambda job: job.get("id"))
     )
