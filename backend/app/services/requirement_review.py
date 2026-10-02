@@ -70,15 +70,15 @@ def review_response(db: Session, opportunity: Opportunity) -> RequirementReviewR
 def _merged_body(
     candidate: OpportunityRequirementCandidate, edit: CandidateAccept
 ) -> RequirementBody:
-    """The candidate's proposal with the edit's non-null fields overlaid, validated through the
-    same rules a manually-typed requirement obeys. Omitted edit fields keep the candidate's."""
+    """The candidate's proposal with the edit overlaid, validated through the same rules a
+    manually-typed requirement obeys. Omitted edit fields keep the candidate's; when the edit
+    names applies_at or reference_date, the date is taken from the edit (so it can be cleared)."""
+    dated = bool({"applies_at", "reference_date"} & edit.model_fields_set)
     return RequirementBody(
         requirement_type=candidate.requirement_type,
         value=edit.value if edit.value is not None else candidate.value,
         applies_at=edit.applies_at if edit.applies_at is not None else candidate.applies_at,
-        reference_date=(
-            edit.reference_date if edit.reference_date is not None else candidate.reference_date
-        ),
+        reference_date=edit.reference_date if dated else candidate.reference_date,
     )
 
 
@@ -134,8 +134,7 @@ def apply_review(
     accepts = []
     for item in body.accept:
         candidate = _candidate(item.id)
-        edits = (item.value, item.applies_at, item.reference_date)
-        edited = any(field is not None for field in edits)
+        edited = bool({"value", "applies_at", "reference_date"} & item.model_fields_set)
         try:
             merged = _merged_body(candidate, item)
         except ValidationError as exc:

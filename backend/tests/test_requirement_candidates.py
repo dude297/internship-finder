@@ -30,12 +30,14 @@ from app.models import (
 )
 from app.repositories import evaluate_and_save, latest_evaluation
 from app.schemas.opportunity import OpportunityBody, RequirementBody
+from app.schemas.requirement_review import CandidateAccept, RequirementReviewRequest
 from app.services.opportunities import create_opportunity, update_opportunity
 from app.services.requirement_candidates import (
     invalidate_after_source_change,
     refresh_candidates,
     scan_catalog,
 )
+from app.services.requirement_review import apply_review
 from tests.ingestion_fixtures import GREENHOUSE_BOARD, FakeSource, greenhouse_board, greenhouse_job
 
 pytestmark = pytest.mark.postgres
@@ -182,6 +184,23 @@ def test_accepted_not_duplicated_on_rerun(db: Session) -> None:
     rows = candidates(db, opportunity)
     assert len(rows) == 1
     assert rows[0].review_state == FactReviewState.ACCEPTED
+
+
+def test_accepted_candidate_stays_current_after_its_canonical_requirement_exists(
+    db: Session,
+) -> None:
+    """An unedited accept creates a canonical requirement with the same semantic key; the next
+    refresh must neither duplicate it nor mark the accepted suggestion 'no longer in posting'."""
+    opportunity = make_opportunity(db, AGE_18)
+    refresh_candidates(db, opportunity)
+    (row,) = candidates(db, opportunity)
+    apply_review(db, opportunity, RequirementReviewRequest(accept=[CandidateAccept(id=row.id)]))
+
+    refresh_candidates(db, opportunity)
+    (row,) = candidates(db, opportunity)
+    assert row.review_state == FactReviewState.ACCEPTED
+    assert row.is_current
+    assert len(opportunity.requirements) == 1
 
 
 def test_canonical_equivalent_proposal_is_suppressed(db: Session) -> None:

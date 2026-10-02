@@ -68,10 +68,12 @@ def refresh_candidates(db: Session, opportunity: Opportunity) -> RefreshOutcome:
         key = semantic_key(
             proposal.requirement_type, proposal.value, proposal.applies_at, proposal.reference_date
         )
-        if key in canonical_keys:
-            continue  # already represented by a canonical requirement (ADR-012 §3)
         proposed_keys.add(key)
         existing = existing_by_key.get(key)
+        if existing is None and key in canonical_keys:
+            # Already represented by a canonical requirement (ADR-012 §3): no new row. An
+            # existing candidate with this key (e.g. one accepted unedited) stays current below.
+            continue
         if existing is None:
             # Appended through the relationship (not `db.add`), so `opportunity.requirement_
             # candidates` stays accurate if this function runs again on the same instance.
