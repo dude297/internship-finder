@@ -315,10 +315,26 @@ export function RequirementReviewPanel({
       </section>
     )
 
-  const labels = uniqueLabels(review.candidates)
-  const pending = review.candidates.filter((c) => c.review_state === 'pending')
-  const accepted = review.candidates.filter((c) => c.review_state === 'accepted')
-  const rejected = review.candidates.filter((c) => c.review_state === 'rejected')
+  // An accepted suggestion shows (and edits from) the canonical requirement the owner accepted,
+  // which may be an edited version of the original proposal.
+  const canonical = new Map(review.requirements.map((r) => [r.id, r]))
+  const candidates = review.candidates.map((c) => {
+    const linked = c.accepted_requirement_id
+      ? canonical.get(c.accepted_requirement_id)
+      : undefined
+    return linked
+      ? {
+          ...c,
+          value: linked.value,
+          applies_at: linked.applies_at,
+          reference_date: linked.reference_date,
+        }
+      : c
+  })
+  const labels = uniqueLabels(candidates)
+  const pending = candidates.filter((c) => c.review_state === 'pending')
+  const accepted = candidates.filter((c) => c.review_state === 'accepted')
+  const rejected = candidates.filter((c) => c.review_state === 'rejected')
   const stagedCount = Object.keys(staged).length
   const applyDisabled =
     busy !== null || (stagedCount === 0 && assessmentChoice === 'no_change')
