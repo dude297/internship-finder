@@ -149,7 +149,16 @@ test('requirement intelligence: extraction, review, staleness, and persistence',
   await page.getByRole('button', { name: 'Log out' }).click()
   await login(page)
   await openOpportunity(page, title)
-  await expect(review.getByText('Accepted')).toBeVisible()
+  // The owner's edit (incoming accepted) persisted and is what the Accepted list shows.
+  const acceptedSuggestions = review.getByRole('region', { name: 'Accepted' })
+  await expect(
+    acceptedSuggestions.getByText('undergraduate (incoming students accepted)', {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(
+    acceptedSuggestions.getByText('at least 16 years old', { exact: true }),
+  ).toBeVisible()
   await expect(eligibility.getByText('Eligible', { exact: true }).first()).toBeVisible()
 
   // The posting changes materially (adds a work-authorization sentence); syncing reopens
