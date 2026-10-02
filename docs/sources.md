@@ -18,12 +18,13 @@ Priority 3 is strategically the most important layer for this user, even though 
 
 ## Source Review and Attribution
 
-Last reviewed: 2026-09-27.
+Last reviewed: 2026-10-02 (Ashby added; earlier rows 2026-09-27).
 
 | Source | Role | API / docs | License / usage basis | Attribution | Implemented? | Notes |
 |---|---|---|---|---|---|---|
 | zshah101 Summer/Fall Tech Internships feed | Broad discovery (layer 1), built in | Public JSON feed: `https://zshah101.github.io/Automated-List-Of-Summer-2027-and-Fall-2026-Tech-Internships/api/jobs.json` ([repository](https://github.com/zshah101/Automated-List-Of-Summer-2027-and-Fall-2026-Tech-Internships)) | Repository is MIT-licensed. We consume only the published API; none of its code is copied | Listed here and shown as "Tech Internship Discovery Feed" on every imported record; each record keeps the original posting link | **Yes** (Milestone 3) | Factual listing metadata; external source links retained. Source-provided sponsorship, H-1B, skill, and category classifications are **not** hard eligibility; they stay in the raw payload only |
 | Greenhouse Job Board API | Direct ATS (layer 2), per-company boards | `GET https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true` ([docs](https://developers.greenhouse.io/job-board.html)) | Public GET endpoints, no authentication, intended for publishing a company's board | The configured organization name; original posting link kept | **Yes** (Milestone 3) | Published board data only. The application-submission endpoint is never used |
+| Ashby Job Postings API | Direct ATS (layer 2), per-company hosted job boards | `GET https://api.ashbyhq.com/posting-api/job-board/{board}?includeCompensation=false` ([docs](https://developers.ashbyhq.com/docs/public-job-posting-api)) | Public GET endpoint, no authentication, intended for publishing a company's hosted job board | The configured organization name; original posting link (`jobUrl`) kept | **Yes** (Milestone 6) | Listed postings (`isListed: true`) only. The authenticated Ashby API and application submission are never used |
 | Lever Postings API | Direct ATS (layer 2), per-company sites | `GET https://api.lever.co/v0/postings/{site}?mode=json` and `https://api.eu.lever.co/...` ([docs](https://github.com/lever/postings-api)) | Public postings API, no authentication | The configured organization name; original posting link kept | **Yes** (Milestone 3) | Published postings only. The authenticated Data API and candidate submission are never used |
 | [`SuryaHarikrishnan/2027-internship-tracker`](https://github.com/SuryaHarikrishnan/2027-internship-tracker) | Reference only | — | Its software license doesn't clearly cover the aggregated listing data | — | **No, excluded** | Its listing data must not be imported. Its ideas may be read as a reference; no code is copied |
 | [`pleasedodisturb/kestrel`](https://github.com/pleasedodisturb/kestrel) | Architectural reference only | — | AGPL-3.0 | — | No | No code copying unless licensing is separately reviewed and approved |
@@ -47,7 +48,7 @@ Last reviewed: 2026-09-27.
 - **Source name / key:** `greenhouse:<board token>`; added on the Sources page from a board link (`https://boards.greenhouse.io/<board>` or `https://job-boards.greenhouse.io/<board>`) or a bare token
 - **Stable ID:** the job `id`; identity `greenhouse:<board>:<id>` plus the canonical `absolute_url`
 - **Mapped:** `title`, the configured organization name, `content` (entity-escaped HTML → plain text), `location.name`, `absolute_url`, `first_published` → posted date. `updated_at` is stored as the source update time and is never used as a posting date. Departments, offices, metadata, and the rest stay in the raw payload
-- **Type:** `other`. The API has no reliable internship flag
+- **Type:** `internship` when the title matches the shared internship title matcher (below), otherwise `other`: the API has no structured internship flag (Milestone 6; before that every Greenhouse posting was `other`)
 - **Scope:** **Internships only** by default (title filter, below); **All postings** imports every published posting
 - **Completeness check:** `meta.total` must equal the number of jobs
 
@@ -55,12 +56,27 @@ Last reviewed: 2026-09-27.
 
 - **Source name / key:** `lever:<global|eu>:<site>`; added from `https://jobs.lever.co/<site>` (global), `https://jobs.eu.lever.co/<site>` (EU), or a site name plus region
 - **Stable ID:** the posting `id`; identity `lever:<region>:<site>:<id>` plus the canonical `hostedUrl`
-- **Mapped:** `text` → title, the configured organization name, `description` + `lists` + `additional` (HTML → plain text), `categories.allLocations`/`location`, `hostedUrl`, `workplaceType` (`onsite`/`remote`/`hybrid`; anything else → unknown), `createdAt` → posted date, and `categories.commitment` containing "intern" → internship (otherwise other)
+- **Mapped:** `text` → title, the configured organization name, `description` + `lists` + `additional` (HTML → plain text), `categories.allLocations`/`location`, `hostedUrl`, `workplaceType` (`onsite`/`remote`/`hybrid`; anything else → unknown), `createdAt` → posted date, and `categories.commitment` containing "intern" → internship (otherwise the shared title matcher decides, Milestone 6)
 - **Scope:** **Internships only** by default (title filter, below); **All postings** imports every published posting
 
-### Board scope: internships only (Greenhouse and Lever)
+### Ashby boards (Milestone 6)
 
-Adding a company board shouldn't flood the catalog with full-time jobs ([ADR-010 §10](decisions/ADR-010-fit-scoring-v1.md#10-ats-scope-internships-only-by-default)). Each Greenhouse/Lever source has a scope, chosen when it's added and changeable on the Sources page:
+- **Source name / key:** `ashby:<board>`; added on the Sources page from a hosted board link (`https://jobs.ashbyhq.com/<board>`) or a bare board name. Only `jobs.ashbyhq.com` links are accepted; credentials, ports, other hosts, and malformed paths are refused. The link is parsed into the board name and never requested
+- **Board names:** case-insensitive at the provider (verified 2026-10-01 against the public endpoint: three casings returned the same board), so they're lowercased and stored like Greenhouse tokens and Lever slugs, validated with the same slug pattern, and duplicates are detected on the lowercased name
+- **Endpoint:** `https://api.ashbyhq.com/posting-api/job-board/<board>?includeCompensation=false` (Ashby's public Job Postings API; no key). The authenticated `job.list`/`jobPosting.list` API is never used
+- **Listed postings only:** a job is imported only when `isListed` is exactly `true` (or absent; every observed job carries it). Unlisted jobs are dropped before processing, so a posting that becomes unlisted closes like a removed one on the next complete sync
+- **Stable ID:** the job `id`; identity `ashby:<board>:<id>` plus the canonical `jobUrl`
+- **Mapped:** `title`, the configured organization name, `descriptionPlain` (else `descriptionHtml` → plain text), `location` + `secondaryLocations[].location` joined with " · ", `jobUrl` (else `applyUrl`) as the application URL, `workplaceType` (`OnSite`/`Remote`/`Hybrid`) or, without it, `isRemote: true` → remote, `publishedAt` → posted date, and `employmentType: "Intern"` → internship (otherwise the shared title matcher decides). Department, team, address, and compensation stay out of scope
+- **Scope:** **Internships only** by default; **All postings** imports every listed posting
+- **Completeness check:** none; the endpoint has no total to compare
+
+### Opportunity type (Milestone 6)
+
+One shared rule for every adapter ([ADR-012 §13](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md#13-opportunity-type)): a structured provider field that says intern wins (Lever `commitment`, Ashby `employmentType`, the feed's `program`); otherwise the internship title matcher below; otherwise `other`. Type is a display and discovery aid, never eligibility. Because this changes the normalized form of existing imported postings whose titles match, the first sync after the release reports them as `updated` once; nothing is closed or lost, and since title and description are unchanged it doesn't make any requirement review stale.
+
+### Board scope: internships only (Greenhouse, Lever, and Ashby)
+
+Adding a company board shouldn't flood the catalog with full-time jobs ([ADR-010 §10](decisions/ADR-010-fit-scoring-v1.md#10-ats-scope-internships-only-by-default)). Each Greenhouse, Lever, or Ashby source has a scope, chosen when it's added and changeable on the Sources page:
 
 - **Internships only** (default): a posting is kept only when its **title** contains, as a whole word (case- and Unicode-normalized), `intern`, `interns`, `internship(s)`, `co-op(s)`, `co op`, `coop(s)`, `apprentice(s)`, or `apprenticeship(s)`. Descriptions are never searched, because full-time postings often mention internship programs. `student`, `new grad`, `junior`, and `entry level` don't count. Limitations: an internship titled without those words is filtered, and a title such as "Internship Program Manager" is kept; choose **All postings** for boards where that matters.
 - **All postings:** everything the board publishes.
@@ -73,11 +89,11 @@ Opportunities added through the app keep a `manual` source record without an ext
 
 ## Common Behavior
 
-- **Network safety:** HTTPS to the four allowlisted API hosts only, public addresses only, 5 s connect / 20 s read timeouts, ≤ 3 redirects (each re-checked), ≤ 20 MB responses, ≤ 3 attempts (429/5xx/timeouts; `Retry-After` honored up to 30 s), a descriptive `User-Agent`. User-entered links are parsed into identifiers and never requested.
+- **Network safety:** HTTPS to the five allowlisted API hosts only, public addresses only, 5 s connect / 20 s read timeouts, ≤ 3 redirects (each re-checked), ≤ 20 MB responses, ≤ 3 attempts (429/5xx/timeouts; `Retry-After` honored up to 30 s), a descriptive `User-Agent`. User-entered links are parsed into identifiers and never requested.
 - **Deduplication:** same source + external ID first, then exact identifiers; no fuzzy matching. Conflicting identities are recorded as errors and nothing is merged ([ADR-008 §7](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#7-deduplication-order)).
 - **Failure behavior:** fetch, format, and completeness failures fail the run without changing data. One bad item makes the run `partial` and is recorded; other items still import. Only a complete successful snapshot closes postings it no longer contains. Closed postings reopen if they return.
 - **Fit:** adapters never score. Imported postings are scored by the shared evaluation step like any other opportunity ([scoring.md](scoring.md)); feed hints such as sponsorship, H-1B counts, or skill tags stay discovery metadata in the raw payload and affect neither eligibility nor fit.
-- **Requirements:** imported opportunities start `unassessed` (so at least `needs_verification`) until the owner reviews them. Nothing in a source becomes a hard requirement automatically.
+- **Requirements:** imported opportunities start `unassessed` (so at least `needs_verification`) until the owner reviews them. Nothing in a source becomes a hard requirement automatically. Since Milestone 6, new and materially changed postings get deterministic requirement *suggestions* that change nothing until the owner accepts them ([ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)).
 - **Descriptions:** stored and displayed as plain text only. The original posting link is always kept.
 
 ## Adapter Boundary
@@ -88,7 +104,6 @@ Implemented in `backend/app/ingestion/adapters/` ([ADR-008 §2](decisions/ADR-00
 
 | Source | Layer | Status | Notes |
 |---|---|---|---|
-| Ashby | 2 | Planned | Public job board API; would be one more adapter |
 | University/research programs | 3 | Planned | Often seasonal and deadline-driven; start dates matter for time-aware eligibility |
 | Government / nonprofit STEM programs, fellowships | 3 | Planned | Often high-school or incoming-freshman eligible |
 | Selected company career pages | 4 | Planned | Stable IDs may be missing; would need an exact-URL identity |
