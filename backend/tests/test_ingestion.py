@@ -1091,6 +1091,47 @@ def test_ashby_posting_becoming_unlisted_closes_like_a_removed_posting(
     assert not closed.is_active and closed.closed_at is not None
 
 
+@pytest.mark.parametrize("bad", ["missing", "true", None])
+def test_ashby_malformed_islisted_makes_the_run_partial_and_closes_nothing(
+    db: Session, ashby_source: IngestionSource, web: FakeSource, bad: Any
+) -> None:
+    web.json(ASHBY_URL, ashby_board(ashby_job(), ashby_job("b")))
+    sync(db, ashby_source, web)
+
+    # Schema drift on one item: the valid one still processes, but nothing unseen closes.
+    drifted = ashby_job("b")
+    if bad == "missing":
+        del drifted["isListed"]
+    else:
+        drifted["isListed"] = bad
+    web.json(ASHBY_URL, ashby_board(ashby_job(), drifted))
+    run = sync(db, ashby_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert run.closed_count == 0
+    assert counts(run) == {"fetched": 2, "unchanged": 1, "invalid": 1}
+    db.expire_all()
+    assert record(db, ashby_source, ASHBY_JOB_ID).is_active
+    assert record(db, ashby_source, "b").is_active
+
+
+def test_ashby_islisted_dropped_board_wide_closes_nothing(
+    db: Session, ashby_source: IngestionSource, web: FakeSource
+) -> None:
+    web.json(ASHBY_URL, ashby_board(ashby_job()))
+    sync(db, ashby_source, web)
+
+    job = ashby_job()
+    del job["isListed"]
+    web.json(ASHBY_URL, ashby_board(job))
+    run = sync(db, ashby_source, web)
+
+    assert run.status is IngestionRunStatus.PARTIAL
+    assert run.closed_count == 0
+    db.expire_all()
+    assert record(db, ashby_source, ASHBY_JOB_ID).is_active
+
+
 def test_ashby_internships_only_filters_by_title(
     db: Session, ashby_source: IngestionSource, web: FakeSource
 ) -> None:

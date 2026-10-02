@@ -680,25 +680,27 @@ def test_ashby_isremote_fallback_without_workplace_type() -> None:
     assert off.remote_mode is None  # isRemote: false doesn't mean on-site
 
 
-def test_ashby_unlisted_jobs_are_excluded() -> None:
+def test_ashby_only_exactly_listed_jobs_are_imported_and_false_is_excluded() -> None:
     snapshot = ashby.parse(
-        ashby_board(
-            ashby_job("a", isListed=True),
-            ashby_job("b", isListed=False),
-            ashby_job("c", isListed="false"),
-            ashby_job("d", isListed=None),
-        ),
-        ASHBY_SOURCE,
+        ashby_board(ashby_job("a", isListed=True), ashby_job("b", isListed=False)), ASHBY_SOURCE
     )
-    [item] = only_items(snapshot.items)
-    assert item.external_id == "a"
+    # "b" is dropped outright (not an error), so a complete snapshot closes it.
+    assert [type(i).__name__ for i in snapshot.items] == ["NormalizedOpportunity"]
+    assert snapshot.items[0].external_id == "a"
 
 
-def test_ashby_missing_islisted_is_treated_as_listed() -> None:
+@pytest.mark.parametrize("value", ["true", "false", None, 1, 0, [], {}])
+def test_ashby_malformed_islisted_is_an_item_error_never_coerced(value: Any) -> None:
+    [error] = ashby.parse(ashby_board(ashby_job("x", isListed=value)), ASHBY_SOURCE).items
+    assert isinstance(error, ItemError)
+    assert error.external_id == "x" and "isListed" in error.message
+
+
+def test_ashby_missing_islisted_is_an_item_error() -> None:
     job = ashby_job()
     del job["isListed"]
-    [item] = only_items(ashby.parse(ashby_board(job), ASHBY_SOURCE).items)
-    assert item.external_id == ASHBY_JOB_ID
+    [error] = ashby.parse(ashby_board(job), ASHBY_SOURCE).items
+    assert isinstance(error, ItemError) and "isListed" in error.message
 
 
 def test_ashby_bad_items_are_item_errors_not_snapshot_failures() -> None:
