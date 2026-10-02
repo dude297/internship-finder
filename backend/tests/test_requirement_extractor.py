@@ -86,6 +86,31 @@ def test_citizen_or_permanent_resident_is_work_authorization_not_citizenship() -
     assert proposal.requirement_type is RequirementType.WORK_AUTHORIZATION
 
 
+def test_citizen_or_alternative_status_is_never_citizenship() -> None:
+    for text in (
+        "Must be a U.S. citizen or green card holder.",
+        "Applicants must be U.S. citizens or permanent residents.",
+        "Must be a U.S. citizen or lawful permanent resident.",
+        "U.S. citizens only, or nationals of partner countries.",
+    ):
+        assert all(p.requirement_type is not RequirementType.CITIZENSHIP for p in extract(text))
+    (proposal,) = extract("Applicants must be U.S. citizens or permanent residents.")
+    assert proposal.requirement_type is RequirementType.WORK_AUTHORIZATION
+
+
+def test_completed_education_level_is_not_enrollment() -> None:
+    for text in (
+        "Must be a graduate of an accredited program.",
+        "Must be a high school graduate.",
+        "Must be a high school diploma holder.",
+    ):
+        assert extract(text) == (), text
+    (proposal,) = extract("Must be a graduate student.")
+    assert proposal.value == {"levels": ["graduate"], "accepts_incoming": False}
+    (proposal,) = extract("Applicants must be currently enrolled in high school.")
+    assert proposal.value == {"levels": ["high_school"], "accepts_incoming": False}
+
+
 def test_us_person_proposes_nothing() -> None:
     assert extract("Applicants should be a U.S. person.") == ()
 
