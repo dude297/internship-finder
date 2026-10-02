@@ -22,24 +22,33 @@ from typing import Any
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, delete, event
+from sqlalchemy import create_engine, delete, event, select
 from sqlalchemy.orm import Session
 
 from app.enums import (
     ExtractionMethod,
+    FactReviewState,
     OpportunityType,
     RemoteMode,
     RemotePreference,
     RequirementsAssessmentStatus,
     RequirementType,
 )
-from app.models import Opportunity, OpportunityRequirement, Profile, ProfileSource
+from app.models import (
+    Opportunity,
+    OpportunityRequirement,
+    OpportunityRequirementCandidate,
+    Profile,
+    ProfileSource,
+)
 from app.schemas.profile import MatchItem, MatchProfile
 from app.schemas.profile_source import AcceptItem, ReviewRequest
+from app.schemas.requirement_review import CandidateAccept, RequirementReviewRequest
 from app.services.discovery import Filters, list_page
 from app.services.match_profile import save_match_profile
 from app.services.profile_sources import create_source, get_source, review_source
 from app.services.requirement_candidates import scan_catalog
+from app.services.requirement_review import apply_review
 
 OPPORTUNITIES = 1_100
 # A fraction of postings carry extractable sentences, exercising the requirement extractor.
@@ -179,6 +188,43 @@ def main() -> None:
 
         timed(db, "scan_catalog (cold, ~1/5 extractable)", lambda: scan_catalog(db))
         timed(db, "scan_catalog (idempotent rerun)", lambda: scan_catalog(db))
+
+        # Requirement review discovery (ADR-012 §8): pending counts come from one aggregate
+        # subquery, so the statement count must not grow with the page size.
+        for size in (5, 50):
+            timed(
+                db,
+                f"needs_review list page ({size})",
+                lambda size=size: len(
+                    list_page(db, Filters(requirement_review="needs_review"), size, 0)[0]
+                ),
+            )
+        timed(
+            db,
+            "deadline sort list page (50)",
+            lambda: len(list_page(db, Filters(), 50, 0, "deadline")[0]),
+        )
+
+        # One opportunity's review batch: one evaluation of that opportunity, never a catalog pass.
+        target = db.scalars(
+            select(Opportunity)
+            .join(OpportunityRequirementCandidate)
+            .where(OpportunityRequirementCandidate.review_state == FactReviewState.PENDING)
+            .limit(1)
+        ).first()
+        assert target is not None
+        pending = [
+            c for c in target.requirement_candidates if c.review_state is FactReviewState.PENDING
+        ]
+        request = RequirementReviewRequest(
+            accept=[CandidateAccept(id=c.id) for c in pending],
+            assessment_status=RequirementsAssessmentStatus.COMPLETE,
+        )
+        timed(
+            db,
+            f"requirement review batch ({len(pending)} accepted)",
+            lambda: apply_review(db, target, request).evaluated,
+        )
 
 
 if __name__ == "__main__":
