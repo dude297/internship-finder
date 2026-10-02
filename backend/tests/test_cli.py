@@ -291,3 +291,29 @@ def test_database_unreachable_exits_two_without_leaking_the_url(
     assert password not in combined
     assert "if_m6_unreachable" not in combined
     assert combined.strip() == cli.DB_ERROR_MESSAGE
+
+
+def test_scheduled_sync_refuses_a_database_behind_the_code(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Merged code on an unmigrated database must fail the workflow visibly (exit 2), not run a
+    sync whose items all fail into a `partial` run that exits 0."""
+
+    def behind(_connection: object) -> bool:
+        return False
+
+    monkeypatch.setattr(cli, "schema_is_current", behind)
+    web = FakeSource()
+    web.json(FEED_URL, feed(feed_job("a")))
+    use_fake_network(monkeypatch, web)
+
+    code = cli.main(["sync-sources", "--scheduled"])
+
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "migration head" in captured.err
+    assert db.scalars(select(IngestionRun)).first() is None  # nothing was attempted
+
+
+def test_schema_check_matches_the_migrated_test_database(db: Session) -> None:
+    assert cli.schema_is_current(db.connection())

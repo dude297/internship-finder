@@ -94,6 +94,18 @@ def test_persist_credentials_disabled_on_checkout() -> None:
     assert "persist-credentials: false" in _text()
 
 
+def test_actions_are_pinned_to_commit_shas() -> None:
+    """The job holds the production database secret: a moved tag must not change what runs."""
+    uses = re.findall(r"uses:\s*(\S+)", _text())
+    assert uses
+    for action in uses:
+        assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", action), action
+
+
+def test_scheduled_run_checks_the_schema_first() -> None:
+    assert "sync-sources --scheduled" in _text()
+
+
 def test_fails_fast_without_echoing_when_secret_is_empty() -> None:
     text = _text()
     assert "DATABASE_URL" in text

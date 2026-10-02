@@ -17,8 +17,8 @@ Source sync (ADR-008), the same pipeline the API uses:
 Prints run counts and elapsed time only (never payloads, headers, or the database URL).
 
 Exit codes: 0 every attempted source finished success/no_change/partial; 1 at least one source
-failed; 2 an operational error (the database is unreachable or misconfigured) before any source
-could be attempted.
+failed; 2 an operational error before any source could be attempted (the database is unreachable
+or misconfigured, or, with --scheduled, its schema isn't at this code's migration head).
 
 Requirement candidate catalog scan (ADR-012 §9):
 
@@ -34,8 +34,12 @@ import sys
 import time
 import uuid
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
-from sqlalchemy import select
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import Connection, select
 from sqlalchemy.exc import ArgumentError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -113,11 +117,31 @@ def _sync_source(reference: str) -> int:
         return 2
 
 
+# backend/alembic, next to the `app` package (the scheduled workflow runs from backend/).
+ALEMBIC_DIR = Path(__file__).resolve().parents[1] / "alembic"
+SCHEMA_BEHIND_MESSAGE = (
+    "error: the database schema isn't at this code's migration head; migrate before syncing."
+)
+
+
+def schema_is_current(connection: Connection) -> bool:
+    """Whether the database is at the code's single Alembic head. The scheduled sync checks this
+    first: new code on an unmigrated database would fail item by item (a `partial` run, exit 0)
+    instead of failing visibly."""
+    config = Config()
+    config.set_main_option("script_location", str(ALEMBIC_DIR))
+    head = ScriptDirectory.from_config(config).get_current_head()
+    return MigrationContext.configure(connection).get_current_revision() == head
+
+
 def _sync_sources(*, scheduled: bool) -> int:
     started = time.monotonic()
     skipped: list[str] = []
     try:
         with Session(get_engine(), expire_on_commit=False) as db:
+            if scheduled and not schema_is_current(db.connection()):
+                print(SCHEMA_BEHIND_MESSAGE, file=sys.stderr)
+                return 2
             runs = sync_enabled_sources(
                 db,
                 transport=configured_transport(),
