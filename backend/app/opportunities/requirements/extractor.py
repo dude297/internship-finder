@@ -117,7 +117,10 @@ _EDU_RE = re.compile(
     r"\b(?:must be (?:an? )?|currently enrolled (?:in )?(?:an? )?|must be enrolled in an? )"
     r"(?P<incoming>incoming |rising |entering )?"
     r"(?P<level>high school|undergraduate|graduate)"
-    r"(?:\s+student[s]?)?(?:\s+program)?\b",
+    # The level must name enrollment: "... student(s)" / "... program", or end the clause
+    # ("currently enrolled in high school."). "a graduate of", "a high school graduate", and
+    # "a high school diploma" describe a finished level, never current enrollment.
+    r"(?:\s+(?:students?|programs?)\b|(?=\s*(?:[.,;:]|only\b|$)))",
     re.IGNORECASE,
 )
 
@@ -150,7 +153,18 @@ _CITIZENSHIP_RE = re.compile(
 )
 
 
+# "citizen or permanent resident / green card holder / national ..." is a broader requirement
+# than citizenship: never reduce it to citizenship (it's a work-authorization proposal instead).
+_ALTERNATIVE_STATUS_RE = re.compile(
+    r"\bor\b[^.]*\b(?:permanent residents?|green card|residents?|nationals?|refugees?|"
+    r"asylees?|visa)\b",
+    re.IGNORECASE,
+)
+
+
 def _match_citizenship(sentence: str) -> dict[str, Any] | None:
+    if _ALTERNATIVE_STATUS_RE.search(sentence):
+        return None
     return {"countries": ["US"]} if _CITIZENSHIP_RE.search(sentence) else None
 
 
@@ -159,7 +173,8 @@ def _match_citizenship(sentence: str) -> dict[str, Any] | None:
 _WORK_AUTH_RE = re.compile(
     r"\bauthorized to work in the united states\b"
     r"|\bwork authorization(?: is)? required\b"
-    r"|\bcitizen or permanent resident\b",
+    r"|\bcitizens? or (?:lawful )?permanent residents?\b"
+    r"|\bcitizens? or green card holders?\b",
     re.IGNORECASE,
 )
 
