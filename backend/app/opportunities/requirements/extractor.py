@@ -2,7 +2,8 @@
 
 Pure: no network, no AI, no clock, no randomness. Same input always yields the same output.
 Precision over recall: a sentence is only turned into a proposal when it explicitly states a
-hard requirement in one of the forms below; anything hedged, vague, or ambiguous is left alone.
+hard requirement in one of the forms below; anything hedged, negated, conditional on a range,
+listed with alternatives, or otherwise ambiguous is left alone.
 """
 
 import re
@@ -41,15 +42,17 @@ class Proposal(BaseModel):
 
 
 # --- sentence splitting -------------------------------------------------------------------------
-# "U.S." is the only abbreviation the extractor's own patterns care about; protecting its periods
-# keeps "Must be a U.S. citizen." from splitting into two fragments.
+# Sentences end at . ! ? and also at line breaks and bullets: descriptions arrive as plain text
+# where each <li> is its own line without a period, and one bullet list must not become one
+# "sentence" (one hedge word in it would silence every bullet, and only one proposal per sentence
+# is made). "U.S." is protected so "Must be a U.S. citizen." stays one sentence.
 
 _US_PLACEHOLDER = ""  # a Unicode private-use codepoint: won't collide with real text
-_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+|\s*[\r\n]+\s*|\s*[•▪◦]\s*")
 
 
 def _protect_abbreviations(text: str) -> str:
-    return re.sub(r"\bU\.S\.", f"U{_US_PLACEHOLDER}S{_US_PLACEHOLDER}", text)
+    return re.sub(r"\bU\.S\.", f"U{_US_PLACEHOLDER}S{_US_PLACEHOLDER}", text, flags=re.IGNORECASE)
 
 
 def _restore_abbreviations(text: str) -> str:
@@ -67,51 +70,69 @@ def _sentences(text: str | None) -> list[str]:
     ]
 
 
-# --- hedge / preference / vague-audience filter -------------------------------------------------
-# Any of these anywhere in a sentence means the sentence is never a hard requirement: ADR-012 §5.
+# --- sentence-level filters -----------------------------------------------------------------------
+# Any of these anywhere in a sentence means it's never a hard requirement (ADR-012 §5): hedges and
+# preferences, and negations ("No security clearance is required", "must not be enrolled",
+# "non-U.S. citizens", "are not eligible") or upper bounds ("18 or younger") that would invert
+# the meaning of an otherwise matching phrase.
 
 _HEDGE_RE = re.compile(
     r"\b(?:preferred|nice to have|bonus|ideally|ideal|typically|most|usually|encouraged|"
     r"welcome)\b|\bplus\b",
     re.IGNORECASE,
 )
+_NEGATION_RE = re.compile(
+    r"\b(?:not|no|never|cannot|can't|don't|doesn't|isn't|aren't|won't|nor|neither|"
+    r"ineligible)\b|\bnon[-\s]|\bor (?:younger|under|less)\b|\bunder the age\b|\bunder \d",
+    re.IGNORECASE,
+)
 
 
-def _is_hedged(sentence: str) -> bool:
-    return bool(_HEDGE_RE.search(sentence))
+def _skipped(sentence: str) -> bool:
+    return bool(_HEDGE_RE.search(sentence) or _NEGATION_RE.search(sentence))
+
+
+Match = tuple[dict[str, Any], int]  # (value, position of the matched phrase in the sentence)
 
 
 # --- minimum_age ----------------------------------------------------------------------------------
+# The number must be an age: followed by "years" or ending the clause. "at least 18 months into
+# the degree", "at least 20 hours per week", and "at least 16 weeks" are never ages.
 
+# Or a date phrase follows: "at least 18 at the time of application", "at least 16 by June 1".
+_AGE_END = r"(?:\s+years?\b|(?=\s*(?:[.,;:)]|$|(?:at|by|on|as of|when|before)\b)))"
 _AGE_PATTERNS = (
-    re.compile(r"\bmust be at least (\d{1,3})\b", re.IGNORECASE),
-    re.compile(r"\bminimum age[: ]+(\d{1,3})\b", re.IGNORECASE),
+    re.compile(r"\bmust be at least (\d{1,3})" + _AGE_END, re.IGNORECASE),
+    re.compile(r"\bminimum age(?: of| is|:)?\s+(\d{1,3})" + _AGE_END, re.IGNORECASE),
     re.compile(r"\bmust be (\d{1,3}) years (?:of age|old) or older\b", re.IGNORECASE),
     re.compile(r"\bapplicants must be (?:at least )?(\d{1,3}) years of age\b", re.IGNORECASE),
 )
 
 
-def _match_minimum_age(sentence: str) -> dict[str, Any] | None:
+def _match_minimum_age(sentence: str) -> Match | None:
     for pattern in _AGE_PATTERNS:
         match = pattern.search(sentence)
         if match is None:
             continue
         years = int(match.group(1))
         if MIN_PLAUSIBLE_AGE <= years <= MAX_PLAUSIBLE_AGE:
-            return {"years": years}
+            return {"years": years}, match.start()
         return None  # out-of-range age: the sentence is about age, but not a usable proposal
     return None
 
 
 # --- education --------------------------------------------------------------------------------
 # Mandatory enrollment language only; "senior", "teens", "young people" etc. never match because
-# they aren't accepted lead-ins or level words.
+# they aren't accepted lead-ins or level words. A sentence naming more than one level ("a high
+# school student, undergraduate, or graduate student") is a list of alternatives that one level
+# would misrepresent: skipped.
 
 _EDU_LEVELS = {
     "high school": EducationLevel.HIGH_SCHOOL,
     "undergraduate": EducationLevel.UNDERGRADUATE,
     "graduate": EducationLevel.GRADUATE,
 }
+_LEVEL_WORD_RE = re.compile(r"\b(high school|undergraduate|graduate)\b", re.IGNORECASE)
 
 _EDU_RE = re.compile(
     r"\b(?:must be (?:an? )?|currently enrolled (?:in )?(?:an? )?|must be enrolled in an? )"
@@ -133,17 +154,22 @@ _EDU_INCOMING_RE = re.compile(
 )
 
 
-def _match_education(sentence: str) -> dict[str, Any] | None:
+def _match_education(sentence: str) -> Match | None:
+    if len({word.lower() for word in _LEVEL_WORD_RE.findall(sentence)}) > 1:
+        return None
     match = _EDU_RE.search(sentence) or _EDU_INCOMING_RE.search(sentence)
     if match is None:
         return None
     level = _EDU_LEVELS[match.group("level").lower()]
-    return {"levels": [level.value], "accepts_incoming": bool(match.group("incoming"))}
+    return {"levels": [level.value], "accepts_incoming": bool(match.group("incoming"))}, (
+        match.start()
+    )
 
 
 # --- citizenship ------------------------------------------------------------------------------
-# Only "U.S." has a mapping in v1 (ADR-012 §5: "a small explicit table"). "U.S. person" and
-# "citizen or permanent resident" are deliberately excluded: different legal concepts.
+# Only "U.S." has a mapping in v1 (ADR-012 §5: "a small explicit table"). Any sentence that also
+# names another status ("or permanent resident", "U.S. national", "DACA recipient", a visa) is a
+# broader requirement than citizenship: never reduced to it. "U.S. person" never matches.
 
 _CITIZENSHIP_RE = re.compile(
     r"\bmust be an? (?:U\.S\.|united states) citizen\b"
@@ -151,27 +177,24 @@ _CITIZENSHIP_RE = re.compile(
     r"|\b(?:U\.S\.|united states) citizenship(?: is)? required\b",
     re.IGNORECASE,
 )
-
-
-# "citizen or permanent resident / green card holder / national ..." is a broader requirement
-# than citizenship: never reduce it to citizenship (it's a work-authorization proposal instead).
-_ALTERNATIVE_STATUS_RE = re.compile(
-    r"\bor\b[^.]*\b(?:permanent residents?|green card|residents?|nationals?|refugees?|"
-    r"asylees?|visa)\b",
+_OTHER_STATUS_RE = re.compile(
+    r"\b(?:permanent residents?|green card|residents?|nationals?|refugees?|asylees?|visas?|"
+    r"daca|tps|lawful)\b",
     re.IGNORECASE,
 )
 
 
-def _match_citizenship(sentence: str) -> dict[str, Any] | None:
-    if _ALTERNATIVE_STATUS_RE.search(sentence):
+def _match_citizenship(sentence: str) -> Match | None:
+    if _OTHER_STATUS_RE.search(sentence):
         return None
-    return {"countries": ["US"]} if _CITIZENSHIP_RE.search(sentence) else None
+    match = _CITIZENSHIP_RE.search(sentence)
+    return ({"countries": ["US"]}, match.start()) if match else None
 
 
 # --- work_authorization -------------------------------------------------------------------------
 
 _WORK_AUTH_RE = re.compile(
-    r"\bauthorized to work in the united states\b"
+    r"\bauthorized to work in the (?:united states|U\.S\.)"
     r"|\bwork authorization(?: is)? required\b"
     r"|\bcitizens? or (?:lawful )?permanent residents?\b"
     r"|\bcitizens? or green card holders?\b",
@@ -179,22 +202,25 @@ _WORK_AUTH_RE = re.compile(
 )
 
 
-def _match_work_authorization(sentence: str) -> dict[str, Any] | None:
-    return {"description": WORK_AUTH_LABEL} if _WORK_AUTH_RE.search(sentence) else None
+def _match_work_authorization(sentence: str) -> Match | None:
+    match = _WORK_AUTH_RE.search(sentence)
+    return ({"description": WORK_AUTH_LABEL}, match.start()) if match else None
 
 
 # --- other --------------------------------------------------------------------------------------
-# Used sparingly (ADR-012 §5): only hard requirements no evaluator rule covers.
+# Used sparingly (ADR-012 §5): only hard requirements no evaluator rule covers, and only with
+# mandatory wording ("must have/hold/possess", "requires", "... is required").
 
 _OTHER_RE = re.compile(
-    r"\b(?:must have an? |requires? an? )?(?:active )?security clearance"
-    r"(?: required| is required)?\b",
+    r"\b(?:must (?:have|hold|possess)|requires?) an? (?:active )?(?:\w+ )?security clearance\b"
+    r"|\b(?:active )?security clearance (?:is )?required\b",
     re.IGNORECASE,
 )
 
 
-def _match_other(sentence: str) -> dict[str, Any] | None:
-    return {"description": OTHER_SECURITY_CLEARANCE_LABEL} if _OTHER_RE.search(sentence) else None
+def _match_other(sentence: str) -> Match | None:
+    match = _OTHER_RE.search(sentence)
+    return ({"description": OTHER_SECURITY_CLEARANCE_LABEL}, match.start()) if match else None
 
 
 # --- applies_at -----------------------------------------------------------------------------------
@@ -212,7 +238,7 @@ def _applies_at(sentence: str) -> RequirementAppliesAt:
     )
 
 
-def _match_sentence(sentence: str) -> tuple[RequirementType, dict[str, Any]] | None:
+def _match_sentence(sentence: str) -> tuple[RequirementType, Match] | None:
     """At most one proposal per sentence. Order matches the ADR-012 §5 table."""
     for requirement_type, matcher in (
         (RequirementType.MINIMUM_AGE, _match_minimum_age),
@@ -221,10 +247,22 @@ def _match_sentence(sentence: str) -> tuple[RequirementType, dict[str, Any]] | N
         (RequirementType.WORK_AUTHORIZATION, _match_work_authorization),
         (RequirementType.OTHER, _match_other),
     ):
-        value = matcher(sentence)
-        if value is not None:
-            return requirement_type, value
+        found = matcher(sentence)
+        if found is not None:
+            return requirement_type, found
     return None
+
+
+def _excerpt(sentence: str, position: int) -> str:
+    """The sentence, or a window of at most MAX_EXCERPT_CHARS around the matched phrase, so the
+    evidence always shows what the proposal is based on."""
+    if len(sentence) <= MAX_EXCERPT_CHARS:
+        return sentence
+    # Room for an ellipsis on each cut side; the match starts a third of the way in.
+    width = MAX_EXCERPT_CHARS - 2
+    start = max(0, min(position - width // 3, len(sentence) - width))
+    end = start + width
+    return ("…" if start else "") + sentence[start:end] + ("…" if end < len(sentence) else "")
 
 
 def _valid_value(requirement_type: RequirementType, value: dict[str, Any]) -> dict[str, Any] | None:
@@ -244,12 +282,12 @@ def extract_requirements(inputs: ExtractionInput) -> tuple[Proposal, ...]:
     seen_keys: set[str] = set()
 
     for sentence in (*_sentences(inputs.title), *_sentences(inputs.description)):
-        if _is_hedged(sentence):
+        if _skipped(sentence):
             continue
         match = _match_sentence(sentence)
         if match is None:
             continue
-        requirement_type, raw_value = match
+        requirement_type, (raw_value, position) = match
         value = _valid_value(requirement_type, raw_value)
         if value is None:
             continue
@@ -264,8 +302,10 @@ def extract_requirements(inputs: ExtractionInput) -> tuple[Proposal, ...]:
                 value=value,
                 applies_at=applies_at,
                 reference_date=None,
-                source_text=sentence[:MAX_EXCERPT_CHARS],
+                source_text=_excerpt(sentence, position),
             )
         )
+        if len(proposals) == MAX_PROPOSALS:
+            break
 
-    return tuple(proposals[:MAX_PROPOSALS])
+    return tuple(proposals)
