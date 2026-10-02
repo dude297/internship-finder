@@ -65,7 +65,7 @@ A pure function (`app/opportunities/requirements/extractor.py`): no network, no 
 | `work_authorization` | "must be authorized to work in the United States", "work authorization required", "citizen or permanent resident" | `{"description": <fixed canonical label>}`; always `needs_verification` (ELIG-REQ-001) |
 | `other` | sparingly, for explicit hard requirements no evaluator handles (for example a required security clearance) | `{"description": <fixed canonical label>}` |
 
-Never extracted: sentences with preference or hedge words (`preferred`, `nice to have`, `bonus`, `ideal`, `ideally`, `typically`, `most`, `usually`, `encouraged`, `welcome`, `plus`); vague audiences ("young people", "teens", "high-school age"); soft skills ("strong communication", "team player"); "U.S. person" or "citizen or permanent resident" as citizenship (different legal concepts: the latter is a work-authorization proposal). "High school senior" is never turned into an incoming undergraduate.
+Never extracted: sentences with preference or hedge words (`preferred`, `nice to have`, `bonus`, `ideal`, `ideally`, `typically`, `most`, `usually`, `encouraged`, `welcome`, `plus`); vague audiences ("young people", "teens", "high-school age"); soft skills ("strong communication", "team player"); "U.S. person" or "citizen or permanent resident" as citizenship (different legal concepts: the latter is a work-authorization proposal). "High school senior" is never turned into an incoming undergraduate. Also skipped (found by the pre-PR adversarial review): any sentence with a negation or upper bound (`not`, `no`, `never`, `don't`, `non-`, `not eligible`, `or younger`, `under 18`), so "No security clearance is required" or "18 years of age or younger" never invert into a requirement; a number that isn't an age ("at least 18 months", "20 hours per week": the age must be followed by "years", the end of the clause, or a date phrase); any citizenship sentence that also names another status (permanent resident, national, DACA, a visa), wherever the "U.S." periods fall; and an education sentence listing more than one level. Sentences end at line breaks and bullets too, so each bullet of a plain-text list is judged on its own, and a long sentence's excerpt is a window around the matched phrase.
 
 `applies_at` defaults to `program_start`. "at the time of application" / "by the application deadline" → `application`. Explicit calendar dates aren't parsed in v1.
 
@@ -74,7 +74,7 @@ Never extracted: sentences with preference or hedge words (`preferred`, `nice to
 **Refresh** (one function, `refresh_candidates`): extract; for each proposal, an existing candidate with the same key becomes current (a pending one also gets the new excerpt and extractor version); a new key becomes `pending`. Existing candidates not proposed: `pending` ones are deleted, reviewed ones stay with `is_current = false`. Canonical requirements are never deleted or changed by refresh. Refresh runs:
 
 - for a new imported opportunity;
-- for an imported opportunity whose canonical fields a sync rewrote, only when the extraction input fingerprint changed (not on `last_seen_at`, fetch time, ETag, or other field changes);
+- for an imported opportunity whose canonical fields a sync rewrote, only when the extraction input fingerprint (whitespace-collapsed) changed (not on `last_seen_at`, fetch time, ETag, formatting, or other field changes). Only one record rewrites an opportunity's canonical fields: the earliest-seen active automated record. Before Milestone 6 any source's changed record rewrote them, so two sources describing one posting differently (the discovery feed has no description; a board does) overwrote each other on every change and would make a reviewed posting look changed each time. When the owning record closes, the next earliest active one takes over;
 - for a manual create or edit through the API;
 - on the owner's explicit "refresh suggestions" request;
 - from the catalog scan (§9).
@@ -104,7 +104,9 @@ Private, CSRF-protected like every mutation ([ADR-007](ADR-007-single-user-auth-
 A review batch (`accept` with optional edits, `reject`, optional `assessment_status`) is one transaction. Everything is validated first; any failure (unknown or foreign ID, an ID twice, an invalid edited value, an empty request) changes nothing (`404`/`422`).
 
 - **Accept** (pending or rejected candidate): creates one canonical requirement with the candidate's value or the validated edit (`RequirementBody` rules), `extraction_method = deterministic_parser`, the candidate's `source_text`, `extractor_name`, `extractor_version`; links it. Accepting an already accepted candidate with an edit updates its linked requirement (or recreates it if the owner deleted it).
-- **Reject** (pending or accepted): an accepted candidate's linked canonical requirement is deleted. Rejecting never implies completeness.
+- **Reject** (pending or accepted): an accepted candidate's linked canonical requirement is deleted. Rejecting never implies completeness, and removing a requirement from a `complete` set without an explicit `assessment_status` downgrades it (to `partial`, or `unassessed` if none remain): completeness was asserted for the larger set, and removing a requirement must never silently make eligibility more permissive.
+- **No duplicates**: accepting a suggestion whose (possibly edited) meaning already exists as a canonical requirement links to that row instead of adding another, and a refresh drops pending suggestions the owner has since entered by hand. When `PUT /api/opportunities/{id}` replaces the requirement rows, accepted suggestions are re-linked to the new row with the same meaning, so a later reject or edit still finds it.
+- **Concurrency**: both mutating review routes lock the opportunity row for the transaction, so two batches can't both accept the same suggestion.
 - **Assessment**: an explicit `assessment_status` is applied as given. `complete` with zero requirements is allowed: the owner asserts there are none. Without it, accepting while `unassessed` moves to `partial`; nothing else changes the status. Extraction alone never changes it.
 - **Evaluation**: after the batch, `evaluate_if_changed` runs once for this opportunity. Reject-only on pending candidates changes no input and appends nothing. Fit isn't touched beyond what the shared evaluation recomputes; there's never a catalog pass.
 
@@ -136,7 +138,7 @@ One canonical matcher: a structured provider field that says intern (Lever `comm
 
 ### 14. Deadlines
 
-The list sorts by `application_deadline` (nulls last) and filters `deadline_within` (7, 14, 30 days, inclusive of today) and `has_deadline`. "Today" is the client's local date passed as `today`, falling back to the server's UTC date, so results are deterministic and testable. "Closing soon" means a known deadline 0–7 days away; never for a null deadline. No notifications.
+The `deadline` sort lists upcoming deadlines soonest first, then unknown deadlines, then passed ones (least actionable). The list and filters `deadline_within` (7, 14, 30 days, inclusive of today) and `has_deadline`. "Today" is the client's local date passed as `today` (bounded to years 2000–2999 so date arithmetic can't overflow), falling back to the server's UTC date, so results are deterministic and testable. "Closing soon" means a known deadline 0–7 days away; never for a null deadline. No notifications.
 
 ## Consequences
 
