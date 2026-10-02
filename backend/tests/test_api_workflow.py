@@ -301,6 +301,8 @@ def test_list_shows_latest_status_and_tracking(client: TestClient) -> None:
         "origin",
         "availability",
         "source_names",
+        "pending_requirement_count",
+        "requirements_stale",
     }
     assert listed["First Synthetic"]["origin"] == "manual"
     assert listed["First Synthetic"]["availability"] == "manual"

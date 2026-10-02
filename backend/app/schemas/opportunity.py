@@ -70,6 +70,8 @@ class RequirementResponse(BaseModel):
     reference_date: date | None
     source_text: str | None
     extraction_method: ExtractionMethod
+    extractor_name: str | None
+    extractor_version: str | None
 
 
 class OpportunityFields(BaseModel):
@@ -167,6 +169,9 @@ class OpportunitySummary(BaseModel):
     origin: Origin
     availability: Availability
     source_names: list[str]
+    # ADR-012 §8: one aggregate subquery, never per-row.
+    pending_requirement_count: int = 0
+    requirements_stale: bool = False
 
 
 class OpportunityPage(BaseModel):
@@ -212,6 +217,11 @@ class OpportunityDetail(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     manually_curated_at: datetime | None
+    # ADR-012 §6: set when a source update changed the posting text after review; cleared by the
+    # owner's next review batch.
+    requirements_stale_since: datetime | None = None
+    # Pending requirement candidates for this opportunity (ADR-012 §8).
+    pending_requirement_count: int = 0
     requirements: list[RequirementResponse]
     application: ApplicationResponse | None
     origin: Origin = "manual"
