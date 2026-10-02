@@ -12,6 +12,7 @@ from app.schemas.requirement_review import (
     RequirementReviewResponse,
     RequirementReviewResult,
 )
+from app.services.requirement_candidates import refresh_candidates
 from app.services.requirement_review import (
     InvalidReview,
     UnknownCandidate,
@@ -43,11 +44,6 @@ def refresh_requirement_review(
     """Re-extract candidates now (ADR-012 §6). Never evaluates: candidates don't affect
     eligibility."""
     opportunity = _load(db, opportunity_id)
-    # Agent 2's extractor/candidate service; not in this worktree (see ADR-012 §6, §9).
-    from app.services.requirement_candidates import (  # pyright: ignore[reportMissingImports]
-        refresh_candidates,  # pyright: ignore[reportUnknownVariableType]
-    )
-
     refresh_candidates(db, opportunity)
     db.commit()
     return review_response(db, opportunity)
