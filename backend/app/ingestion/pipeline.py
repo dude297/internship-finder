@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import httpx2
-from sqlalchemy import select, tuple_, update
+from sqlalchemy import or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
@@ -222,6 +222,27 @@ def _has_record_from(db: Session, opportunity_id: uuid.UUID, source: IngestionSo
     )
 
 
+def _owns_canonical_fields(db: Session, record: OpportunitySourceRecord) -> bool:
+    """Whether this record's updates rewrite the opportunity's canonical fields (ADR-012 §6).
+
+    Exactly one record owns them: the earliest-seen active automated record (this one counts as
+    active: it was just seen). Otherwise two sources describing the same posting differently
+    (the discovery feed has no description, a board does) would overwrite each other on every
+    change of either, flip-flopping the text and making a reviewed posting look changed. When
+    the owning record closes, the next earliest active record takes over."""
+    owner = db.scalar(
+        select(OpportunitySourceRecord.id)
+        .where(
+            OpportunitySourceRecord.opportunity_id == record.opportunity_id,
+            OpportunitySourceRecord.ingestion_source_id.is_not(None),
+            or_(OpportunitySourceRecord.is_active, OpportunitySourceRecord.id == record.id),
+        )
+        .order_by(OpportunitySourceRecord.first_seen_at, OpportunitySourceRecord.id)
+        .limit(1)
+    )
+    return owner == record.id
+
+
 def _apply(
     db: Session,
     source: IngestionSource,
@@ -253,7 +274,11 @@ def _apply(
         opportunity = record.opportunity
         opportunity.last_seen_at = now
         _register_identifiers(db, opportunity, item, claimed)
-        if outcome.updated and opportunity.manually_curated_at is None:
+        if (
+            outcome.updated
+            and opportunity.manually_curated_at is None
+            and _owns_canonical_fields(db, record)
+        ):
             before = extraction_input_fingerprint(ExtractionInput.model_validate(opportunity))
             _write_canonical(opportunity, item)
             db.flush()

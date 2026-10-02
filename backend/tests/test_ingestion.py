@@ -474,6 +474,39 @@ def test_feed_and_greenhouse_sightings_share_one_opportunity(
     assert count(db, Opportunity) == 1 and count(db, OpportunitySourceRecord) == 2
 
 
+def test_only_one_record_rewrites_a_deduplicated_opportunity(
+    db: Session, feed_source: IngestionSource, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    """Two sources describing one posting differently (the feed has no description) must not
+    overwrite each other on every change, or a reviewed posting keeps looking changed: only the
+    earliest active record owns the canonical fields (ADR-012 §6)."""
+    feed_item = feed_job(
+        f"greenhouse:{GREENHOUSE_BOARD}:1001",
+        url="https://careers.example.com/robotics?gh_jid=1001",
+    )
+    web.json(FEED_URL, feed(feed_item))
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(1001)))
+    sync(db, feed_source, web)
+    sync(db, gh_source, web)
+    [opportunity] = db.scalars(select(Opportunity)).all()
+    opportunity.requirements_assessment_status = RequirementsAssessmentStatus.COMPLETE
+    db.commit()
+
+    # An unrelated feed change (salary) and a board change: neither flips the text or the review.
+    web.json(FEED_URL, feed(feed_item | {"salary": "$25/hr"}))
+    assert counts(sync(db, feed_source, web))["updated"] == 1
+    web.json(
+        GREENHOUSE_URL,
+        greenhouse_board(greenhouse_job(1001, content="&lt;p&gt;Rewritten board text.&lt;/p&gt;")),
+    )
+    assert counts(sync(db, gh_source, web))["updated"] == 1
+
+    db.refresh(opportunity)
+    assert opportunity.description is None  # the owning (feed) record's text
+    assert opportunity.requirements_stale_since is None
+    assert opportunity.requirements_assessment_status is RequirementsAssessmentStatus.COMPLETE
+
+
 def test_lever_first_then_feed(
     db: Session, feed_source: IngestionSource, lever_source: IngestionSource, web: FakeSource
 ) -> None:
