@@ -8,9 +8,10 @@ name: Scheduled source sync
 # `if:` guard below is defense in depth against a manual dispatch on the wrong repo or branch.
 on:
   schedule:
-    # 06:17 and 18:17 America/Los_Angeles. The `timezone` key (GitHub Actions, 2024+) resolves
-    # the IANA zone to UTC per run, so this already accounts for the PDT/PST shift twice a year
-    # without a second cron line.
+    # 06:17 and 18:17 America/Los_Angeles. `timezone` takes an IANA zone (documented under
+    # on.schedule in GitHub's workflow syntax reference, verified 2026-10-02), so PDT/PST is
+    # handled without a second cron line. Off the hour: GitHub delays or drops scheduled runs
+    # under high load, especially at the top of the hour.
     - cron: "17 6 * * *"
       timezone: "America/Los_Angeles"
     - cron: "17 18 * * *"
