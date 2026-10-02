@@ -6,6 +6,14 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Milestone 6: requirement intelligence and automation ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)).
+  - Migration `e6d1a4b8c2f9`: `opportunity_requirement_candidates`, `opportunities.requirements_stale_since` and `requirement_extraction_fingerprint`, and the `ashby` source kind. Additive; no backfill.
+  - Deterministic requirement extractor `requirements-rules` v1 and owner review: `/api/opportunities/{id}/requirement-review` (read, refresh, one atomic batch with at most one evaluation), a Requirement Review panel, and list filters for pending suggestions, changed postings, and assessment status. Suggestions never affect eligibility until accepted; `complete` is only ever set explicitly.
+  - Source-change staleness for reviewed postings, and `python -m app.cli scan-requirements` for stored opportunities.
+  - Scheduled production source sync workflow (GitHub Actions, twice daily, environment-scoped secret, schema-head check) and derived source health on the Sources page.
+  - Ashby public job boards (Job Postings API; listed postings only; internships only by default).
+  - Deadline discovery: `deadline_within`, `has_deadline`, `sort=deadline`, "Closing soon" and "Deadline passed" badges.
+  - Tests: extractor (including adversarial phrasings), candidate lifecycle, review API, staleness, discovery filters, CLI exit codes, workflow structure, Ashby adapter, source health, Vitest for the new UI, and a Playwright requirement-review scenario.
 - Milestone 5: private profile source ingestion and review ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)).
   - Migration `c5a1e0f3d7b2`: `profile_source_artifacts` (original upload bytes in PostgreSQL), upload metadata and a per-profile SHA-256 uniqueness constraint on `profile_sources`, and `profile_facts.review_state` (backfilled so no fit input changes).
   - Deterministic résumé parser for plain text and text-based PDF (no AI, no OCR), content-sniffed, bounded, with PDF extraction in a time- and memory-limited child process.
@@ -26,6 +34,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- Milestone 6: every adapter types an opportunity with one shared rule (structured intern field, else the internship title matcher); Greenhouse postings can now be `internship`. Only the earliest active source record rewrites a deduplicated opportunity's canonical fields. `sync-sources` prints elapsed time and an aggregate line and exits `2` for database errors.
 - An eligibility-relevant profile save no longer appends an evaluation for every opportunity; only opportunities whose inputs changed get one.
 - Editing an opportunity's title, organization, description, location, work mode, dates, or application URL now appends an evaluation (they are fit inputs).
 
@@ -42,6 +51,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Milestone 5.1: a reparse could re-propose an imported fact the owner had accepted with an edited name (facts are now keyed by the original parsed candidate). The manual-opportunity frontend test no longer races navigation.
 - Greenhouse and Lever board links with credentials (`user:pw@`) or an explicit port are rejected with `422` instead of being reduced to the board name.
 
 - Milestone 3: automated opportunity discovery and ingestion ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md)).
