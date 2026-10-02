@@ -51,6 +51,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Milestone 6 final review: rejecting or editing an accepted requirement suggestion no longer deletes or rewrites a manually entered requirement, or one still shared by another accepted suggestion; `complete` is downgraded only when a reject actually removes a requirement. Ashby postings with a missing or non-boolean `isListed` are invalid items (partial run, nothing closes) instead of being imported as listed.
 - Milestone 5.1: a reparse could re-propose an imported fact the owner had accepted with an edited name (facts are now keyed by the original parsed candidate). The manual-opportunity frontend test no longer races navigation.
 - Greenhouse and Lever board links with credentials (`user:pw@`) or an explicit port are rejected with `422` instead of being reduced to the board name.
 
