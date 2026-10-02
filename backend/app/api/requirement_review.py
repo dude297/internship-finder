@@ -24,8 +24,8 @@ from app.services.requirement_review import (
 router = APIRouter(prefix="/opportunities", tags=["requirement-review"])
 
 
-def _load(db: DbSession, opportunity_id: uuid.UUID) -> Opportunity:
-    opportunity = get_opportunity_for_review(db, opportunity_id)
+def _load(db: DbSession, opportunity_id: uuid.UUID, *, lock: bool = False) -> Opportunity:
+    opportunity = get_opportunity_for_review(db, opportunity_id, lock=lock)
     if opportunity is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Opportunity not found.")
     return opportunity
@@ -43,7 +43,7 @@ def refresh_requirement_review(
 ) -> RequirementReviewResponse:
     """Re-extract candidates now (ADR-012 §6). Never evaluates: candidates don't affect
     eligibility."""
-    opportunity = _load(db, opportunity_id)
+    opportunity = _load(db, opportunity_id, lock=True)
     refresh_candidates(db, opportunity)
     db.commit()
     return review_response(db, opportunity)
@@ -53,7 +53,7 @@ def refresh_requirement_review(
 def post_requirement_review(
     opportunity_id: uuid.UUID, body: RequirementReviewRequest, db: DbSession
 ) -> RequirementReviewResult:
-    opportunity = _load(db, opportunity_id)
+    opportunity = _load(db, opportunity_id, lock=True)
     try:
         result = apply_review(db, opportunity, body)
     except UnknownCandidate as exc:

@@ -21,6 +21,7 @@ from app.models import (
     OpportunitySourceRecord,
     Profile,
 )
+from app.opportunities.requirements.identity import requirement_key
 from app.repositories import (
     CatalogEvaluation,
     evaluate_and_save,
@@ -113,8 +114,21 @@ def update_opportunity(db: Session, opportunity: Opportunity, body: OpportunityB
     but never overwrite these fields or requirements (ADR-008 §8)."""
     for name, value in _fields(body).items():
         setattr(opportunity, name, value)
+    # Replacing the rows gives them new IDs; an accepted suggestion stays linked to the new row
+    # with the same meaning (ADR-012 §7), so a later reject or edit still finds it.
+    # Read before the flush: deleting the old rows makes PostgreSQL null the links (SET NULL).
+    old_keys = {r.id: requirement_key(r) for r in opportunity.requirements}
+    linked = {
+        candidate: old_keys.get(candidate.accepted_requirement_id)
+        for candidate in opportunity.requirement_candidates
+        if candidate.accepted_requirement_id is not None
+    }
     opportunity.requirements = [_requirement(r) for r in body.requirements]
     opportunity.manually_curated_at = datetime.now(UTC)
+    db.flush()
+    new_by_key = {requirement_key(r): r.id for r in opportunity.requirements}
+    for candidate, key in linked.items():
+        candidate.accepted_requirement_id = new_by_key.get(key) if key else None
     db.flush()
     refresh_candidates(db, opportunity)  # ADR-012 §6: refresh on manual edit, no invalidation
     evaluate_automatically(db, opportunity)

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.enums import ExtractionMethod, FactReviewState, RequirementsAssessmentStatus
 from app.models import Opportunity, OpportunityRequirement, OpportunityRequirementCandidate
+from app.opportunities.requirements.identity import requirement_key
 from app.repositories import evaluate_if_changed, get_profile
 from app.schemas.opportunity import RequirementBody, RequirementResponse
 from app.schemas.requirement_review import (
@@ -39,9 +40,14 @@ _STATE_RANK = {
 }
 
 
-def get_opportunity_for_review(db: Session, opportunity_id: uuid.UUID) -> Opportunity | None:
+def get_opportunity_for_review(
+    db: Session, opportunity_id: uuid.UUID, *, lock: bool = False
+) -> Opportunity | None:
     """Opportunity with its candidates and canonical requirements loaded, for the review
-    endpoints. `None` when the opportunity doesn't exist."""
+    endpoints. `None` when the opportunity doesn't exist. `lock` takes a row lock on the
+    opportunity for the rest of the transaction, so two concurrent review batches (or a batch
+    and a refresh) of one opportunity run one after the other instead of both accepting the
+    same suggestion."""
     return db.get(
         Opportunity,
         opportunity_id,
@@ -49,6 +55,8 @@ def get_opportunity_for_review(db: Session, opportunity_id: uuid.UUID) -> Opport
             selectinload(Opportunity.requirement_candidates),
             selectinload(Opportunity.requirements),
         ],
+        with_for_update=lock,
+        populate_existing=lock,
     )
 
 
@@ -143,12 +151,22 @@ def apply_review(
     rejects = [_candidate(candidate_id) for candidate_id in body.reject]
 
     # --- mutate ---
+    def _link_or_create(
+        candidate: OpportunityRequirementCandidate, merged: RequirementBody
+    ) -> None:
+        """Link to a canonical requirement that already means exactly this (e.g. one typed by
+        hand), or create one: accepting never duplicates a requirement (ADR-012 §7)."""
+        key = requirement_key(merged)
+        existing = next((r for r in opportunity.requirements if requirement_key(r) == key), None)
+        if existing is None:
+            existing = _new_requirement(candidate, merged)
+            opportunity.requirements.append(existing)
+        candidate.accepted_requirement_id = existing.id
+
     for _item, candidate, merged, edited in accepts:
         if candidate.review_state in (FactReviewState.PENDING, FactReviewState.REJECTED):
-            requirement = _new_requirement(candidate, merged)
-            opportunity.requirements.append(requirement)
+            _link_or_create(candidate, merged)
             candidate.review_state = FactReviewState.ACCEPTED
-            candidate.accepted_requirement_id = requirement.id
         elif edited:
             linked = _find_requirement(opportunity, candidate.accepted_requirement_id)
             if linked is not None:
@@ -156,11 +174,10 @@ def apply_review(
                 linked.applies_at = merged.applies_at
                 linked.reference_date = merged.reference_date
             else:
-                requirement = _new_requirement(candidate, merged)
-                opportunity.requirements.append(requirement)
-                candidate.accepted_requirement_id = requirement.id
+                _link_or_create(candidate, merged)
         # already accepted, no edit: no-op
 
+    removed_requirement = False
     for candidate in rejects:
         linked_id = candidate.accepted_requirement_id
         candidate.accepted_requirement_id = None
@@ -168,13 +185,20 @@ def apply_review(
         linked = _find_requirement(opportunity, linked_id)
         if linked is not None:
             opportunity.requirements.remove(linked)
+            removed_requirement = True
 
+    status = opportunity.requirements_assessment_status
     if body.assessment_status is not None:
         opportunity.requirements_assessment_status = body.assessment_status
-    elif (
-        body.accept
-        and opportunity.requirements_assessment_status is RequirementsAssessmentStatus.UNASSESSED
-    ):
+    elif removed_requirement and status is RequirementsAssessmentStatus.COMPLETE:
+        # "Complete" was asserted for a set that just lost a requirement. Removing one must never
+        # silently make eligibility more permissive: the owner re-asserts completeness explicitly.
+        opportunity.requirements_assessment_status = (
+            RequirementsAssessmentStatus.PARTIAL
+            if opportunity.requirements
+            else RequirementsAssessmentStatus.UNASSESSED
+        )
+    elif body.accept and status is RequirementsAssessmentStatus.UNASSESSED:
         opportunity.requirements_assessment_status = RequirementsAssessmentStatus.PARTIAL
 
     opportunity.requirements_stale_since = None

@@ -25,7 +25,7 @@ from app.models import (
     OpportunityRequirementCandidate,
 )
 from app.opportunities.requirements.identity import semantic_key
-from tests.test_api_workflow import AGE_16, count, create, put_profile
+from tests.test_api_workflow import AGE_16, count, create, opportunity, put_profile
 
 pytestmark = pytest.mark.postgres
 
@@ -353,3 +353,111 @@ def test_refresh_endpoint_without_candidate_service(client: TestClient) -> None:
     """Agent 2's extractor/candidate service isn't in this worktree; the refresh route still
     exists and 404s for an unknown opportunity, and skips cleanly once the service is present."""
     pytest.importorskip("app.services.requirement_candidates")
+
+
+# --- Review findings (adversarial pass, 2026-10-02) ------------------------------------------
+
+AGE_18_TEXT = "You must be at least 18."
+AGE_18 = {"requirement_type": "minimum_age", "value": {"years": 18}}
+
+
+def _review(client: TestClient, opportunity_id: str) -> dict[str, Any]:
+    response = client.get(review_url(opportunity_id))
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _post(client: TestClient, opportunity_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    response = client.post(review_url(opportunity_id), json=body)
+    assert response.status_code == 200, response.text
+    return response.json()["review"]
+
+
+def _only_candidate(review: dict[str, Any]) -> dict[str, Any]:
+    [candidate] = review["candidates"]
+    return candidate
+
+
+def test_form_edit_keeps_accepted_suggestion_linked_so_reject_removes_it(
+    client: TestClient,
+) -> None:
+    """H1: a PUT replaces every requirement row; the accepted suggestion must follow its
+    requirement to the new row, or a later reject leaves the requirement in force."""
+    created = create(client, description=AGE_18_TEXT)
+    candidate = _only_candidate(_review(client, created["id"]))
+    _post(client, created["id"], {"accept": [{"id": candidate["id"]}]})
+
+    edited = client.put(
+        f"/api/opportunities/{created['id']}",
+        json=opportunity(description=AGE_18_TEXT, location="Another City", requirements=[AGE_18]),
+    )
+    assert edited.status_code == 200, edited.text
+    relinked = _only_candidate(_review(client, created["id"]))
+    [requirement] = _review(client, created["id"])["requirements"]
+    assert relinked["accepted_requirement_id"] == requirement["id"]
+
+    review = _post(client, created["id"], {"reject": [candidate["id"]]})
+    assert review["requirements"] == []
+
+
+def test_form_edit_keeps_an_edited_accept_linked(client: TestClient) -> None:
+    created = create(client, description=AGE_18_TEXT)
+    candidate = _only_candidate(_review(client, created["id"]))
+    _post(client, created["id"], {"accept": [{"id": candidate["id"], "value": {"years": 19}}]})
+    edited_requirement = {"requirement_type": "minimum_age", "value": {"years": 19}}
+    client.put(
+        f"/api/opportunities/{created['id']}",
+        json=opportunity(description=AGE_18_TEXT, requirements=[edited_requirement]),
+    )
+
+    # Re-editing updates the one linked requirement instead of adding a second.
+    review = _post(
+        client, created["id"], {"accept": [{"id": candidate["id"], "value": {"years": 20}}]}
+    )
+    assert [r["value"] for r in review["requirements"]] == [{"years": 20}]
+
+
+def test_suggestion_already_entered_by_hand_never_duplicates(
+    client: TestClient, db: Session
+) -> None:
+    """H2: a pending suggestion the owner then types by hand is dropped on refresh, and
+    accepting an identical suggestion links the existing requirement instead of adding one."""
+    created = create(client, description=AGE_18_TEXT)
+    assert _only_candidate(_review(client, created["id"]))["review_state"] == "pending"
+
+    client.put(
+        f"/api/opportunities/{created['id']}",
+        json=opportunity(description=AGE_18_TEXT, requirements=[AGE_18]),
+    )
+    review = _review(client, created["id"])
+    assert review["candidates"] == []
+    [requirement] = review["requirements"]
+
+    # A suggestion that slipped in anyway (e.g. written before the edit) links, not duplicates.
+    stray = add_candidate(db, created["id"], value={"years": 18})
+    review = _post(client, created["id"], {"accept": [{"id": str(stray.id)}]})
+    assert [r["id"] for r in review["requirements"]] == [requirement["id"]]
+    assert _only_candidate(review)["accepted_requirement_id"] == requirement["id"]
+
+
+def test_rejecting_an_accepted_requirement_never_keeps_complete(client: TestClient) -> None:
+    """L3: completeness was asserted for a set that just lost a requirement."""
+    put_profile(client)
+    created = create(client, description=AGE_18_TEXT)
+    candidate = _only_candidate(_review(client, created["id"]))
+    review = _post(
+        client,
+        created["id"],
+        {"accept": [{"id": candidate["id"]}], "assessment_status": "complete"},
+    )
+    assert review["requirements_assessment_status"] == "complete"
+
+    review = _post(client, created["id"], {"reject": [candidate["id"]]})
+    assert review["requirements_assessment_status"] == "unassessed"
+
+    # An explicit assertion in the same batch still wins.
+    _post(client, created["id"], {"accept": [{"id": candidate["id"]}]})
+    review = _post(
+        client, created["id"], {"reject": [candidate["id"]], "assessment_status": "complete"}
+    )
+    assert review["requirements_assessment_status"] == "complete"
