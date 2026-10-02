@@ -3,9 +3,9 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-10-02
-Current Milestone: **Milestone 5 — Private Profile Source Ingestion + Review complete; merged via [PR #11](https://github.com/dude297/internship-finder/pull/11) and released from `main`** ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). **Milestone 6 — Requirement Intelligence + Automation implemented on `feature/m6-requirements-and-automation` (PR pending review; not merged, not deployed)** ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)), including the Milestone 5.1 fixes. Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) and released from `main` ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
-Current Production Version: `main` at `639e447` on https://internship-finder-pi.vercel.app (Neon `c5a1e0f3d7b2`; Render deploy `dep-dautc2gjo6nc73ehekag` live 2026-10-01 03:41 UTC; Vercel production deployment `dpl_8jfYs2Ychc77wiH7JbWCMjroEwUF` created 2026-10-01 03:52 UTC from a clean checkout of `639e447` via CLI; hosted smoke passed 2026-10-01)
-Active Development Branch: `feature/m6-requirements-and-automation` (Milestone 6 PR, unmerged). Production stays on `main`. Remote: https://github.com/dude297/internship-finder.
+Current Milestone: **Milestone 6 — Requirement Intelligence + Automation complete; merged via [PR #13](https://github.com/dude297/internship-finder/pull/13) and released from `main` on 2026-10-02** ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)), including the Milestone 5.1 fixes. Milestone 5 — Private Profile Source Ingestion + Review complete; merged via [PR #11](https://github.com/dude297/internship-finder/pull/11) ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Current Production Version: `main` at `80257c5` on https://internship-finder-pi.vercel.app (Neon `e6d1a4b8c2f9`; Render deploy `dep-db03iknavr4c73e10b8g` live 2026-10-02 23:09 UTC; Vercel production deployment `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk` created 2026-10-02 23:11 UTC from a clean checkout of `80257c5` via CLI; hosted smoke passed 2026-10-02; scheduled source sync active)
+Active Development Branch: none (`main`). Remote: https://github.com/dude297/internship-finder.
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 5 is released (2026-10-01) and is what production runs. Milestone 6 is implemented and validated on its branch and awaits review; its release is prepared (runbook in the PR and in the Milestone 6 section below) but not executed.
+Milestone 6 is released (2026-10-02) and is what production runs. The next milestone is not chosen yet (planning only).
 
 ## Status Summary
 
@@ -31,8 +31,8 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Source/profile strategy | **Selected** ([ADR-005](docs/decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Opportunity ingestion implemented (ADR-008). Résumé parser `resume-sections` v1 (ADR-011). |
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
-| Opportunity ingestion | **Implemented**; production syncs manually ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`). Milestone 6 branch: Ashby boards, a scheduled GitHub Actions sync (inactive until released and its secret is configured), derived source health ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) |
-| Requirement suggestions and review | **Implemented on the Milestone 6 branch, not released** (`requirements-rules` v1, migration `e6d1a4b8c2f9`, [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). Suggestions never affect eligibility until accepted |
+| Opportunity ingestion | **Implemented and deployed** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`). Since Milestone 6: Ashby boards (no production Ashby source), a scheduled GitHub Actions sync (active since 2026-10-02), derived source health ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) |
+| Requirement suggestions and review | **Implemented and deployed** (`requirements-rules` v1, migration `e6d1a4b8c2f9`, applied to Neon 2026-10-02; [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). Suggestions never affect eligibility until accepted |
 | Eligibility | **Implemented** v1 (rules version `v1`), evaluated automatically (only when inputs change) |
 | Fit scoring and ranking | **Implemented and deployed** (scoring `v1`, [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`, applied to Neon 2026-09-30) |
 | Application tracking | **Implemented** |
@@ -40,7 +40,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local and hosted) |
 | Profile source ingestion | **Implemented and deployed** ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md), migration `c5a1e0f3d7b2`, applied to Neon 2026-10-01) |
-| Next milestone | Milestone 6 (proposal only, not started) |
+| Next milestone | Not chosen (planning only) |
 
 ### Selected stack
 
@@ -100,7 +100,7 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 6 PR review. Nothing is merged or deployed; production is unchanged on Milestone 5.
+Nothing. Milestone 6 is released; the next milestone is not started.
 
 ## Milestone 4 (complete; merged via PR #9)
 
@@ -204,7 +204,7 @@ Local development uses the Compose database (private data in the `pgdata` volume
 
 `v1`, implemented 2026-09-25 ([docs/eligibility.md](docs/eligibility.md)). Unchanged by Milestones 2 and 3 (only when evaluations run changed).
 
-## Milestone 6 (implemented on `feature/m6-requirements-and-automation`; PR open, not merged, not released)
+## Milestone 6 (complete; merged via PR #13)
 
 Decision record: [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md); ADR-009 amended (scheduled sync); ADR-011 amended (M5.1 candidate identity). Base: `main` at `d47a799`.
 
@@ -220,7 +220,8 @@ Decision record: [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intell
 - **Validation (local, 2026-10-02):** backend ruff, format, pyright clean; 480 unit + 420 PostgreSQL tests; migration base → head → `alembic check` → M5 → M6 → base → head; frontend lint, format, typecheck, 102 Vitest, build; Playwright on one fresh disposable database, four runs in a row: 9/9, then a Playwright worker crash (Windows exit 0xC0000409, no assertion failure), then 9/9 and 9/9. An earlier session saw the same kind of local crash once; it never reproduced as a test failure. Performance (1,100 synthetic opportunities): cold scan 13.3 s / 1,357 statements, rerun 0.95 s / 37; needs-review list page 5 statements for 5 or 50 items; one review batch 0.12 s, one evaluation.
 - **Adversarial review:** a separate reviewer found 4 high (form edit unlinking accepted suggestions, duplicate requirements, source flip-flop staleness, extractor contradictions), 4 medium, 8 low; all high and medium items fixed or documented (see the PR). Accepted: backend dependencies aren't hash-locked in the scheduled workflow (no lockfile exists).
 - **Final review fixes (2026-10-02):** (1) review ownership: a review only deletes or replaces *suggestion-owned* requirements (`deterministic_parser` + `requirements-rules`), and only when no other accepted suggestion still links them; manual rows are never mutated or deleted by a review; an accepted edit relinks (or creates) instead of rewriting; the `complete` downgrade happens only when a reject actually deletes a requirement; a form `PUT` keeps the provenance of requirements resubmitted unchanged. (2) Ashby `isListed` is strictly boolean and required: `false` is excluded (closes on a complete run), missing/non-boolean is an item error (partial run, nothing closes). Revalidated: 487 unit + 435 PostgreSQL, 102 Vitest, Playwright 9/9, migration round-trip, flake stress.
-- **Production:** unchanged (Milestone 5, Neon `c5a1e0f3d7b2`). No migration, deploy, secret, workflow run, Ashby source, or catalog scan in production.
+- **Release (2026-10-02):** [PR #13](https://github.com/dude297/internship-finder/pull/13) rebase-merged at the approved head `ff47970`; `main` `80257c5` (post-merge CI `37066645594` green); Neon migrated `c5a1e0f3d7b2` → `e6d1a4b8c2f9`; Render deploy `dep-db03iknavr4c73e10b8g`; Vercel production `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`; scheduled sync configured; production requirement scan run. Record: [deployment.md](docs/deployment.md#milestone-6-release-2026-10-02).
+- **Production results:** first scheduled-sync dispatch green (feed: 1,117 fetched, 138 created, 102 updated, 877 unchanged, 76 closed, 0 invalid; all 76 closures verified absent from the live feed); Source Health `healthy`. Requirement scan: 1,193 scanned, 1,050 refreshed, 143 unchanged, 0 failed, **0 suggestions** in 92.9 s, because the only production source (the discovery feed) carries no posting descriptions (0 of 1,193 opportunities have one). Requirements, evaluations, assessment statuses, and eligibility unchanged by the scan. No Ashby source added.
 
 ## Milestone 5 (complete; merged via PR #11)
 

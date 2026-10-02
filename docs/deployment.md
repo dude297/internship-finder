@@ -2,14 +2,15 @@
 
 Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md). This file is the runbook. It never contains secrets: no `DATABASE_URL`, proxy secret, password, hash, session or CSRF token.
 
-## Status (2026-10-01)
+## Status (2026-10-02)
 
 | Part | State |
 |---|---|
-| Neon | **Provisioned.** Migrated to `c5a1e0f3d7b2` on 2026-10-01 (`alembic check` clean). Owner created (CLI, `getpass`). 1,055 opportunities. |
-| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-dautc2gjo6nc73ehekag` of `639e447` live (finished 2026-10-01 03:41 UTC). Auto-deploy off, branch `main`. The only Render service (the stray `internship-finder` was deleted 2026-10-01). |
-| Vercel | **Deployed** (production `dpl_8jfYs2Ychc77wiH7JbWCMjroEwUF`, `Ready`, aliased to `internship-finder-pi.vercel.app`; created 2026-10-01 03:52 UTC from a clean checkout of `639e447` via CLI). |
-| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)). |
+| Neon | **Provisioned.** Migrated to `e6d1a4b8c2f9` on 2026-10-02 (`alembic check` clean). Owner created (CLI, `getpass`). 1,193 opportunities (1,117 active source records) after the first scheduled sync. |
+| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-db03iknavr4c73e10b8g` of `80257c5` live (finished 2026-10-02 23:09 UTC). Auto-deploy off, branch `main`. The only Render service (the stray `internship-finder` was deleted 2026-10-01). |
+| Vercel | **Deployed** (production `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`, `Ready`, aliased to `internship-finder-pi.vercel.app`; created 2026-10-02 23:11 UTC from a clean checkout of `80257c5` via CLI). |
+| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)); Milestone 6 release and smoke on 2026-10-02 ([below](#milestone-6-release-2026-10-02)). |
+| Scheduled sync | **Active.** GitHub environment `production` (deployment branches: `main` only) with secret `PRODUCTION_DATABASE_URL` (Neon pooled URL); first dispatch green 2026-10-02. |
 
 ## Topology
 
@@ -148,6 +149,28 @@ The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `
 9. **Final counts and reconciliation:** `profile_sources` 0, `profile_source_artifacts` 0, `profile_facts` 10 (all accepted), migration `c5a1e0f3d7b2`, database size. Evaluations: 4,220 + the accept pass + the delete pass, each at most 1,055 (only opportunities whose fit input changed get a row), so at most 6,330; record the actual `evaluated_opportunities` of both passes and reconcile exactly. Record everything in [PROJECT_STATE.md](../PROJECT_STATE.md) and the Production Verification table.
 10. **Release-state docs PR**, if needed, to record the above once production reflects it.
 
+### Milestone 6 release (2026-10-02)
+
+[PR #13](https://github.com/dude297/internship-finder/pull/13) ([ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) rebase-merged at the approved head `ff47970` (CI `37064233989`); resulting `main` `80257c5`, post-merge CI `37066645594` green (backend, frontend, e2e). All counts below are aggregates from read-only queries.
+
+| Step | Result |
+|---|---|
+| Pre-migration baseline | `c5a1e0f3d7b2`; 1,055 opportunities and source records (all active); 0 canonical requirements; 6,330 evaluations (4,220 with fit, 1,055 latest, all `needs_verification`); 6,330 rule results; 1,055 `unassessed`; 1 profile, 10 facts, 0 profile sources/artifacts; 1 ingestion source, 2 runs; 1 owner; 23 MB |
+| Migration | `e6d1a4b8c2f9`, `alembic check` clean. `opportunity_requirement_candidates` exists; `opportunities.requirements_stale_since` and `requirement_extraction_fingerprint` exist; the kind CHECK accepts `ashby`. Every count identical to the baseline (0 candidates, 0 fingerprints, no evaluation, no status change) |
+| Milestone 5 code on the new schema | `/api/health` `200`; dummy-cookie session lookup `200` unauthenticated; private APIs `401` |
+| Render | `dep-db03iknavr4c73e10b8g` of `80257c5`, `live`; Free, Oregon, 1 instance, one worker, auto-deploy off, branch `main`, env var names unchanged. `/api/health` `200`; `/docs`, `/openapi.json` `404`; requirement-review and needs-review routes `401` (unknown routes `404`); synthetic wrong login `401`; clean startup log |
+| Vercel | `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`, `Ready`, aliased. `/api/health` `200` JSON; `/login`, `/opportunities`, `/sources`, unknown SPA path → `index.html`; `/api/nope`, `/api/health/` → JSON `404`. Bundle contains the Requirement Review panel, the `needs_review` filter, deadline filters and badges, Source Health labels, and the Ashby option; no Render hostname. Temporary checkout and `.env.local` deleted |
+| Hosted smoke (owner login via `getpass`, session in memory, logged out) | Authenticated session, list (1,055), Match Profile, sources: `200`. One fabricated opportunity (`ZZZ M6 RELEASE SMOKE — Synthetic Robotics Internship`, `Synthetic Example Org`): 3 pending `requirements-rules` suggestions with excerpts (minimum age, education, citizenship); pending changed nothing (`unassessed`, no requirements, same evaluation). One batch (accept age, edit + accept education, reject citizenship): 2 canonical `deterministic_parser` requirements, edit applied, `partial`, one evaluation. Editing the accepted age suggestion: relinked to a new row, no duplicate, old row removed. Explicit `complete` applied. 26/26 PASS |
+| Smoke cleanup | Guards verified (exact UUID, title prefix, organization, manually curated, manual source), then the app's `DELETE /api/opportunities/{id}` (`204`, then `404`). Read-only check: 0 rows left for that UUID or title in opportunities, candidates, requirements, evaluations, source records, identifiers, applications; 0 orphaned rule results; every production count identical to before the smoke |
+| Read-only discovery checks | `requirement_review` `needs_review`/`pending`/`stale`, `deadline_within` 7/14/30, `has_deadline`, `sort=deadline`: all `200`. The feed has no deadlines, so the deadline filters matched only the smoke opportunity while it existed |
+| GitHub environment | `production` (created earlier by the Vercel GitHub integration as `Production`; names are case-insensitive) restricted to branch `main` (custom policy, verified) before adding `PRODUCTION_DATABASE_URL` (Neon pooled URL, checked read-only with the app engine first). Secret name verified via metadata only; no repository secrets |
+| First sync ([run 37077086322](https://github.com/dude297/internship-finder/actions/runs/37077086322), manual dispatch on `main`) | Green in 3 m 17 s; schema check passed; log shows counts only (`DATABASE_URL: ***`). Feed: 1,117 fetched, 138 created, 102 updated (includes the one-time type reclassification: `other` 93 → 2), 877 unchanged, 76 closed, 0 invalid, 0 errors. All 76 closed postings verified absent from the live feed; active records equal the feed's 1,117 IDs exactly. Source Health `stale` → `healthy` |
+| Requirement scan (`python -m app.cli scan-requirements`, once) | 1,193 scanned, 1,050 refreshed, 143 unchanged, 0 failed, **0 suggestions**, 92.9 s. Cause: no production opportunity has a description (the feed has no description field). Unchanged by the scan, verified with per-opportunity digests: latest eligibility, assessment status and staleness, canonical requirement IDs, newest evaluation. Fingerprints 143 → 1,193 (all valid) |
+| Final counts | `e6d1a4b8c2f9`; 1,193 opportunities and source records (1,117 active); 0 canonical requirements; 0 candidates; 6,492 evaluations (4,382 with fit, 1,193 latest, all `needs_verification`); 1,193 `unassessed`; 1 ingestion source (`healthy`), 3 runs; 1 profile, 10 facts, 0 profile sources/artifacts; 1 owner; 26 MB. The 162 evaluations since the baseline come from the sync (138 new postings + 24 updated ones whose eligibility inputs changed) |
+| Security | Actions sync log, Render logs since the deploy (522 lines), and command output: no database URL, password, cookie, CSRF or session token, or profile data. These docs contain no secret values |
+
+Not done by design: no Ashby source in production (sources can't be deleted; Ashby is covered by CI and integration tests); no real opportunity's suggestions accepted or rejected. Rollback: as for Milestone 5, a Render/Vercel code rollback to `639e447` stays possible while no Ashby source exists ([data-model.md](data-model.md)); Neon is never downgraded.
+
 ## Rollback
 
 - **Code (Render):** Render dashboard → Deploys → **Rollback** to an earlier deploy, or deploy an earlier commit. Health check afterwards. After the `c5a1e0f3d7b2` migration, a code rollback to the Milestone 4 release is possible: the `review_state` default keeps Milestone 4's Match Profile save working on the migrated schema, so this is a normal rollback, not a schema/code coupling to avoid.
@@ -252,7 +275,7 @@ Render Free sleeps after about 15 minutes without traffic. Observed 2026-09-28: 
 
 ## Scheduling
 
-Released production (Milestone 5): none; source sync is manual. Milestone 6 adds the GitHub Actions workflow `.github/workflows/sync-production.yml` (twice daily, 06:17 and 18:17 America/Los_Angeles, plus `workflow_dispatch`). It reads `PRODUCTION_DATABASE_URL` from the GitHub `production` **environment** secret, runs only on `main` of this repository, and never runs for pull requests or pushes ([ADR-009 amendment](decisions/ADR-009-hosted-deployment-architecture.md#amendment-2026-10-01-scheduled-source-sync-milestone-6)). Until that secret is configured during the release, every run fails fast without touching anything. No Render or Vercel cron, and no keep-alive or uptime pings.
+Since the Milestone 6 release (2026-10-02): the GitHub Actions workflow `.github/workflows/sync-production.yml` (twice daily, 06:17 and 18:17 America/Los_Angeles, plus `workflow_dispatch`). It reads `PRODUCTION_DATABASE_URL` from the GitHub `production` **environment** secret, runs only on `main` of this repository, and never runs for pull requests or pushes ([ADR-009 amendment](decisions/ADR-009-hosted-deployment-architecture.md#amendment-2026-10-01-scheduled-source-sync-milestone-6)). Configured 2026-10-02: deployment branches restricted to `main` (custom branch policy) before the secret was added; the secret is the Neon pooled URL, piped from `neonctl connection-string --pooled` into `gh secret set PRODUCTION_DATABASE_URL --env production` (stdin, never displayed). Without the secret, every run fails fast without touching anything. No Render or Vercel cron, and no keep-alive or uptime pings.
 
 Configuring the secret (a release step for the owner only; never in a file, a command-line argument, or chat): GitHub → Settings → Environments → **New environment** `production` → **Deployment branches: Selected branches → `main`** (required: otherwise a workflow on another branch could name the environment and read the secret; adding yourself as a required reviewer is optional) → **Add environment secret** `PRODUCTION_DATABASE_URL` with the Neon pooled `postgresql+psycopg://…?sslmode=require` URL. Or run `gh secret set PRODUCTION_DATABASE_URL --env production` and paste the value at its prompt.
 

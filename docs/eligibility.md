@@ -58,6 +58,7 @@ Imported and manual postings get deterministic requirement **suggestions** (`req
 - Extraction never changes `requirements_assessment_status`. Accepting the first requirement while `unassessed` moves it to `partial`. Only the owner's explicit choice makes it `complete` (zero requirements allowed). Rejecting every suggestion never implies `complete`.
 - If a sync later changes a reviewed posting's text, a `complete` assessment is downgraded (to `partial`, or `unassessed` if no canonical requirement remains), the opportunity is flagged "Posting changed since requirement review", accepted requirements are kept, and the opportunity is re-evaluated.
 - An accepted work-authorization suggestion evaluates to `needs_verification` (ELIG-REQ-001) until a work-authorization rule exists.
+- Production (released 2026-10-02): the catalog scan found no suggestions, because the discovery feed provides no description text; every opportunity remains `unassessed` (`needs_verification`) until the owner enters requirements or a board source with descriptions is added.
 
 ## Time-Aware Evaluation
 
