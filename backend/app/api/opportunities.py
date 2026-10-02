@@ -1,11 +1,13 @@
 import uuid
+from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import func, select
 
 from app.api.deps import DbSession
-from app.enums import RemoteMode
-from app.models import Opportunity
+from app.enums import FactReviewState, RemoteMode, RequirementsAssessmentStatus
+from app.models import Opportunity, OpportunityRequirementCandidate
 from app.repositories import get_profile
 from app.schemas.application import ApplicationBody, ApplicationResponse
 from app.schemas.opportunity import (
@@ -27,6 +29,18 @@ def _load(db: DbSession, opportunity_id: uuid.UUID) -> Opportunity:
     return opportunity
 
 
+def _pending_requirement_count(db: DbSession, opportunity_id: uuid.UUID) -> int:
+    return (
+        db.scalar(
+            select(func.count()).where(
+                OpportunityRequirementCandidate.opportunity_id == opportunity_id,
+                OpportunityRequirementCandidate.review_state == FactReviewState.PENDING,
+            )
+        )
+        or 0
+    )
+
+
 def _detail(db: DbSession, opportunity: Opportunity) -> OpportunityDetail:
     detail = OpportunityDetail.model_validate(opportunity)
     detail.origin, detail.availability = discovery.provenance(opportunity.source_records)
@@ -34,6 +48,7 @@ def _detail(db: DbSession, opportunity: Opportunity) -> OpportunityDetail:
     evaluation = service.current_evaluation(db, opportunity)
     detail.latest_evaluation = EvaluationResponse.model_validate(evaluation) if evaluation else None
     detail.profile_exists = get_profile(db) is not None
+    detail.pending_requirement_count = _pending_requirement_count(db, opportunity.id)
     return detail
 
 
@@ -51,10 +66,17 @@ def list_opportunities(
     eligibility: discovery.EligibilityFilter | None = None,
     application_status: discovery.ApplicationFilter | None = None,
     remote_mode: RemoteMode | None = None,
+    requirements_assessment_status: RequirementsAssessmentStatus | None = None,
+    requirement_review: discovery.RequirementReviewFilter | None = None,
+    deadline_within: discovery.DeadlineWithin | None = None,
+    has_deadline: bool | None = None,
+    today: date | None = None,
     sort: discovery.Sort = "newest",
 ) -> OpportunityPage:
     """One page of opportunities with server-side search and filters. `sort=recommended` orders
-    by eligibility status, then fit score; `newest` (default) by posted date."""
+    by eligibility status, then fit score; `newest` (default) by posted date; `deadline` by
+    application deadline (nulls last). `today` (ADR-012 §14) is used only by the deadline
+    filters, defaulting to the server's UTC date."""
     filters = discovery.Filters(
         q=q or None,
         availability=availability,
@@ -62,6 +84,11 @@ def list_opportunities(
         eligibility=eligibility,
         application_status=application_status,
         remote_mode=remote_mode,
+        requirements_assessment_status=requirements_assessment_status,
+        requirement_review=requirement_review,
+        deadline_within=deadline_within,
+        has_deadline=has_deadline,
+        today=today,
     )
     items, total = discovery.list_page(db, filters, limit, offset, sort)
     return OpportunityPage(items=items, total=total, limit=limit, offset=offset)
