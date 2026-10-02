@@ -5,16 +5,19 @@ Candidates are created directly through the ORM (Agent 2's extractor/candidate s
 this worktree); `semantic_key` is computed the same way the service would.
 """
 
+import threading
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import Engine, delete, select
 from sqlalchemy.orm import Session
 
 from app.enums import (
     FactReviewState,
+    OpportunityType,
     RequirementAppliesAt,
     RequirementType,
 )
@@ -25,6 +28,8 @@ from app.models import (
     OpportunityRequirementCandidate,
 )
 from app.opportunities.requirements.identity import semantic_key
+from app.schemas.requirement_review import RequirementReviewRequest
+from app.services.requirement_review import apply_review, get_opportunity_for_review
 from tests.test_api_workflow import AGE_16, count, create, opportunity, put_profile
 
 pytestmark = pytest.mark.postgres
@@ -461,3 +466,193 @@ def test_rejecting_an_accepted_requirement_never_keeps_complete(client: TestClie
         client, created["id"], {"reject": [candidate["id"]], "assessment_status": "complete"}
     )
     assert review["requirements_assessment_status"] == "complete"
+
+
+# --- Ownership: a review only ever deletes the rows suggestions created (ADR-012 §7) ---------
+
+
+def _candidate(review: dict[str, Any], candidate_id: Any) -> dict[str, Any]:
+    return next(c for c in review["candidates"] if c["id"] == str(candidate_id))
+
+
+def test_rejecting_a_suggestion_linked_to_a_manual_requirement_keeps_it(
+    client: TestClient, db: Session
+) -> None:
+    created = create(client, requirements=[AGE_18])
+    [manual] = _review(client, created["id"])["requirements"]
+    stray = add_candidate(db, created["id"], value={"years": 18})
+
+    review = _post(client, created["id"], {"accept": [{"id": str(stray.id)}]})
+    assert _candidate(review, stray.id)["accepted_requirement_id"] == manual["id"]
+
+    review = _post(client, created["id"], {"reject": [str(stray.id)]})
+    assert review["requirements"] == [manual]
+    assert _candidate(review, stray.id)["review_state"] == "rejected"
+
+
+def test_editing_a_suggestion_linked_to_a_manual_requirement_never_mutates_it(
+    client: TestClient, db: Session
+) -> None:
+    created = create(client, requirements=[AGE_18])
+    [manual] = _review(client, created["id"])["requirements"]
+    stray = add_candidate(db, created["id"], value={"years": 18})
+    _post(client, created["id"], {"accept": [{"id": str(stray.id)}]})
+
+    review = _post(
+        client, created["id"], {"accept": [{"id": str(stray.id), "value": {"years": 19}}]}
+    )
+
+    by_value = {r["value"]["years"]: r for r in review["requirements"]}
+    assert by_value[18] == manual
+    assert by_value[19]["extraction_method"] == "deterministic_parser"
+    assert _candidate(review, stray.id)["accepted_requirement_id"] == by_value[19]["id"]
+
+
+def test_a_shared_suggestion_requirement_goes_only_with_its_last_accepted_suggestion(
+    client: TestClient, db: Session
+) -> None:
+    created = create(client)
+    a = add_candidate(db, created["id"], value={"years": 18})
+    b = add_candidate(db, created["id"], value={"years": 20})
+
+    review = _post(
+        client,
+        created["id"],
+        {
+            "accept": [
+                {"id": str(a.id), "value": {"years": 19}},
+                {"id": str(b.id), "value": {"years": 19}},
+            ]
+        },
+    )
+    [shared] = review["requirements"]
+    assert {_candidate(review, c.id)["accepted_requirement_id"] for c in (a, b)} == {shared["id"]}
+
+    review = _post(client, created["id"], {"reject": [str(a.id)]})
+    assert review["requirements"] == [shared]
+    assert _candidate(review, b.id)["review_state"] == "accepted"
+    assert _candidate(review, b.id)["accepted_requirement_id"] == shared["id"]
+
+    review = _post(client, created["id"], {"reject": [str(b.id)]})
+    assert review["requirements"] == []
+
+
+def test_editing_to_an_existing_requirement_relinks_without_a_duplicate(
+    client: TestClient, db: Session
+) -> None:
+    age_20 = {"requirement_type": "minimum_age", "value": {"years": 20}}
+    created = create(client, requirements=[age_20])
+    [manual] = _review(client, created["id"])["requirements"]
+    candidate = add_candidate(db, created["id"], value={"years": 18})
+    _post(client, created["id"], {"accept": [{"id": str(candidate.id)}]})
+
+    review = _post(
+        client, created["id"], {"accept": [{"id": str(candidate.id), "value": {"years": 20}}]}
+    )
+
+    # The suggestion's own age-18 row was orphaned and removed; the manual row is untouched.
+    assert review["requirements"] == [manual]
+    assert _candidate(review, candidate.id)["accepted_requirement_id"] == manual["id"]
+
+
+def test_editing_an_owned_requirement_replaces_it_and_cleans_up_the_old_row(
+    client: TestClient, db: Session
+) -> None:
+    created = create(client)
+    candidate = add_candidate(db, created["id"], value={"years": 18})
+    [old] = _post(client, created["id"], {"accept": [{"id": str(candidate.id)}]})["requirements"]
+
+    review = _post(
+        client, created["id"], {"accept": [{"id": str(candidate.id), "value": {"years": 21}}]}
+    )
+
+    [current] = review["requirements"]
+    assert current["id"] != old["id"] and current["value"] == {"years": 21}
+    assert _candidate(review, candidate.id)["accepted_requirement_id"] == current["id"]
+    assert db.get(OpportunityRequirement, uuid.UUID(old["id"])) is None
+
+
+def test_rejecting_a_suggestion_linked_to_a_manual_requirement_keeps_complete(
+    client: TestClient, db: Session
+) -> None:
+    created = create(client, requirements=[AGE_18])
+    stray = add_candidate(db, created["id"], value={"years": 18})
+    _post(
+        client,
+        created["id"],
+        {"accept": [{"id": str(stray.id)}], "assessment_status": "complete"},
+    )
+
+    review = _post(client, created["id"], {"reject": [str(stray.id)]})
+
+    assert [r["value"] for r in review["requirements"]] == [{"years": 18}]
+    assert review["requirements_assessment_status"] == "complete"
+
+
+@pytest.mark.parametrize("attempt", range(5))
+def test_concurrent_rejects_of_a_shared_requirement_remove_it_exactly_once(
+    pg_engine: Engine, attempt: int
+) -> None:
+    """Two batches rejecting the two suggestions that share one row, committed from separate
+    connections at once: the opportunity lock serializes them, so the second sees the first's
+    reject and removes the now-orphaned row (never keeps an orphan, never fails)."""
+    with Session(pg_engine) as setup:
+        target = Opportunity(
+            title="Synthetic Concurrency Intern",
+            organization="Example Org",
+            opportunity_type=OpportunityType.INTERNSHIP,
+        )
+        setup.add(target)
+        setup.commit()
+        opportunity_id = target.id
+        a = add_candidate(setup, opportunity_id, value={"years": 18})
+        b = add_candidate(setup, opportunity_id, value={"years": 20})
+        loaded = get_opportunity_for_review(setup, opportunity_id, lock=True)
+        assert loaded is not None
+        apply_review(
+            setup,
+            loaded,
+            RequirementReviewRequest.model_validate(
+                {
+                    "accept": [
+                        {"id": a.id, "value": {"years": 19}},
+                        {"id": b.id, "value": {"years": 19}},
+                    ]
+                }
+            ),
+        )
+        setup.commit()
+        candidate_ids = [a.id, b.id]
+
+    barrier = threading.Barrier(2)
+    errors: list[BaseException] = []
+
+    def reject(candidate_id: uuid.UUID) -> None:
+        try:
+            with Session(pg_engine) as session:
+                barrier.wait()
+                found = get_opportunity_for_review(session, opportunity_id, lock=True)
+                assert found is not None
+                apply_review(session, found, RequirementReviewRequest(reject=[candidate_id]))
+                session.commit()
+        except BaseException as exc:  # noqa: BLE001 -- surfaced by the assert below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=reject, args=(cid,)) for cid in candidate_ids]
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        assert errors == []
+        with Session(pg_engine) as check:
+            final = get_opportunity_for_review(check, opportunity_id)
+            assert final is not None
+            assert final.requirements == []
+            assert {c.review_state for c in final.requirement_candidates} == {
+                FactReviewState.REJECTED
+            }
+    finally:
+        with Session(pg_engine) as cleanup:
+            cleanup.execute(delete(Opportunity).where(Opportunity.id == opportunity_id))
+            cleanup.commit()

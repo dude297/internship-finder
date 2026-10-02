@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.enums import ExtractionMethod, FactReviewState, RequirementsAssessmentStatus
 from app.models import Opportunity, OpportunityRequirement, OpportunityRequirementCandidate
+from app.opportunities.requirements.extractor import EXTRACTOR_NAME
 from app.opportunities.requirements.identity import requirement_key
 from app.repositories import evaluate_if_changed, get_profile
 from app.schemas.opportunity import RequirementBody, RequirementResponse
@@ -119,6 +120,45 @@ def _new_requirement(
     )
 
 
+def _candidate_managed(requirement: OpportunityRequirement) -> bool:
+    """Created by accepting a suggestion, not typed by the owner. Only these rows may ever be
+    deleted or replaced by a review; a manual row (including one rewritten by an owner edit)
+    is never touched here (manual data wins, ADR-012 §7)."""
+    return (
+        requirement.extraction_method is ExtractionMethod.DETERMINISTIC_PARSER
+        and requirement.extractor_name == EXTRACTOR_NAME
+    )
+
+
+def _link_or_create(
+    opportunity: Opportunity, candidate: OpportunityRequirementCandidate, merged: RequirementBody
+) -> None:
+    """Link to a canonical requirement that already means exactly this (e.g. one typed by hand,
+    or one another accepted suggestion created), or create one: accepting never duplicates a
+    requirement and never mutates an existing one (ADR-012 §7)."""
+    key = requirement_key(merged)
+    existing = next((r for r in opportunity.requirements if requirement_key(r) == key), None)
+    if existing is None:
+        existing = _new_requirement(candidate, merged)
+        opportunity.requirements.append(existing)
+    candidate.accepted_requirement_id = existing.id
+
+
+def _release(opportunity: Opportunity, requirement_id: uuid.UUID | None) -> bool:
+    """Called after a candidate dropped its link: delete the requirement only when it is
+    candidate-managed and no accepted candidate still links to it. True if it was deleted."""
+    requirement = _find_requirement(opportunity, requirement_id)
+    if requirement is None or not _candidate_managed(requirement):
+        return False
+    if any(
+        c.review_state is FactReviewState.ACCEPTED and c.accepted_requirement_id == requirement.id
+        for c in opportunity.requirement_candidates
+    ):
+        return False
+    opportunity.requirements.remove(requirement)
+    return True
+
+
 def apply_review(
     db: Session, opportunity: Opportunity, body: RequirementReviewRequest
 ) -> RequirementReviewResult:
@@ -151,41 +191,25 @@ def apply_review(
     rejects = [_candidate(candidate_id) for candidate_id in body.reject]
 
     # --- mutate ---
-    def _link_or_create(
-        candidate: OpportunityRequirementCandidate, merged: RequirementBody
-    ) -> None:
-        """Link to a canonical requirement that already means exactly this (e.g. one typed by
-        hand), or create one: accepting never duplicates a requirement (ADR-012 §7)."""
-        key = requirement_key(merged)
-        existing = next((r for r in opportunity.requirements if requirement_key(r) == key), None)
-        if existing is None:
-            existing = _new_requirement(candidate, merged)
-            opportunity.requirements.append(existing)
-        candidate.accepted_requirement_id = existing.id
-
     for _item, candidate, merged, edited in accepts:
         if candidate.review_state in (FactReviewState.PENDING, FactReviewState.REJECTED):
-            _link_or_create(candidate, merged)
+            _link_or_create(opportunity, candidate, merged)
             candidate.review_state = FactReviewState.ACCEPTED
         elif edited:
-            linked = _find_requirement(opportunity, candidate.accepted_requirement_id)
-            if linked is not None:
-                linked.value = merged.value
-                linked.applies_at = merged.applies_at
-                linked.reference_date = merged.reference_date
-            else:
-                _link_or_create(candidate, merged)
+            # Relink rather than rewrite: the linked row may be manual or shared with another
+            # accepted suggestion. The old row goes only if this left it candidate-owned orphan.
+            previous = candidate.accepted_requirement_id
+            _link_or_create(opportunity, candidate, merged)
+            if candidate.accepted_requirement_id != previous:
+                _release(opportunity, previous)
         # already accepted, no edit: no-op
 
     removed_requirement = False
     for candidate in rejects:
-        linked_id = candidate.accepted_requirement_id
+        previous = candidate.accepted_requirement_id
         candidate.accepted_requirement_id = None
         candidate.review_state = FactReviewState.REJECTED
-        linked = _find_requirement(opportunity, linked_id)
-        if linked is not None:
-            opportunity.requirements.remove(linked)
-            removed_requirement = True
+        removed_requirement |= _release(opportunity, previous)
 
     status = opportunity.requirements_assessment_status
     if body.assessment_status is not None:
