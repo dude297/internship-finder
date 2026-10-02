@@ -1,6 +1,8 @@
 """`requirements-rules` v1 (ADR-012 §5). Pure; no database. Precision over recall: every case
 here either asserts a specific proposal or asserts none."""
 
+import pytest
+
 from app.enums import RequirementAppliesAt, RequirementType
 from app.opportunities.requirements.extractor import (
     EXTRACTOR_NAME,
@@ -208,3 +210,58 @@ def test_dedupes_rephrased_duplicate_within_one_posting() -> None:
     description = "Must be at least 16 years old. Minimum age: 16."
     proposals = extract(description)
     assert len(proposals) == 1
+
+
+# --- Adversarial review findings (2026-10-02) -------------------------------------------------
+
+CONTRADICTING_OR_NON_REQUIREMENTS = (
+    # citizenship alternatives (the U.S. abbreviation must not hide them)
+    "Must be a U.S. citizen or U.S. permanent resident.",
+    "Must be a U.S. citizen or U.S. national.",
+    "Must be a U.S. citizen, permanent resident, or DACA recipient.",
+    "Non-U.S. citizens only may apply.",
+    # numbers that aren't minimum ages
+    "Applicants must be 18 years of age or younger.",
+    "Students must be at least 18 months into their degree.",
+    "You must be available at least 20 hours per week.",
+    "Must be at least 16 weeks long.",
+    # negations
+    "No security clearance is required.",
+    "You do not need a security clearance.",
+    "You do not need to be authorized to work in the United States.",
+    "Applicants currently enrolled in a graduate program are not eligible.",
+    "You must not be currently enrolled in high school.",
+    # a list of alternative levels
+    "Must be a high school student, undergraduate, or graduate student.",
+)
+
+
+@pytest.mark.parametrize("text", CONTRADICTING_OR_NON_REQUIREMENTS)
+def test_never_proposes_a_requirement_the_text_contradicts(text: str) -> None:
+    assert extract(text) == ()
+
+
+def test_age_followed_by_a_date_phrase_still_counts() -> None:
+    (proposal,) = extract("Must be at least 16 by June 1.")
+    assert proposal.value == {"years": 16}
+
+
+def test_each_bullet_is_its_own_sentence() -> None:
+    """A plain-text bullet list has no periods: one hedge must not silence the whole list, and
+    each bullet can yield its own proposal."""
+    proposals = extract(
+        "Requirements:\n• Must be a U.S. citizen\n• Must be at least 18 years old\n"
+        "• Python experience preferred"
+    )
+    assert [(p.requirement_type, p.source_text) for p in proposals] == [
+        (RequirementType.CITIZENSHIP, "Must be a U.S. citizen"),
+        (RequirementType.MINIMUM_AGE, "Must be at least 18 years old"),
+    ]
+
+
+def test_long_sentence_excerpt_keeps_the_matched_phrase() -> None:
+    padding = "Our synthetic team builds robots and collaborates across many disciplines; " * 8
+    (proposal,) = extract(padding + "applicants must be at least 18 years old to join")
+    assert len(proposal.source_text) <= MAX_EXCERPT_CHARS
+    assert "at least 18 years old" in proposal.source_text
+    assert proposal.source_text.startswith("…")
