@@ -53,6 +53,7 @@ def _detail(db: DbSession, opportunity: Opportunity) -> OpportunityDetail:
 
 
 MAX_PAGE_SIZE = 100
+TODAY_MIN, TODAY_MAX = date(2000, 1, 1), date(2999, 12, 31)
 
 
 @router.get("")
@@ -75,8 +76,15 @@ def list_opportunities(
 ) -> OpportunityPage:
     """One page of opportunities with server-side search and filters. `sort=recommended` orders
     by eligibility status, then fit score; `newest` (default) by posted date; `deadline` by
-    application deadline (nulls last). `today` (ADR-012 §14) is used only by the deadline
-    filters, defaulting to the server's UTC date."""
+    application deadline (upcoming soonest first, then unknown, then passed). `today` (ADR-012
+    §14, the client's local date) drives the deadline filters and sort,
+    defaulting to the server's UTC date."""
+    # Bounded so date arithmetic (today + 30 days) can't overflow; any plausible date passes, so
+    # tests can pin "today" (ADR-012 §14).
+    if today is not None and not TODAY_MIN <= today <= TODAY_MAX:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "today must be between 2000 and 2999."
+        )
     filters = discovery.Filters(
         q=q or None,
         availability=availability,
