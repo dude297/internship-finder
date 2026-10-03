@@ -27,6 +27,54 @@ Milestone 6 adds `.github/workflows/sync-production.yml`: `python -m app.cli syn
 
 Measured locally on 2026-09-27 against the live discovery feed (disposable database, synthetic profile, Windows + Docker PostgreSQL 18): the first sync of 1,034 postings took about 22 s (including one evaluation per posting); a repeat answered `304` in under 0.5 s; a forced full re-process (validators cleared) found all 1,034 unchanged in under 1 s. A 50-item page of the opportunity list took 30–130 ms at ~1,100 opportunities.
 
+## Source Coverage (implemented, Milestone 7)
+
+`python -m app.cli source-coverage` and the Sources page's coverage section report, derived on read over open opportunities (nothing stored, [ADR-013 §2](decisions/ADR-013-provider-enrichment-and-source-authority.md#2-ats-source-discovery)):
+
+- **Description coverage %**: active opportunities with a non-empty canonical description, over all active opportunities.
+- **ATS-backed**: active opportunities with an active record from a direct ATS source (Greenhouse, Lever, Ashby).
+- **Feed-only**: active opportunities whose only active automated records are from the discovery feed.
+- **Enrichable**: feed-only opportunities whose feed record proves a supported provider identity a source suggestion covers.
+
+Description coverage is the operational KPI this milestone introduces: it's the number a bounded first batch of added boards should move (see the runbook below).
+
+Scheduled and manual syncs order direct ATS sources before the discovery feed (within each group, oldest source first, then ID), so a feed sync within one run sees the boards' current state; correctness doesn't depend on this ordering ([ADR-013 §5](decisions/ADR-013-provider-enrichment-and-source-authority.md#5-fallback-when-a-direct-ats-source-closes), [ADR-013 §7](decisions/ADR-013-provider-enrichment-and-source-authority.md#7-scheduled-sync-ordering)). One source failing never stops the others; the per-source running-run index stays the only concurrency guard.
+
+### Operational source cap
+
+<!-- PERF: lead fills -->
+
+| Sources synced in one run | Elapsed time | Notes |
+|---|---|---|
+| 10 (synthetic) | <!-- PERF: lead fills --> | |
+| 25 (synthetic) | <!-- PERF: lead fills --> | |
+| 50 (synthetic) | <!-- PERF: lead fills --> | |
+
+Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: <!-- PERF: lead fills -->.
+
+## Milestone 7 production activation runbook (prepared, not executed)
+
+Code release (merge, deploy) is separate from source activation (ADR-013 §9). This runbook is written ahead of both; none of its steps have run yet.
+
+1. Merge `feature/m7-provider-enrichment` to `main`.
+2. Confirm CI is green on the merge commit.
+3. Deploy: Render first, then Vercel, following the existing procedure in [deployment.md](deployment.md#deploy-order).
+4. Run `python -m app.cli source-coverage` against production (read-only; no sources are created or synced by this step).
+5. Open the Sources page's discovery/suggestions view and inspect what it offers.
+6. Choose a bounded first batch of suggestions (for example, at most 10 boards, largest feed-only coverage first); leave scope **Internships only**.
+7. Add the selected boards (`POST /api/sources/discovery/add`).
+8. Sync each added source manually, one at a time.
+9. Verify deduplication: counts in the run summary, no new duplicate opportunities, no unexpected closures.
+10. Re-run `source-coverage` and record the description-coverage delta against step 4.
+11. Count pending requirement suggestions created by the new syncs.
+12. Leave every suggestion pending — accept none. The scheduled sync maintains them afterward.
+13. Watch the next scheduled run's elapsed time against the 20-minute GitHub Actions limit, now that more sources are enabled.
+14. Docs closeout: record what ran, the before/after coverage numbers, and the batch added, in PROJECT_STATE.md (lead) and here if operational behavior changed.
+
+**Expected one-time side effect:** the first full feed sync after this release adds an `ashby:<board>:<posting>` identifier to feed postings that match an Ashby board (ADR-013 §2); about 60 Ashby-backed feed postings report as `updated` once, because the identifier is part of the content hash. This is normal — nothing closes, and no requirement-extraction fingerprint input changes.
+
+**Rollback.** Disable a source rather than deleting it (toggle on the Sources page, or `UPDATE ingestion_sources SET is_enabled = false WHERE key = '<key>'`): disabling stops future syncs and leaves its existing records and opportunities untouched. A disabled source's canonical text stays as the last-owned text until another source either falls back onto the opportunity or the opportunity closes (ADR-013 §5); nothing is deleted or rewritten by disabling alone.
+
 ## Source Health (implemented, Milestone 6)
 
 The Sources page and `GET /api/sources` report `health`, `consecutive_failures`, and `last_success_age_hours` per source, derived on every read from `last_success_at` and run history (nothing stored; `app/services/source_health.py`):

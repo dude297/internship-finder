@@ -478,33 +478,43 @@ def test_only_one_record_rewrites_a_deduplicated_opportunity(
     db: Session, feed_source: IngestionSource, gh_source: IngestionSource, web: FakeSource
 ) -> None:
     """Two sources describing one posting differently (the feed has no description) must not
-    overwrite each other on every change, or a reviewed posting keeps looking changed: only the
-    earliest active record owns the canonical fields (ADR-012 §6)."""
+    overwrite each other on every change, or a reviewed posting keeps looking changed: exactly
+    one owns the canonical fields (ADR-013 §1). The board outranks the feed and takes over as
+    soon as it attaches (ADR-013 §4.3), so a feed change afterwards never flips the text back;
+    only the owning board's own change does -- and that one does mark the review stale."""
     feed_item = feed_job(
         f"greenhouse:{GREENHOUSE_BOARD}:1001",
         url="https://careers.example.com/robotics?gh_jid=1001",
     )
     web.json(FEED_URL, feed(feed_item))
-    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(1001)))
+    web.json(
+        GREENHOUSE_URL, greenhouse_board(greenhouse_job(1001, content="Must be a U.S. citizen."))
+    )
     sync(db, feed_source, web)
     sync(db, gh_source, web)
     [opportunity] = db.scalars(select(Opportunity)).all()
+    assert opportunity.description == "Must be a U.S. citizen."  # the board owns on attach
     opportunity.requirements_assessment_status = RequirementsAssessmentStatus.COMPLETE
     db.commit()
 
-    # An unrelated feed change (salary) and a board change: neither flips the text or the review.
+    # An unrelated feed change (salary): the feed isn't the owner, so it never touches the text.
     web.json(FEED_URL, feed(feed_item | {"salary": "$25/hr"}))
     assert counts(sync(db, feed_source, web))["updated"] == 1
+    db.refresh(opportunity)
+    assert opportunity.description == "Must be a U.S. citizen."
+    assert opportunity.requirements_stale_since is None
+    assert opportunity.requirements_assessment_status is RequirementsAssessmentStatus.COMPLETE
+
+    # The owning board's own change does rewrite the text, and does mark the review stale.
     web.json(
-        GREENHOUSE_URL,
-        greenhouse_board(greenhouse_job(1001, content="&lt;p&gt;Rewritten board text.&lt;/p&gt;")),
+        GREENHOUSE_URL, greenhouse_board(greenhouse_job(1001, content="Rewritten board text."))
     )
     assert counts(sync(db, gh_source, web))["updated"] == 1
 
     db.refresh(opportunity)
-    assert opportunity.description is None  # the owning (feed) record's text
-    assert opportunity.requirements_stale_since is None
-    assert opportunity.requirements_assessment_status is RequirementsAssessmentStatus.COMPLETE
+    assert opportunity.description == "Rewritten board text."
+    assert opportunity.requirements_stale_since is not None
+    assert opportunity.requirements_assessment_status is RequirementsAssessmentStatus.UNASSESSED
 
 
 def test_lever_first_then_feed(
@@ -841,6 +851,9 @@ def test_an_abandoned_run_is_marked_failed(
 def test_sync_enabled_sources_continues_past_a_failure(
     db: Session, feed_source: IngestionSource, gh_source: IngestionSource, web: FakeSource
 ) -> None:
+    """Direct ATS sources sync before the discovery feed (ADR-013 §7), so the board (which is
+    served) runs and succeeds before the feed (which isn't) fails; a disabled source never runs
+    at all."""
     lever = IngestionSource(
         kind=IngestionSourceKind.LEVER,
         identifier="disabledsite",
@@ -855,8 +868,8 @@ def test_sync_enabled_sources_continues_past_a_failure(
     runs = sync_enabled_sources(db, transport=web.transport())
 
     assert [(r.source.key, r.status) for r in runs] == [
-        ("community_feed:zshah-tech-internships", IngestionRunStatus.FAILED),
         (f"greenhouse:{GREENHOUSE_BOARD}", IngestionRunStatus.SUCCESS),
+        ("community_feed:zshah-tech-internships", IngestionRunStatus.FAILED),
     ]
 
 

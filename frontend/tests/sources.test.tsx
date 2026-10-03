@@ -1,6 +1,14 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { json, loggedIn, mockApi, renderAt, run, source } from './helpers'
+import {
+  discoveryResponse,
+  json,
+  loggedIn,
+  mockApi,
+  renderAt,
+  run,
+  source,
+} from './helpers'
 
 // Synthetic sources and runs only.
 
@@ -18,6 +26,7 @@ describe('sources page', () => {
   it('lists the built-in feed with its latest run, reachable from the navigation', async () => {
     mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [
         source({
           last_attempted_at: '2040-10-01T12:00:00Z',
@@ -42,6 +51,7 @@ describe('sources page', () => {
   it('syncs one source with the CSRF header and shows the result', async () => {
     const calls = mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source()],
       'POST /api/sources/src-feed/sync': () =>
         run({
@@ -75,6 +85,7 @@ describe('sources page', () => {
   it('shows a failed run without counts', async () => {
     mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [
         source({
           latest_run: run({ status: 'failed', error_summary: 'The source timed out.' }),
@@ -91,6 +102,7 @@ describe('sources page', () => {
   it('syncs all sources', async () => {
     mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source(), greenhouse],
       'POST /api/sources/sync': () => [
         run(),
@@ -108,6 +120,7 @@ describe('sources page', () => {
   it('disables a source', async () => {
     const calls = mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source()],
       'PUT /api/sources/src-feed': () => source({ enabled: false }),
     })
@@ -128,6 +141,7 @@ describe('sources page', () => {
   it('adds a Greenhouse board from its link', async () => {
     const calls = mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source()],
       'POST /api/sources': () => json(greenhouse, 201),
     })
@@ -156,6 +170,7 @@ describe('sources page', () => {
   it('sends the Lever region only for a bare site name', async () => {
     const calls = mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source()],
       'POST /api/sources': () => json(source({ id: 'src-lv', kind: 'lever' }), 201),
     })
@@ -181,6 +196,7 @@ describe('sources page', () => {
     let attempt = 0
     mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source()],
       'POST /api/sources': () =>
         ++attempt === 1
@@ -219,6 +235,7 @@ describe('sources page', () => {
   it('reports a failed sync request', async () => {
     mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source()],
       'POST /api/sources/src-feed/sync': () =>
         json({ detail: 'Tech Internship Discovery Feed is already syncing.' }, 409),
@@ -237,6 +254,7 @@ describe('sources page', () => {
   it('reports a load error', async () => {
     mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => json({ detail: 'Internal server error.' }, 500),
     })
     renderAt('/sources')

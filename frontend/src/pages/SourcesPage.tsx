@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import { sourceScopes, type Run, type Source, type SourceScope } from '../api/schemas'
 import { AddSourceForm } from '../components/AddSourceForm'
 import { RunSummary } from '../components/RunSummary'
+import { SourceCoverage } from '../components/SourceCoverage'
 import { ErrorMessage, SuccessMessage } from '../components/ui'
 import {
   formatDateTime,
@@ -56,6 +57,13 @@ export function SourcesPage() {
       active = false
     }
   }, [])
+
+  function refreshSources() {
+    api
+      .listSources()
+      .then(setSources)
+      .catch((caught: unknown) => setError(message(caught, 'Could not load.')))
+  }
 
   function withRun(run: Run) {
     setSources(
@@ -156,6 +164,7 @@ export function SourcesPage() {
       </div>
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {notice && <SuccessMessage>{notice}</SuccessMessage>}
+      <SourceCoverage onSourcesChanged={refreshSources} />
       <ul className="space-y-3">
         {sources?.map((source) => (
           <li key={source.id} className="space-y-3 rounded border border-slate-200 p-4">
