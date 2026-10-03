@@ -149,4 +149,6 @@ def _url(source: SourceConfig) -> str:
     return f"{API}/{quote(source.identifier, safe='')}?includeCompensation=false"
 
 
-ADAPTER = Adapter(source_type=OpportunitySourceType.ATS, url=_url, parse=parse)
+ADAPTER = Adapter(
+    source_type=OpportunitySourceType.ATS, url=_url, parse=parse, normalize=_normalize
+)
