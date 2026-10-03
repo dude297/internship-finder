@@ -142,4 +142,6 @@ def _url(source: SourceConfig) -> str:
     return f"{base}/{quote(source.identifier, safe='')}?mode=json"
 
 
-ADAPTER = Adapter(source_type=OpportunitySourceType.ATS, url=_url, parse=parse)
+ADAPTER = Adapter(
+    source_type=OpportunitySourceType.ATS, url=_url, parse=parse, normalize=_normalize
+)

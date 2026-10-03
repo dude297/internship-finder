@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.enums import OpportunitySourceType, RemoteMode
 from app.ingestion.adapters import Adapter, SourceConfig, normalize_each, top_level
 from app.ingestion.normalize import (
+    ASHBY,
     GREENHOUSE,
     LEVER,
     SLUG,
@@ -39,6 +40,13 @@ BUILTIN_IDENTIFIER = "zshah-tech-internships"
 _DIGITS = re.compile(r"^[0-9]+$")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _LEVER_HOSTS = {"jobs.lever.co": "global", "jobs.eu.lever.co": "eu"}
+_ASHBY_HOSTS = {"jobs.ashbyhq.com": "global"}
+_GREENHOUSE_HOSTS = {
+    "boards.greenhouse.io": "global",
+    "job-boards.greenhouse.io": "global",
+    "boards.eu.greenhouse.io": "eu",
+    "job-boards.eu.greenhouse.io": "eu",
+}
 
 
 class _Item(BaseModel):
@@ -62,20 +70,43 @@ class _Feed(BaseModel):
     generated_at: str | None = None
 
 
+def _hosted_path(url: str | None, hosts: dict[str, str]) -> tuple[str, list[str]] | None:
+    """(region, lowercased path segments) for a plain https link on one of `hosts`. Credentials
+    or an explicit port mean it isn't a plain public posting link: no identity (ADR-013 §2)."""
+    try:
+        parts = urlsplit(url or "")
+        port = parts.port
+    except ValueError:
+        return None
+    region = hosts.get((parts.hostname or "").lower())
+    if parts.scheme != "https" or region is None or parts.username is not None or port is not None:
+        return None
+    return region, [s.lower() for s in parts.path.split("/") if s]
+
+
 def provider_identity(item_id: str, url: str | None) -> Identifier | None:
-    """The underlying ATS identity, only for ID formats understood exactly (ADR-008 §6)."""
+    """The underlying ATS identity, only for ID formats understood exactly (ADR-008 §6,
+    ADR-013 §2). A posting link on the provider's own host must agree with the ID."""
     kind, _, rest = item_id.partition(":")
     head, _, tail = rest.partition(":")
     head = head.lower()
     if kind == "greenhouse" and SLUG.match(head) and _DIGITS.match(tail):
+        # The ID alone is the identity (many feed links are company career pages), but a link on
+        # a Greenhouse board host naming a different board is conflicting evidence.
+        hosted = _hosted_path(url, _GREENHOUSE_HOSTS)
+        if hosted is not None and hosted[1][:1] != [head]:
+            return None
         return Identifier(namespace=GREENHOUSE, value=f"{head}:{tail}")
     if kind == "lever" and SLUG.match(head) and _UUID.match(tail.lower()):
         # The feed ID doesn't say global vs EU; only the posting URL can, and it must agree.
-        parts = urlsplit(url or "")
-        region = _LEVER_HOSTS.get((parts.hostname or "").lower())
-        segments = [s.lower() for s in parts.path.split("/") if s]
-        if parts.scheme == "https" and region and segments[:2] == [head, tail.lower()]:
-            return Identifier(namespace=LEVER, value=f"{region}:{head}:{tail.lower()}")
+        hosted = _hosted_path(url, _LEVER_HOSTS)
+        if hosted is not None and hosted[1][:2] == [head, tail.lower()]:
+            return Identifier(namespace=LEVER, value=f"{hosted[0]}:{head}:{tail.lower()}")
+    if kind == "ashby" and SLUG.match(head) and _UUID.match(tail.lower()):
+        # Both the provider-shaped ID and a matching hosted posting link (ADR-013 §2).
+        hosted = _hosted_path(url, _ASHBY_HOSTS)
+        if hosted is not None and hosted[1][:2] == [head, tail.lower()]:
+            return Identifier(namespace=ASHBY, value=f"{head}:{tail.lower()}")
     return None
 
 
@@ -125,4 +156,9 @@ def _url(source: SourceConfig) -> str:
         raise SnapshotError("unknown_feed", "Unknown built-in feed.") from None
 
 
-ADAPTER = Adapter(source_type=OpportunitySourceType.PUBLIC_FEED, url=_url, parse=parse)
+ADAPTER = Adapter(
+    source_type=OpportunitySourceType.PUBLIC_FEED,
+    url=_url,
+    parse=parse,
+    normalize=lambda raw, _source: _normalize(raw),
+)

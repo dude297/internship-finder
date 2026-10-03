@@ -27,6 +27,9 @@ class Adapter:
     url: Callable[[SourceConfig], str]
     # Raises SnapshotError when the response as a whole is unusable.
     parse: Callable[[Any, SourceConfig], Snapshot]
+    # One stored raw item → its normalized form (ADR-013 §5: re-deriving a fallback owner's
+    # canonical fields without a fetch). Raises ItemError/ValidationError like `parse` items.
+    normalize: Callable[[dict[str, Any], SourceConfig], NormalizedOpportunity]
 
 
 def top_level[M: BaseModel](model: type[M], payload: Any, what: str) -> M:
