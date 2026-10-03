@@ -451,6 +451,70 @@ export const profileSourceDeleteResultSchema = z.object({
 })
 export type ProfileSourceDeleteResult = z.infer<typeof profileSourceDeleteResultSchema>
 
+// Source discovery / coverage (ADR-013 §2, §3): derived on read, never stored.
+
+export const supportedSourceKinds = ['greenhouse', 'lever', 'ashby'] as const
+export type SupportedSourceKind = (typeof supportedSourceKinds)[number]
+
+export const coverageMetricsSchema = z.object({
+  active_opportunities: z.number().int(),
+  with_description: z.number().int(),
+  without_description: z.number().int(),
+  description_coverage_percent: z.number().nullable(),
+  ats_backed: z.number().int(),
+  feed_only: z.number().int(),
+  enrichable: z.number().int(),
+  unsupported: z.number().int(),
+})
+export type CoverageMetrics = z.infer<typeof coverageMetricsSchema>
+
+export const providerCountSchema = z.object({
+  provider: z.string(),
+  supported: z.boolean(),
+  opportunities: z.number().int(),
+  enrichable: z.number().int(),
+})
+export type ProviderCount = z.infer<typeof providerCountSchema>
+
+export const sourceSuggestionSchema = z.object({
+  kind: z.enum(supportedSourceKinds),
+  identifier: z.string(),
+  region: z.enum(regions).nullable(),
+  key: z.string(),
+  suggested_display_name: z.string(),
+  display_name_ambiguous: z.boolean(),
+  matching_opportunities: z.number().int(),
+  feed_only_opportunities: z.number().int(),
+  already_configured: z.boolean(),
+  sample_titles: z.array(z.string()),
+})
+export type SourceSuggestion = z.infer<typeof sourceSuggestionSchema>
+
+export const sourceDiscoveryResponseSchema = z.object({
+  coverage: coverageMetricsSchema,
+  providers: z.array(providerCountSchema),
+  suggestions: z.array(sourceSuggestionSchema),
+})
+export type SourceDiscoveryResponse = z.infer<typeof sourceDiscoveryResponseSchema>
+
+export const discoveryAddSkippedSchema = z.object({
+  key: z.string(),
+  reason: z.literal('already_configured'),
+})
+
+export const discoveryAddResponseSchema = z.object({
+  created: z.array(sourceSchema),
+  skipped: z.array(discoveryAddSkippedSchema),
+})
+export type DiscoveryAddResponse = z.infer<typeof discoveryAddResponseSchema>
+
+/** What the server accepts back (ADR-013 §3): identity only, never a display name or URL. */
+export interface DiscoverySelectionInput {
+  kind: SupportedSourceKind
+  identifier: string
+  region: Region | null
+}
+
 export interface FactReviewInput {
   id: string
   name?: string

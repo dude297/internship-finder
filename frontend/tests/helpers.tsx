@@ -173,6 +173,47 @@ export const source = (changes: Record<string, unknown> = {}) => ({
   ...changes,
 })
 
+export const suggestion = (changes: Record<string, unknown> = {}) => ({
+  kind: 'greenhouse',
+  identifier: 'examplerobotics',
+  region: null,
+  key: 'greenhouse:examplerobotics',
+  suggested_display_name: 'Example Robotics',
+  display_name_ambiguous: false,
+  matching_opportunities: 5,
+  feed_only_opportunities: 5,
+  already_configured: false,
+  sample_titles: ['Software Intern', 'Hardware Intern'],
+  ...changes,
+})
+
+export const coverageMetrics = (changes: Record<string, unknown> = {}) => ({
+  active_opportunities: 100,
+  with_description: 40,
+  without_description: 60,
+  description_coverage_percent: 40.0,
+  ats_backed: 10,
+  feed_only: 90,
+  enrichable: 20,
+  unsupported: 70,
+  ...changes,
+})
+
+export const providerCount = (changes: Record<string, unknown> = {}) => ({
+  provider: 'greenhouse',
+  supported: true,
+  opportunities: 20,
+  enrichable: 20,
+  ...changes,
+})
+
+export const discoveryResponse = (changes: Record<string, unknown> = {}) => ({
+  coverage: coverageMetrics(),
+  providers: [providerCount()],
+  suggestions: [suggestion()],
+  ...changes,
+})
+
 export const importedFact = (changes: Record<string, unknown> = {}) => ({
   id: 'fact-1',
   category: 'skill',

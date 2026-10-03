@@ -9,7 +9,13 @@ from app.api.deps import DbSession
 from app.ingestion.http import configured_transport
 from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_source
 from app.models import IngestionSource
+from app.schemas.source_discovery import (
+    DiscoveryAddRequest,
+    DiscoveryAddResponse,
+    SourceDiscoveryResponse,
+)
 from app.schemas.sources import RunResponse, SourceCreate, SourceResponse, SourceUpdate
+from app.services import source_discovery
 from app.services import sources as service
 
 router = APIRouter(prefix="/sources", tags=["sources"])
@@ -36,6 +42,34 @@ def list_sources(db: DbSession) -> list[SourceResponse]:
         service.to_response(s, latest.get(s.id), finished.get(s.id), failures.get(s.id, 0), now)
         for s in sources
     ]
+
+
+@router.get("/discovery")
+def discovery(db: DbSession) -> SourceDiscoveryResponse:
+    """Coverage metrics and ATS board suggestions, derived on read (ADR-013 §2). Zero network
+    calls; registered ahead of the `/{source_id}` routes so "discovery" is never captured as a
+    source ID."""
+    return source_discovery.discover(db)
+
+
+@router.post("/discovery/add", response_model=DiscoveryAddResponse)
+def add_discovery(body: DiscoveryAddRequest, db: DbSession) -> DiscoveryAddResponse | JSONResponse:
+    """Create sources from current suggestions only (ADR-013 §3); all-or-nothing, at most 25 per
+    request. 201 when anything was created, 200 when every selection was already configured."""
+    try:
+        result = source_discovery.add_from_discovery(db, body)
+    except ValueError as error:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={
+                "detail": [{"loc": ["body", "sources"], "msg": str(error), "type": "value_error"}]
+            },
+        )
+    except source_discovery.SourceDiscoveryConflict as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    db.commit()
+    status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
+    return JSONResponse(status_code=status_code, content=result.model_dump(mode="json"))
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=SourceResponse)

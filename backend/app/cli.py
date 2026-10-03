@@ -26,6 +26,15 @@ Requirement candidate catalog scan (ADR-012 §9):
 
 Idempotent; never accepts, rejects, changes an assessment status, or evaluates. Prints counts
 only. Exits 2 on an operational (database) error, never on an individual extractor failure.
+
+Source coverage and discovery (ADR-013 §2, §9):
+
+    python -m app.cli source-coverage
+
+Derived on read; zero network calls, nothing stored. Prints aggregate counts only: coverage
+metrics, provider distribution, and how many proven suggestions by kind are and aren't already
+configured. Never a title, company name, payload, URL, or the database URL. Exits 2 on a
+database error, like the other commands.
 """
 
 import argparse
@@ -48,7 +57,7 @@ from app.enums import IngestionRunStatus
 from app.ingestion.http import configured_transport
 from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_source
 from app.models import AuthUser, IngestionRun, IngestionSource
-from app.services import auth
+from app.services import auth, source_discovery
 from app.services.requirement_candidates import CATALOG_SCAN_BATCH_SIZE, scan_catalog
 
 # Never the exception text or the URL it may embed (ADR-009 §9): a connection failure or a
@@ -177,6 +186,39 @@ def _scan_requirements(batch_size: int) -> int:
     return 0
 
 
+def _source_coverage() -> int:
+    try:
+        with Session(get_engine(), expire_on_commit=False) as db:
+            result = source_discovery.discover(db)
+    except (OperationalError, ArgumentError, RuntimeError):
+        print(DB_ERROR_MESSAGE, file=sys.stderr)
+        return 2
+    coverage = result.coverage
+    pct = coverage.description_coverage_percent
+    print(
+        f"opportunities: {coverage.active_opportunities} open, "
+        f"{coverage.with_description} with description, "
+        f"{coverage.without_description} without "
+        f"({pct if pct is not None else 'n/a'}% coverage)"
+    )
+    print(
+        f"ats_backed {coverage.ats_backed}, feed_only {coverage.feed_only}, "
+        f"enrichable {coverage.enrichable}, unsupported {coverage.unsupported}"
+    )
+    for provider in result.providers:
+        print(
+            f"provider {provider.provider}: {provider.opportunities} opportunities, "
+            f"supported={provider.supported}, enrichable={provider.enrichable}"
+        )
+    configured = sum(1 for s in result.suggestions if s.already_configured)
+    not_configured = len(result.suggestions) - configured
+    print(
+        f"suggestions: {len(result.suggestions)} total, "
+        f"{configured} configured, {not_configured} not"
+    )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m app.cli", description="Owner account and source administration."
@@ -205,6 +247,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "scan-requirements", help="refresh requirement candidates catalog-wide (ADR-012 §9)"
     )
     scan.add_argument("--batch-size", type=int, default=CATALOG_SCAN_BATCH_SIZE)
+    commands.add_parser(
+        "source-coverage", help="print ATS source coverage and discovery counts (ADR-013)"
+    )
     args = parser.parse_args(argv)
 
     if args.command == "sync-sources":
@@ -213,6 +258,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _sync_source(args.source)
     if args.command == "scan-requirements":
         return _scan_requirements(args.batch_size)
+    if args.command == "source-coverage":
+        return _source_coverage()
 
     action: Callable[[Session, str, str], AuthUser] = (
         auth.create_owner if args.command == "create-owner" else auth.set_password

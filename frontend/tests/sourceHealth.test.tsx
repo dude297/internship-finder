@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { loggedIn, mockApi, renderAt, source } from './helpers'
+import { discoveryResponse, loggedIn, mockApi, renderAt, source } from './helpers'
 
 // Synthetic sources only.
 
@@ -15,6 +15,7 @@ describe('source health', () => {
   ])('shows the %s badge as "%s"', async (health, label) => {
     mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source({ health })],
     })
     renderAt('/sources')
@@ -26,6 +27,7 @@ describe('source health', () => {
   it('shows consecutive failures and the last-success age without relying on color alone', async () => {
     mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [
         source({
           health: 'failing',
@@ -46,6 +48,7 @@ describe('source health', () => {
   it('adds an Ashby board by its link, with no region field', async () => {
     const calls = mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source()],
       'POST /api/sources': () =>
         source({

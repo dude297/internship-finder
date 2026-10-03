@@ -18,7 +18,7 @@ Priority 3 is strategically the most important layer for this user, even though 
 
 ## Source Review and Attribution
 
-Last reviewed: 2026-10-02 (Ashby added; earlier rows 2026-09-27).
+Last reviewed: 2026-10-03 (Milestone 7 source authority and discovery; Ashby added 2026-10-02; earlier rows 2026-09-27).
 
 | Source | Role | API / docs | License / usage basis | Attribution | Implemented? | Notes |
 |---|---|---|---|---|---|---|
@@ -38,7 +38,7 @@ Last reviewed: 2026-10-02 (Ashby added; earlier rows 2026-09-27).
 - **Ingestion method:** one HTTPS GET of the JSON feed (about 1,000 postings, ~800 KB as of 2026-09-27)
 - **Stable ID:** the feed's `id` (e.g. `greenhouse:<board>:<job>`, `workday:<tenant>:<path>`)
 - **Mapped:** `company` → organization, `title`, `location`, `url` → application URL, `posted_at` → posted date (when it has a timezone), `remote: true` → remote (false isn't taken to mean on-site), `program: "Internship"` → internship (anything else → other). `first_seen_at`, `season`, `category`, `salary`, `skills`, `sponsorship`, `h1b_approvals`, and the rest stay in the raw payload only
-- **Cross-source identity:** `zshah:<id>`; `greenhouse:<board>:<job>` when the ID has exactly that form; `lever:<region>:<site>:<posting>` only when the posting URL is on `jobs.lever.co`/`jobs.eu.lever.co` with the same site and ID; the canonical URL
+- **Cross-source identity:** `zshah:<id>`; `greenhouse:<board>:<job>` when the ID has exactly that form (a link on a Greenhouse board host naming a different board is conflicting evidence and yields no identity; the EU Greenhouse hosts aren't matched, since discovery only calls the US Job Board API); `lever:<region>:<site>:<posting>` only when the posting URL is on `jobs.lever.co`/`jobs.eu.lever.co` with the same site and ID; `ashby:<board>:<posting>` only when the ID is exactly `ashby:<board>:<uuid>` **and** the posting URL is on `jobs.ashbyhq.com` with the same board and posting ID (Milestone 7, [ADR-013 §2](decisions/ADR-013-provider-enrichment-and-source-authority.md#2-ats-source-discovery)); a link with credentials or an explicit port proves nothing; the canonical URL
 - **Completeness check:** the feed's `count` must equal the number of jobs, or the run fails
 - **Conditional requests:** GitHub Pages returns `ETag`/`Last-Modified`; an unchanged feed answers 304 → `no_change`
 - **Refresh:** manual (Sources page, API, or CLI). The feed itself updates about every 30 minutes
@@ -87,13 +87,43 @@ Excluded postings count as **Filtered** in the run (`fetched` = provider items, 
 
 Opportunities added through the app keep a `manual` source record without an external ID. They're curated from the start, never closed by a sync, and not matched by identifiers.
 
+## Source authority (Milestone 7)
+
+Canonical fields (title, organization, description, application URL, location, remote mode, posted date, opportunity type) have exactly one automated owner per opportunity: the highest-authority active automated source record ([ADR-013 §1](decisions/ADR-013-provider-enrichment-and-source-authority.md#1-automated-source-authority)).
+
+| Rank | `source_type` | |
+|---|---|---|
+| 0 | `ats` (Greenhouse, Lever, Ashby) | the original posting, with its text |
+| 1 | `public_feed` (the discovery feed) | discovery metadata about someone else's posting |
+| 2 | anything else | |
+
+Ties within a rank: earliest `first_seen_at`, then record ID — so two boards naming one posting never alternate.
+
+The owner's fields are rewritten from its normalized output when its own item changes, it reactivates, it first attaches through deduplication and outranks the current owner (**takeover**: a board added after the feed), or the previous owner closes and it's the next owner (**fallback**: re-derived from the new owner's own *stored* raw item through its adapter's per-item normalizer, no fetch, in the same run as the closure, [ADR-013 §5](decisions/ADR-013-provider-enrichment-and-source-authority.md#5-fallback-when-a-direct-ats-source-closes)). The discovery feed never supplies a description, so a feed owner taking over keeps the last known posting text instead of erasing it; every other field is restored from the feed. Non-owners only update their own source record; unchanged items skip canonical work entirely.
+
+A curated opportunity (`manually_curated_at`) is never rewritten by any sync, owner or not (ADR-008 §8) — above all of the above.
+
+## Source coverage and discovery (Milestone 7)
+
+`GET /api/sources/discovery` derives coverage metrics and board suggestions on read from active discovery-feed records already in the database (`external_id` and the stored posting URL). It makes **zero network calls** and stores nothing ([ADR-013 §2](decisions/ADR-013-provider-enrichment-and-source-authority.md#2-ats-source-discovery)).
+
+A feed record proves a board only through the same `provider_identity` function the feed adapter uses for deduplication, so discovery and dedup can never disagree:
+
+- **Greenhouse:** ID exactly `greenhouse:<board>:<digits>`. A link on a Greenhouse board host naming a different board is conflicting evidence and yields nothing. The EU Greenhouse hosts aren't suggested, because the adapter only calls the US Job Board API.
+- **Lever:** ID exactly `lever:<site>:<uuid>` **and** a matching `https` posting link on `jobs.lever.co`/`jobs.eu.lever.co` (same site and ID; the host decides the region, never guessed).
+- **Ashby:** ID exactly `ashby:<board>:<uuid>` **and** a matching `https` posting link on `jobs.ashbyhq.com` (same board and posting ID).
+
+A link with credentials or an explicit port proves nothing; hosts are compared exactly. Workday, Oracle, SmartRecruiters, and every other provider named in feed IDs are **counted only** (by a fixed list of known ID prefixes; anything else is `other`) — never fetched, scraped, or reverse-engineered. The feed's company label is only a *suggested display name*: when feed rows for one board disagree, the most common label wins (ties alphabetically) and the suggestion is flagged ambiguous. Company names are never identity.
+
+Discovery only suggests. `POST /api/sources/discovery/add` (CSRF-protected) creates sources only when the owner selects suggestions and submits: at most 25 per request, validated all-or-nothing; the client sends only `kind`, `identifier`, and `region`, and the server re-derives the current suggestion set and refuses anything not in it. Already-configured suggestions are skipped and reported, never duplicated (the existing unique constraint on `(kind, identifier, region)` is the final guard). New sources default to **Internships only**. Creating a source never syncs it — the owner syncs with the existing controls.
+
 ## Common Behavior
 
 - **Network safety:** HTTPS to the five allowlisted API hosts only, public addresses only, 5 s connect / 20 s read timeouts, ≤ 3 redirects (each re-checked), ≤ 20 MB responses, ≤ 3 attempts (429/5xx/timeouts; `Retry-After` honored up to 30 s), a descriptive `User-Agent`. User-entered links are parsed into identifiers and never requested.
 - **Deduplication:** same source + external ID first, then exact identifiers; no fuzzy matching. Conflicting identities are recorded as errors and nothing is merged ([ADR-008 §7](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#7-deduplication-order)).
 - **Failure behavior:** fetch, format, and completeness failures fail the run without changing data. One bad item makes the run `partial` and is recorded; other items still import. Only a complete successful snapshot closes postings it no longer contains. Closed postings reopen if they return.
 - **Fit:** adapters never score. Imported postings are scored by the shared evaluation step like any other opportunity ([scoring.md](scoring.md)); feed hints such as sponsorship, H-1B counts, or skill tags stay discovery metadata in the raw payload and affect neither eligibility nor fit.
-- **Requirements:** imported opportunities start `unassessed` (so at least `needs_verification`) until the owner reviews them. Nothing in a source becomes a hard requirement automatically. Since Milestone 6, new and materially changed postings get deterministic requirement *suggestions* that change nothing until the owner accepts them ([ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). Suggestions need posting text: the discovery feed has no description field, so its postings get none (production, 2026-10-02: 0 suggestions over 1,193 feed opportunities); Greenhouse, Lever, and Ashby boards include descriptions.
+- **Requirements:** imported opportunities start `unassessed` (so at least `needs_verification`) until the owner reviews them. Nothing in a source becomes a hard requirement automatically. Since Milestone 6, new and materially changed postings get deterministic requirement *suggestions* that change nothing until the owner accepts them ([ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). Suggestions need posting text: the discovery feed has no description field, so its postings get none (production, 2026-10-02: 0 suggestions over 1,193 feed opportunities); Greenhouse, Lever, and Ashby boards include descriptions. Since Milestone 7, a feed posting that a board source takes over or falls back onto (below) gets suggestions from the board's own description on that same run.
 - **Descriptions:** stored and displayed as plain text only. The original posting link is always kept.
 
 ## Adapter Boundary

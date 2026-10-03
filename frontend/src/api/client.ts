@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   applicationSchema,
+  discoveryAddResponseSchema,
   evaluationSchema,
   matchProfileSaveSchema,
   matchProfileSchema,
@@ -16,8 +17,10 @@ import {
   requirementReviewResultSchema,
   runSchema,
   sessionSchema,
+  sourceDiscoveryResponseSchema,
   sourceSchema,
   type ApplicationInput,
+  type DiscoverySelectionInput,
   type MatchProfile,
   type OpportunityInput,
   type OpportunityQuery,
@@ -236,6 +239,11 @@ export const api = {
   syncSource: (id: string) =>
     request('POST', `/sources/${encodeURIComponent(id)}/sync`, runSchema),
   syncAllSources: () => request('POST', '/sources/sync', z.array(runSchema)),
+
+  getSourceDiscovery: () =>
+    request('GET', '/sources/discovery', sourceDiscoveryResponseSchema),
+  addDiscoverySources: (sources: DiscoverySelectionInput[]) =>
+    request('POST', '/sources/discovery/add', discoveryAddResponseSchema, { sources }),
 
   listProfileSources: () =>
     request('GET', '/profile/sources', z.array(profileSourceSummarySchema)),

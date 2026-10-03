@@ -9,16 +9,24 @@ and committed at the end. A failed or partial run never closes unseen records.
 
 import logging
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import httpx2
-from sqlalchemy import or_, select, tuple_, update
+from pydantic import ValidationError
+from sqlalchemy import case, or_, select, tuple_, update
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
-from app.enums import IngestionRunStatus, IngestionStage, SourceScope
+from app.enums import (
+    IngestionRunStatus,
+    IngestionSourceKind,
+    IngestionStage,
+    OpportunitySourceType,
+    SourceScope,
+)
 from app.ingestion.adapters import SourceConfig, adapter_for
 from app.ingestion.http import FetchError, fetch_json
 from app.ingestion.normalize import (
@@ -222,14 +230,25 @@ def _has_record_from(db: Session, opportunity_id: uuid.UUID, source: IngestionSo
     )
 
 
-def _owns_canonical_fields(db: Session, record: OpportunitySourceRecord) -> bool:
-    """Whether this record's updates rewrite the opportunity's canonical fields (ADR-012 §6).
+# Authority rank for canonical-field ownership (ADR-013 §1): the original posting outranks
+# discovery metadata about it, which outranks anything else.
+_SOURCE_RANK = case(
+    (OpportunitySourceRecord.source_type == OpportunitySourceType.ATS, 0),
+    (OpportunitySourceRecord.source_type == OpportunitySourceType.PUBLIC_FEED, 1),
+    else_=2,
+)
 
-    Exactly one record owns them: the earliest-seen active automated record (this one counts as
-    active: it was just seen). Otherwise two sources describing the same posting differently
-    (the discovery feed has no description, a board does) would overwrite each other on every
+
+def _owns_canonical_fields(db: Session, record: OpportunitySourceRecord) -> bool:
+    """Whether this record's updates rewrite the opportunity's canonical fields (ADR-013 §1).
+
+    Exactly one record owns them: the highest-authority active automated record (this one
+    counts as active: it was just seen), ties broken by earliest `first_seen_at` then ID. An ATS
+    record always outranks a discovery-feed record, so a board added after the feed can take
+    over the posting it describes (§4.3); without that rank, two sources describing one posting
+    differently (the feed has no description, a board does) would overwrite each other on every
     change of either, flip-flopping the text and making a reviewed posting look changed. When
-    the owning record closes, the next earliest active record takes over."""
+    the owning record closes, the next highest-ranked active record takes over (§5)."""
     owner = db.scalar(
         select(OpportunitySourceRecord.id)
         .where(
@@ -237,10 +256,91 @@ def _owns_canonical_fields(db: Session, record: OpportunitySourceRecord) -> bool
             OpportunitySourceRecord.ingestion_source_id.is_not(None),
             or_(OpportunitySourceRecord.is_active, OpportunitySourceRecord.id == record.id),
         )
-        .order_by(OpportunitySourceRecord.first_seen_at, OpportunitySourceRecord.id)
+        .order_by(_SOURCE_RANK, OpportunitySourceRecord.first_seen_at, OpportunitySourceRecord.id)
         .limit(1)
     )
     return owner == record.id
+
+
+def _owners(
+    db: Session, opportunity_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, OpportunitySourceRecord]:
+    """The current canonical-field owner (ADR-013 §1) of each given opportunity, among active
+    automated records of non-curated opportunities. One set-based query, not one per
+    opportunity; used by the ADR-013 §5 fallback, before and after the closing update."""
+    if not opportunity_ids:
+        return {}
+    rows = db.scalars(
+        select(OpportunitySourceRecord)
+        .join(Opportunity, Opportunity.id == OpportunitySourceRecord.opportunity_id)
+        .where(
+            OpportunitySourceRecord.opportunity_id.in_(opportunity_ids),
+            OpportunitySourceRecord.ingestion_source_id.is_not(None),
+            OpportunitySourceRecord.is_active,
+            Opportunity.manually_curated_at.is_(None),
+        )
+        .ext(distinct_on(OpportunitySourceRecord.opportunity_id))
+        .order_by(
+            OpportunitySourceRecord.opportunity_id,
+            _SOURCE_RANK,
+            OpportunitySourceRecord.first_seen_at,
+            OpportunitySourceRecord.id,
+        )
+    ).all()
+    return {r.opportunity_id: r for r in rows}
+
+
+def _rewrite_canonical(
+    db: Session,
+    source_type: OpportunitySourceType,
+    opportunity: Opportunity,
+    item: NormalizedOpportunity,
+    now: datetime,
+    context: EvaluationContext | None,
+) -> None:
+    """The owner's canonical-field rewrite (ADR-013 §4): compares the extraction-input
+    fingerprint before and after, invalidating stale requirements and refreshing candidates only
+    when it changed (ADR-012 §6), then runs `evaluate_if_changed`. A public-feed owner never
+    writes `description` (ADR-013 §4): the feed has none, so a feed owner keeps the
+    opportunity's last known text instead of erasing it."""
+    before = extraction_input_fingerprint(ExtractionInput.model_validate(opportunity))
+    kept_description = opportunity.description
+    _write_canonical(opportunity, item)
+    if source_type is OpportunitySourceType.PUBLIC_FEED:
+        opportunity.description = kept_description
+    db.flush()
+    after = extraction_input_fingerprint(ExtractionInput.model_validate(opportunity))
+    if before != after:
+        invalidate_after_source_change(db, opportunity, now)
+        refresh_candidates(db, opportunity)
+    if context is not None:
+        evaluate_if_changed(db, context.profile, opportunity, context)
+
+
+def _apply_fallback(
+    db: Session, owner: OpportunitySourceRecord, now: datetime, context: EvaluationContext | None
+) -> None:
+    """ADR-013 §5: when the previous owner just closed, re-derive the new owner's canonical
+    fields from its stored raw item through its own adapter's per-item normalizer (no fetch) and
+    apply the same rewrite as any other takeover. A stored item that no longer normalizes (e.g.
+    the adapter's schema tightened since it was stored) is logged -- IDs and exception type
+    only, never the payload -- and skipped: the opportunity keeps its current text."""
+    source = owner.ingestion_source
+    if source is None or owner.raw_payload is None:
+        return
+    config = SourceConfig(source.kind, source.identifier, source.region, source.display_name)
+    try:
+        item = adapter_for(source.kind).normalize(owner.raw_payload, config)
+    except (ItemError, ValidationError) as error:
+        logger.warning(
+            "fallback re-normalize failed opportunity_id=%s record_id=%s exception_type=%s",
+            owner.opportunity_id,
+            owner.id,
+            type(error).__name__,
+        )
+        return
+    with db.begin_nested():
+        _rewrite_canonical(db, owner.source_type, owner.opportunity, item, now, context)
 
 
 def _apply(
@@ -275,22 +375,12 @@ def _apply(
         opportunity.last_seen_at = now
         _register_identifiers(db, opportunity, item, claimed)
         if (
-            outcome.updated
+            (outcome.updated or outcome.reactivated)
             and opportunity.manually_curated_at is None
             and _owns_canonical_fields(db, record)
         ):
-            before = extraction_input_fingerprint(ExtractionInput.model_validate(opportunity))
-            _write_canonical(opportunity, item)
-            db.flush()
-            after = extraction_input_fingerprint(ExtractionInput.model_validate(opportunity))
-            if before != after:
-                # ADR-012 §6 "Source change after review": invalidate (if the owner had reviewed)
-                # before refreshing candidates, and both before the evaluation below (step 5 reads
-                # the assessment status invalidation may have just downgraded).
-                invalidate_after_source_change(db, opportunity, now)
-                refresh_candidates(db, opportunity)
-            if context is not None:
-                evaluate_if_changed(db, context.profile, opportunity, context)
+            # ADR-013 §4.1-2: its own item changed, or it reactivates.
+            _rewrite_canonical(db, record.source_type, opportunity, item, now, context)
         db.flush()
         return outcome
 
@@ -334,9 +424,12 @@ def _apply(
     db.flush()
     if outcome.created:
         refresh_candidates(db, opportunity)
-    if outcome.created and context is not None:
-        # A new opportunity has no evaluation yet.
-        evaluate_and_save(db, context.profile, opportunity, context)
+        if context is not None:
+            # A new opportunity has no evaluation yet.
+            evaluate_and_save(db, context.profile, opportunity, context)
+    elif opportunity.manually_curated_at is None and _owns_canonical_fields(db, new_record):
+        # ADR-013 §4.3 takeover: a board attaching to a feed-only opportunity it outranks.
+        _rewrite_canonical(db, new_record.source_type, opportunity, item, now, context)
     return outcome
 
 
@@ -437,17 +530,41 @@ def _process(
 
     if run.invalid_count == 0 and run.error_count == 0:
         # Complete successful snapshot: anything of this source not in it is closed (not deleted).
-        closed = db.scalars(
-            update(OpportunitySourceRecord)
-            .where(
+        to_close = db.execute(
+            select(OpportunitySourceRecord.id, OpportunitySourceRecord.opportunity_id).where(
                 OpportunitySourceRecord.ingestion_source_id == source.id,
                 OpportunitySourceRecord.is_active,
                 OpportunitySourceRecord.external_id.not_in(list(seen)),
             )
+        ).all()
+        to_close_ids = {row[0] for row in to_close}
+        # ADR-013 §5 fallback: which affected, non-curated opportunities currently have one of
+        # these about-to-close records as their canonical owner (looked up before closing, while
+        # `is_active` still reflects it).
+        owners_before = _owners(db, list({row[1] for row in to_close}))
+        falling = [
+            opportunity_id
+            for opportunity_id, owner in owners_before.items()
+            if owner.id in to_close_ids
+        ]
+
+        closed = db.scalars(
+            update(OpportunitySourceRecord)
+            .where(OpportunitySourceRecord.id.in_(to_close_ids))
             .values(is_active=False, closed_at=now)
             .returning(OpportunitySourceRecord.id)
         ).all()
         run.closed_count = len(closed)
+
+        if falling:
+            # The new owner, if any, is re-derived from its own stored raw item and written in
+            # the same run (ADR-013 §5): correctness never depends on sync order or on the feed
+            # changing, which it often doesn't (304).
+            new_owners = _owners(db, falling)
+            for opportunity_id in falling:
+                new_owner = new_owners.get(opportunity_id)
+                if new_owner is not None:
+                    _apply_fallback(db, new_owner, now, context)
 
 
 def sync_source(
@@ -520,12 +637,18 @@ def sync_enabled_sources(
     on_skip: Callable[[IngestionSource], None] | None = None,
 ) -> list[IngestionRun]:
     """Sync every enabled source in turn. One source failing doesn't stop the others; a source
-    that is already syncing is skipped (reported through `on_skip`, when given)."""
+    that is already syncing is skipped (reported through `on_skip`, when given).
+
+    Direct ATS sources sync before the discovery feed (ADR-013 §7), so a feed sync in the same
+    run sees the boards' current state; within each tier, oldest source first, then ID.
+    Correctness never depends on this order (§5 fallback), but it means fewer takeovers wait for
+    the next run."""
     runs: list[IngestionRun] = []
+    tier = case((IngestionSource.kind == IngestionSourceKind.COMMUNITY_FEED, 1), else_=0)
     sources = db.scalars(
         select(IngestionSource)
         .where(IngestionSource.enabled)
-        .order_by(IngestionSource.created_at, IngestionSource.id)
+        .order_by(tier, IngestionSource.created_at, IngestionSource.id)
     ).all()
     for source in sources:
         try:

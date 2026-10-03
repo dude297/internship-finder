@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
   detail,
+  discoveryResponse,
   json,
   listPage,
   loggedIn,
@@ -320,6 +321,7 @@ describe('source scope', () => {
   it('adds a board with all postings when chosen', async () => {
     const calls = mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source()],
       'POST /api/sources': () => json({ ...board, scope: 'all', latest_run: null }, 201),
     })
@@ -340,6 +342,7 @@ describe('source scope', () => {
   it('shows filtered counts and switches a board scope', async () => {
     const calls = mockApi({
       ...loggedIn,
+      'GET /api/sources/discovery': () => discoveryResponse(),
       'GET /api/sources': () => [source(), board],
       'PUT /api/sources/src-gh': () => ({ ...board, scope: 'all' }),
     })
