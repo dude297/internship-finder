@@ -37,8 +37,8 @@ FEEDS = {
 }
 BUILTIN_IDENTIFIER = "zshah-tech-internships"
 
-_DIGITS = re.compile(r"^[0-9]+$")
-_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+_DIGITS = re.compile(r"^[0-9]+\Z")
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 _LEVER_HOSTS = {"jobs.lever.co": "global", "jobs.eu.lever.co": "eu"}
 _ASHBY_HOSTS = {"jobs.ashbyhq.com": "global"}
 _GREENHOUSE_HOSTS = {
