@@ -162,7 +162,9 @@ test('source coverage: discovery suggests an Ashby board, and adding it enriches
       .first(),
   ).toBeVisible()
   await expect(
-    page.getByRole('region', { name: 'Requirement Review' }).getByText(/citizenship/i),
+    page
+      .getByRole('region', { name: 'Requirement Review' })
+      .getByRole('button', { name: 'Accept citizenship (US)' }),
   ).toBeVisible()
 
   // Coverage now counts this opportunity as ATS-backed instead of feed-only.
