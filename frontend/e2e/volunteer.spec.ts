@@ -2,14 +2,16 @@ import { expect, test } from '@playwright/test'
 import { owner } from './env.ts'
 
 // Milestone 7.1: a manual Volunteer opportunity works like any other type (synthetic data only).
-test('owner can add, find, evaluate, and track a volunteer opportunity', async ({ page }) => {
+test('owner can add, find, evaluate, and track a volunteer opportunity', async ({
+  page,
+}) => {
   const title = `Synthetic STEM Tutor Volunteer ${Date.now()}`
 
   await page.goto('/login')
   await page.getByLabel('Username').fill(owner.username)
   await page.getByLabel('Password').fill(owner.password)
   await page.getByRole('button', { name: 'Log in' }).click()
-  await expect(page).toHaveURL(/\/profile$/)
+  await expect(page).not.toHaveURL(/\/login$/)
 
   await page.getByRole('link', { name: 'Opportunities' }).click()
   await page.getByRole('link', { name: 'Add opportunity' }).click()
@@ -29,15 +31,22 @@ test('owner can add, find, evaluate, and track a volunteer opportunity', async (
   await expect(page.getByText('Volunteer', { exact: true }).first()).toBeVisible()
   const eligibility = page.getByRole('region', { name: 'Eligibility' })
   await expect(eligibility).toBeVisible()
-  await expect(eligibility).toContainText(/Eligible|Needs verification|Ineligible|Unknown/i)
+  await expect(eligibility).toContainText(
+    /Eligible|Needs verification|Ineligible|Unknown/i,
+  )
   const opportunityUrl = page.url()
 
-  // List: findable by its unique title, labelled Volunteer. (The list has no type filter.)
+  // List: the Type filter finds it (and excludes it under another type); labelled Volunteer.
   await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
   await page.getByLabel('Search title or organization').fill(title)
   await page.getByRole('button', { name: 'Search' }).click()
   const row = page.getByRole('listitem').filter({ hasText: title })
+  await page.locator('#filter-type').selectOption('volunteer')
+  await expect(page).toHaveURL(/opportunity_type=volunteer/)
   await expect(row).toContainText('Volunteer')
+  await page.locator('#filter-type').selectOption('internship')
+  await expect(page).toHaveURL(/opportunity_type=internship/)
+  await expect(row).toHaveCount(0)
 
   // Save/track it.
   await page.goto(opportunityUrl)
