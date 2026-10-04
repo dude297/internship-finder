@@ -2,10 +2,10 @@
 
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
-Last Updated: 2026-10-02
-Current Milestone: **Milestone 6 — Requirement Intelligence + Automation complete; merged via [PR #13](https://github.com/dude297/internship-finder/pull/13) and released from `main` on 2026-10-02** ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)), including the Milestone 5.1 fixes. Milestone 5 — Private Profile Source Ingestion + Review complete; merged via [PR #11](https://github.com/dude297/internship-finder/pull/11) ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
+Last Updated: 2026-10-04
+Current Milestone: **Milestone 7 — Provider Enrichment + Source Coverage implemented on `feature/m7-provider-enrichment`, awaiting review (not merged, not deployed)** ([ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md)). **Milestone 6 — Requirement Intelligence + Automation complete; merged via [PR #13](https://github.com/dude297/internship-finder/pull/13) and released from `main` on 2026-10-02** ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)), including the Milestone 5.1 fixes. Milestone 5 — Private Profile Source Ingestion + Review complete; merged via [PR #11](https://github.com/dude297/internship-finder/pull/11) ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md)). Milestone 4 — Profile Intelligence + Fit Ranking v1 complete; merged via [PR #9](https://github.com/dude297/internship-finder/pull/9) ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)). Milestone 3.5 — Hosted Deployment Foundation complete; merged via [PR #7](https://github.com/dude297/internship-finder/pull/7). Milestone 3 — Automated Opportunity Discovery and Ingestion complete; merged via [PR #6](https://github.com/dude297/internship-finder/pull/6). Milestone 2 complete ([PR #5](https://github.com/dude297/internship-finder/pull/5)). Milestone 1 complete ([PR #4](https://github.com/dude297/internship-finder/pull/4)). Milestone 0 complete ([PR #2](https://github.com/dude297/internship-finder/pull/2)).
 Current Production Version: `main` at `80257c5` on https://internship-finder-pi.vercel.app (Neon `e6d1a4b8c2f9`; Render deploy `dep-db03iknavr4c73e10b8g` live 2026-10-02 23:09 UTC; Vercel production deployment `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk` created 2026-10-02 23:11 UTC from a clean checkout of `80257c5` via CLI; hosted smoke passed 2026-10-02; scheduled source sync active)
-Active Development Branch: none (`main`). Remote: https://github.com/dude297/internship-finder.
+Active Development Branch: `feature/m7-provider-enrichment` (Milestone 7; final PR to `main` open for review). Remote: https://github.com/dude297/internship-finder.
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 6 is released (2026-10-02) and is what production runs. The next milestone is not chosen yet (planning only).
+Milestone 6 is released (2026-10-02) and is what production runs. Milestone 7 (provider enrichment + source coverage) is implemented and validated on `feature/m7-provider-enrichment` and awaits review; nothing from it is deployed and production has no ATS sources yet.
 
 ## Status Summary
 
@@ -40,7 +40,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local and hosted) |
 | Profile source ingestion | **Implemented and deployed** ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md), migration `c5a1e0f3d7b2`, applied to Neon 2026-10-01) |
-| Next milestone | Not chosen (planning only) |
+| Provider enrichment and source coverage | **Implemented, not released** (Milestone 7, [ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md); no migration). ATS > feed authority with fallback, network-free ATS discovery from the feed, bulk add of suggested boards, Source Coverage on the Sources page, ATS-first sync ordering |
 
 ### Selected stack
 
@@ -100,7 +100,16 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Nothing. Milestone 6 is released; the next milestone is not started.
+Milestone 7 review ([ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md)), on `feature/m7-provider-enrichment`. No schema change.
+
+- **Source authority:** canonical fields are owned by the highest-authority active automated record (direct ATS > discovery feed; ties by earliest `first_seen_at`, then ID), derived on every decision from stored `source_type`, so sync order never flips ownership. An ATS board added later takes over a feed-only posting and supplies its description; when the board closes while the feed still lists it, the feed falls back from its stored payload and the posting stays open; the board's return takes over again. Curated opportunities are never rewritten. The opportunity row is locked before ownership is decided, so concurrent syncs serialize.
+- **ATS discovery:** derived on read from active feed records (zero network calls) through the feed adapter's `provider_identity`: Greenhouse by exact feed ID; Lever and Ashby by exact feed ID plus an official posting link whose path agrees. Workday/other are counted only.
+- **Bulk add:** `POST /api/sources/discovery/add` (owner, CSRF), 1–25 selections by `kind`/`identifier`/`region` only, re-derived from current suggestions, all-or-nothing, `internships_only`, never syncs; a concurrent duplicate returns `409`.
+- **Source Coverage:** `GET /api/sources/discovery` and `python -m app.cli source-coverage` (SQL aggregation, 3 queries, no raw payload): description coverage %, ATS-backed, feed-only, enrichable, unsupported, provider distribution, suggestions. Shown on the Sources page and reloaded after every sync.
+- **Scheduler:** direct ATS sources sync before the feed; one failing source doesn't stop the others.
+- **Requirements:** a takeover that changes the description runs the existing `refresh_candidates()`; candidates stay pending and eligibility is unchanged until owner review.
+- **Validation (2026-10-04, local):** backend ruff/format/pyright clean, 992 tests at `b1dd456` plus focused suites after later fixes (identity/discovery 60, authority/ingestion 68, stress 6); frontend lint/format/typecheck/109 Vitest/build; Playwright 10/10 twice on one reused database. Two independent hostile reviews found no BLOCKER/HIGH; the one MEDIUM (trailing newline accepted by `$`-anchored identity patterns) is fixed. Performance: [operations.md](docs/operations.md#operational-source-cap) (recommended cap 50 ATS sources).
+- **Production:** still Milestone 6. Activation follows the [Milestone 7 runbook](docs/operations.md#milestone-7-production-activation-runbook-prepared-not-executed) after merge.
 
 ## Milestone 4 (complete; merged via PR #9)
 
@@ -176,7 +185,8 @@ None open. Fixed during hosted validation (2026-09-29):
 - Backend dependencies are range-pinned in `pyproject.toml` without a lock file, so backend installs aren't fully reproducible. The frontend has `package-lock.json`.
 - Nothing re-evaluates when the eligibility rules version changes or when time passes an expected graduation/enrollment date.
 - `work_authorization` requirements are stored but not evaluated (always `needs_verification`, ELIG-REQ-001).
-- Milestone 6: the requirement extractor favors precision and misses requirements phrased unusually; a deduplicated opportunity whose earliest source has no description (the discovery feed) gets no description and therefore no suggestions from a later board record; the scheduled workflow installs range-pinned backend dependencies (no lockfile); nothing alerts when the schedule is auto-disabled after 60 days of repository inactivity (Source Health turns `stale`).
+- Milestone 7: a database error while applying an ADR-013 §5 fallback fails that source's whole run (the stored item already normalized once, so unlikely); a Greenhouse board-host link with an explicit port or trailing dot doesn't trigger the conflicting-board check (the feed ID alone is Greenhouse identity); the abandoned-run threshold (15 min) is shorter than the scheduled workflow timeout (20 min), so keep enabled ATS sources at or under the measured cap of 50; `USERNAME_PATTERN` uses a `$` anchor (accepts a trailing newline; CLI-only owner creation).
+- Milestone 6: the requirement extractor favors precision and misses requirements phrased unusually; a deduplicated opportunity whose earliest source has no description (the discovery feed) gets no description and therefore no suggestions from a later board record (resolved by Milestone 7's ATS authority, once released); the scheduled workflow installs range-pinned backend dependencies (no lockfile); nothing alerts when the schedule is auto-disabled after 60 days of repository inactivity (Source Health turns `stale`).
 
 ## Architecture Constraints
 
@@ -253,7 +263,7 @@ Known limitations and debt:
 ## Active Opportunity Sources
 
 - Tech Internship Discovery Feed (zshah101 public JSON API) — built in, manual sync.
-- Greenhouse boards and Lever sites — added by the owner, manual sync.
+- Greenhouse boards and Lever sites — added by the owner, manual sync. (Milestone 7, unreleased: suggested from the feed and bulk-added; none in production yet.)
 - Manual entry.
 - Excluded: `SuryaHarikrishnan/2027-internship-tracker` listing data (licensing unclear).
 
@@ -272,10 +282,13 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Review the Milestone 6 PR. After approval, follow its release runbook (merge → migrate Neon → deploy Render and Vercel → hosted smoke → configure the `production` environment and secret → one manual sync dispatch → verify health → candidate scan only with explicit approval). Separately, the owner replaces the hosted synthetic Match Profile with the real one through the app.
+Review the Milestone 7 PR (`feature/m7-provider-enrichment` → `main`). After approval: merge, deploy (Render, then Vercel; no migration), then follow the [Milestone 7 activation runbook](docs/operations.md#milestone-7-production-activation-runbook-prepared-not-executed): a bounded first batch of suggested boards, manual syncs, coverage before/after, every suggestion left pending.
+
+Previously: review the Milestone 6 PR. After approval, follow its release runbook (merge → migrate Neon → deploy Render and Vercel → hosted smoke → configure the `production` environment and secret → one manual sync dispatch → verify health → candidate scan only with explicit approval). Separately, the owner replaces the hosted synthetic Match Profile with the real one through the app.
 
 ## Recent Important Decisions
 
+- 2026-10-03: ADR-013 accepted (on the Milestone 7 branch): automated-source authority (ATS > feed, earliest then ID), takeover and fallback from stored payloads, network-free ATS discovery from exact feed identities, owner-only bulk add of suggestions (max 25, never syncs), Source Coverage, ATS-first scheduled ordering. No migration.
 - 2026-10-02: ADR-012 accepted (on the Milestone 6 branch): deterministic requirement suggestions with owner review, semantic identity, explicit-only completeness, source-change staleness, a GitHub Actions scheduled sync against Neon (ADR-009 amended), derived source health, Ashby public boards, shared type classification, and deadline discovery. ADR-011 amended for the M5.1 candidate identity.
 - 2026-10-01: Milestone 5 released. PR #11 rebase-merged at approved head `12bb4cc`; production `main` is `639e447` (post-merge CI green). Neon migrated `b41e7c9d2f60` → `c5a1e0f3d7b2`; Render and Vercel production redeployed from `639e447`; hosted synthetic TXT and PDF smoke passed; stray Render service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`) deleted. Details: Milestone 5 section above and [deployment.md](docs/deployment.md#milestone-5-release-2026-10-01).
 - 2026-09-29/2026-09-30: Milestone 4 released. PR #9 merged (2026-09-29); production `main` is `ca9b91b`. Neon migrated to `b41e7c9d2f60`; Render and Vercel production redeployed from `main`; hosted smoke passed (see the Milestone 4 section above and [deployment.md](docs/deployment.md#production-verification)).
