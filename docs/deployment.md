@@ -6,9 +6,9 @@ Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.
 
 | Part | State |
 |---|---|
-| Neon | **Provisioned.** Migrated to `e6d1a4b8c2f9` on 2026-10-02 (`alembic check` clean). Owner created (CLI, `getpass`). 1,193 opportunities (1,117 active source records) after the first scheduled sync. |
-| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-db1bksjncjis73c2apr0` of `bc23629` (Milestone 7) live (2026-10-04 20:45 UTC). Auto-deploy off, branch `main`. The only Render service. |
-| Vercel | **Deployed** (production `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`, `Ready`, aliased to `internship-finder-pi.vercel.app`; 2026-10-04 from a clean checkout of `bc23629` via CLI). |
+| Neon | **Provisioned.** Migrated to `f2a7c9d4e1b3` on 2026-10-04 (Milestone 7.1, `alembic check` clean). Owner created (CLI, `getpass`). 1,193 opportunities (1,117 active source records) after the first scheduled sync. |
+| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-db1c2oc9v7es73eshpd0` of `0a636e2` (Milestone 7.1) live (2026-10-04 21:14 UTC). Auto-deploy off, branch `main`. The only Render service. |
+| Vercel | **Deployed** (production `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`, `Ready`, aliased to `internship-finder-pi.vercel.app`; 2026-10-04 from a clean checkout of `0a636e2` via CLI). |
 | Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)); Milestone 6 release and smoke on 2026-10-02 ([below](#milestone-6-release-2026-10-02)); Milestone 7 release and ATS activation on 2026-10-04 ([below](#milestone-7-release-2026-10-04)). |
 | Scheduled sync | **Active.** GitHub environment `production` (deployment branches: `main` only) with secret `PRODUCTION_DATABASE_URL` (Neon pooled URL); first dispatch green 2026-10-02. |
 
@@ -190,6 +190,18 @@ Not done by design: no Ashby source in production (sources can't be deleted; Ash
 | Security | Command output and logs show counts only; no database URL, key, cookie, or token printed. These docs contain no secret values |
 
 Stopped at 20 sources: the next suggestions cover about 3 feed postings each. Rollback: disable a source (see [operations.md](operations.md#milestone-7-production-activation-runbook-executed-2026-10-04)); a code rollback to `80257c5` is possible (no migration), but Milestone 6 code doesn't apply ATS authority, so disable the ATS sources first.
+
+### Milestone 7.1 release (2026-10-04)
+
+| Step | Result |
+|---|---|
+| Merge | [PR #19](https://github.com/dude297/internship-finder/pull/19) rebase-merged at head `d24b836` (rebased onto the Milestone 7 docs; code identical to the reviewed `52c9e55`); `main` `0a636e2`; post-merge CI `37234964868` green |
+| Migration | Neon `e6d1a4b8c2f9` → `f2a7c9d4e1b3`, `alembic current` at head, `alembic check` clean. Every other baseline value identical before/after (1,409 opportunities, 6,796 evaluations, 4 pending candidates, 0 canonical requirements, 29 MB) |
+| Render | `dep-db1c2oc9v7es73eshpd0` of `0a636e2`, `live` 2026-10-04 21:14 UTC; settings unchanged. `/api/health` `200`, `/docs` `404`, `/api/opportunities?opportunity_type=…` `401` unauthenticated, synthetic wrong login `401` |
+| Vercel | `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`, `Ready`, aliased, from a clean checkout of `0a636e2` (`.env.local` deleted). `/api/health`, `/opportunities`, `/login` `200`; bundle contains the Volunteer label and the Type filter, no Render hostname |
+| Synthetic smoke (app service layer against Neon: the functions the API routes call, no raw SQL writes) | `ZZZ M7.1 RELEASE SMOKE — Synthetic STEM Tutor Volunteer …`, `Synthetic Example Org`, minimum age 16, deadline 2999-01-01: created as `volunteer` and manually curated; Type filter `volunteer` finds it, `internship` excludes it; `has_deadline` finds it; evaluated on create (`needs_verification`, `ELIG-AGE-001` ran); application tracked as `saved`; edited to `other` and back. 13/13 PASS |
+| Cleanup | Exact UUID + title + organization + curated guards, then the same delete as `DELETE /api/opportunities/{id}`. 0 rows left in opportunities, evaluations, requirements, source records, applications; 0 volunteer opportunities; opportunity and evaluation counts identical to before the smoke |
+| Not done by design | No automated volunteer source (research only: [volunteer-sources-2027.md](research/volunteer-sources-2027.md)) |
 
 ## Rollback
 
