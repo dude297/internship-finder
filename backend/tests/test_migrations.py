@@ -7,7 +7,7 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import Engine, inspect, text
+from sqlalchemy import Connection, Engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -40,6 +40,7 @@ MILESTONE_5_TABLES = MILESTONE_2_TABLES | {
 TABLES = MILESTONE_5_TABLES | {"opportunity_requirement_candidates"}
 MILESTONE_5_REVISION = "c5a1e0f3d7b2"
 MILESTONE_6_REVISION = "e6d1a4b8c2f9"
+MILESTONE_7_1_REVISION = "f2a7c9d4e1b3"
 GRADUATION_CHECK = "ck_profiles_graduation_after_status_as_of"
 MILESTONE_3_REVISION = "726372d627b8"
 RUNNING_INDEX = "uq_ingestion_runs_one_running_per_source"
@@ -717,4 +718,56 @@ def test_milestone_6_migration_round_trip(pg_engine: Engine, pg_url: str) -> Non
             )
             connection.execute(
                 text("DELETE FROM ingestion_sources WHERE id = :id"), {"id": ASHBY_SOURCE_ID}
+            )
+
+
+VOLUNTEER_ID = "00000000-0000-4000-8000-000000000010"
+OTHER_ID = "00000000-0000-4000-8000-000000000011"
+
+
+def _insert_opportunity(connection: Connection, opportunity_id: str, kind: str) -> None:
+    connection.execute(
+        text(
+            "INSERT INTO opportunities (id, title, organization, opportunity_type)"
+            " VALUES (:id, 'Synthetic STEM Tutor Volunteer', 'Example Org', :kind)"
+        ),
+        {"id": opportunity_id, "kind": kind},
+    )
+
+
+def test_milestone_7_1_volunteer_type_round_trip(pg_engine: Engine, pg_url: str) -> None:
+    config = alembic_config(pg_url)
+    try:
+        # Before the upgrade 'volunteer' is rejected; an existing 'other' row is kept as-is.
+        command.downgrade(config, MILESTONE_6_REVISION)
+        with pg_engine.begin() as connection:
+            _insert_opportunity(connection, OTHER_ID, "other")
+        with pg_engine.connect() as connection, connection.begin() as transaction:
+            with pytest.raises(IntegrityError):
+                _insert_opportunity(connection, VOLUNTEER_ID, "volunteer")
+            transaction.rollback()
+
+        command.upgrade(config, MILESTONE_7_1_REVISION)
+        with pg_engine.begin() as connection:
+            _insert_opportunity(connection, VOLUNTEER_ID, "volunteer")
+            other_type = connection.scalar(
+                text("SELECT opportunity_type FROM opportunities WHERE id = :id"), {"id": OTHER_ID}
+            )
+            assert other_type == "other"  # no backfill
+
+        # The downgrade refuses while a volunteer opportunity exists...
+        with pytest.raises(RuntimeError, match="volunteer"):
+            command.downgrade(config, MILESTONE_6_REVISION)
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM opportunities WHERE id = :id"), {"id": VOLUNTEER_ID}
+            )
+        # ...and succeeds once it's gone.
+        command.downgrade(config, MILESTONE_6_REVISION)
+    finally:
+        command.upgrade(config, "head")
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM opportunities WHERE id IN (:a, :b)"),
+                {"a": VOLUNTEER_ID, "b": OTHER_ID},
             )
