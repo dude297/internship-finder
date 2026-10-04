@@ -305,3 +305,59 @@ describe('manual opportunity form', () => {
     ).toBeChecked()
   })
 })
+
+describe('volunteer opportunity type', () => {
+  it('offers Volunteer in the form and submits opportunity_type volunteer', async () => {
+    const calls = mockApi({
+      ...loggedIn,
+      'POST /api/opportunities': () => detail({ id: 'new-1' }),
+      'GET /api/opportunities/new-1': () => detail({ id: 'new-1' }),
+    })
+    renderAt('/opportunities/new')
+    fireEvent.change(await screen.findByLabelText('Title (required)'), {
+      target: { value: 'Synthetic Food Drive' },
+    })
+    fireEvent.change(screen.getByLabelText('Organization (required)'), {
+      target: { value: 'Example Org' },
+    })
+    expect(screen.getByRole('option', { name: 'Volunteer' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'volunteer' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save opportunity' }))
+
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true))
+    expect(calls.find((c) => c.method === 'POST')?.body).toMatchObject({
+      opportunity_type: 'volunteer',
+    })
+  })
+
+  it('filters the list by Volunteer', async () => {
+    const calls = mockApi({
+      ...loggedIn,
+      ...noSources,
+      'GET /api/opportunities': () => listPage([]),
+    })
+    renderAt('/opportunities')
+    const select = await screen.findByLabelText('Type')
+    expect(within(select).getByRole('option', { name: 'All types' })).toBeInTheDocument()
+    fireEvent.change(select, { target: { value: 'volunteer' } })
+    await waitFor(() =>
+      expect(calls.some((c) => c.path.includes('opportunity_type=volunteer'))).toBe(true),
+    )
+  })
+
+  it('labels Volunteer in the list and detail', async () => {
+    const volunteer = { opportunity_type: 'volunteer' }
+    mockApi({
+      ...loggedIn,
+      ...noSources,
+      'GET /api/opportunities': () => listPage([summary(volunteer)]),
+      'GET /api/opportunities/opp-1': () => detail(volunteer),
+    })
+    const list = renderAt('/opportunities')
+    expect(await screen.findByText(/Example Institute · Volunteer/)).toBeInTheDocument()
+    list.unmount()
+
+    renderAt('/opportunities/opp-1')
+    expect(await screen.findByText('Volunteer')).toBeInTheDocument()
+  })
+})

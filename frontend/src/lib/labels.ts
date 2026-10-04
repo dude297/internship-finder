@@ -29,6 +29,7 @@ export const opportunityTypeLabels: Record<OpportunityType, string> = {
   summer_program: 'Summer program',
   scholarship: 'Scholarship',
   competition: 'Competition',
+  volunteer: 'Volunteer',
   other: 'Other',
 }
 

@@ -24,6 +24,7 @@ const FILTERS: FilterName[] = [
   'eligibility',
   'application_status',
   'remote_mode',
+  'opportunity_type',
   'sort',
   'requirements_assessment_status',
   'requirement_review',

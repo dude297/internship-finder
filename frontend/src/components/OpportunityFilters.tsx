@@ -4,12 +4,14 @@ import {
   assessmentStatuses,
   eligibilityStatuses,
   remoteModes,
+  opportunityTypes,
   type Source,
 } from '../api/schemas'
 import {
   applicationStatusLabels,
   assessmentLabels,
   eligibilityLabels,
+  opportunityTypeLabels,
   remoteModeLabels,
 } from '../lib/labels'
 import { inputClass, secondaryButtonClass } from '../lib/styles'
@@ -21,6 +23,7 @@ export type FilterName =
   | 'eligibility'
   | 'application_status'
   | 'remote_mode'
+  | 'opportunity_type'
   | 'sort'
   | 'requirements_assessment_status'
   | 'requirement_review'
@@ -166,6 +169,19 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
           options={[
             ['', 'Any'],
             ...remoteModes.map((m): [string, string] => [m, remoteModeLabels[m]]),
+          ]}
+        />
+        <Select
+          id="filter-type"
+          label="Type"
+          value={values.opportunity_type}
+          onChange={(v) => onChange('opportunity_type', v)}
+          options={[
+            ['', 'All types'],
+            ...opportunityTypes.map((t): [string, string] => [
+              t,
+              opportunityTypeLabels[t],
+            ]),
           ]}
         />
         <Select
