@@ -129,7 +129,7 @@ describe('sources page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Disable' }))
 
     expect(await screen.findByRole('button', { name: 'Enable' })).toBeInTheDocument()
-    expect(calls.at(-1)!.body).toEqual({
+    expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({
       display_name: 'Tech Internship Discovery Feed',
       enabled: false,
     })

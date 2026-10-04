@@ -14,7 +14,6 @@ The database is migrated to head; its non-built-in sources and all opportunities
 the start of each N. Timings vary by machine; they are reported, never asserted.
 """
 
-import json
 import os
 import sys
 import time
@@ -172,12 +171,10 @@ def transport_for(
         if i == fail_index:
             routes[url] = httpx2.Response(500)
         else:
-            routes[url] = httpx2.Response(200, content=json.dumps(body).encode())
+            routes[url] = httpx2.Response(200, json=body)
 
     # Hard-code the feed's own URL from its adapter (never rebuilt by hand).
-    routes[feed_adapter.url(feed_config)] = httpx2.Response(
-        200, content=json.dumps(feed_body).encode()
-    )
+    routes[feed_adapter.url(feed_config)] = httpx2.Response(200, json=feed_body)
 
     def handle(request: httpx2.Request) -> httpx2.Response:
         return routes.get(str(request.url), httpx2.Response(404))
