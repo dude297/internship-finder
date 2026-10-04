@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Milestone 7: provider enrichment and source coverage ([ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md)). No migration.
+  - Automated-source authority: direct ATS records (Greenhouse, Lever, Ashby) own canonical fields over the discovery feed; earliest record then ID within a tier; takeover by a later board, fallback to the feed from its stored payload when the board closes, and takeover again on return. Curated opportunities are never rewritten.
+  - ATS source discovery derived from stored feed records (no network calls): `GET /api/sources/discovery`, `python -m app.cli source-coverage`, and owner-only bulk add `POST /api/sources/discovery/add` (max 25, `internships_only`, never syncs).
+  - Source Coverage and Suggested Sources on the Sources page.
+  - Scheduled and manual syncs order direct ATS sources before the feed.
+  - Ashby cross-source identifier on feed postings that name an Ashby board.
+  - Tests: authority, takeover/fallback stress loops, provider-identity spoofing, discovery and bulk add (including concurrency), Vitest, a Playwright enrichment scenario, and `scripts/perf_sources.py`.
+
+### Fixed
+
+- Provider identity patterns no longer accept a trailing newline.
+- The Playwright workflow spec is repeatable on a reused database.
+
 ## Milestone 6 (released 2026-10-02)
 
 Released 2026-10-02: [PR #13](https://github.com/dude297/internship-finder/pull/13) rebase-merged at the approved head `ff47970`; `main` `80257c5` (post-merge CI `37066645594` green); Neon migrated `c5a1e0f3d7b2` → `e6d1a4b8c2f9`; Render deploy `dep-db03iknavr4c73e10b8g`; Vercel production `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`; scheduled sync configured; production requirement scan run. Record: [deployment.md](docs/deployment.md#milestone-6-release-2026-10-02).
