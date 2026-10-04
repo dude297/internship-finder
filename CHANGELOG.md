@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Milestone 7.1: volunteer opportunities. `volunteer` opportunity type (migration `f2a7c9d4e1b3`, additive, no backfill) available in manual create/edit, list, detail, eligibility, fit, and application tracking with no separate workflow; a new `opportunity_type` filter on `GET /api/opportunities` and a **Type** filter on the opportunity list. Ingestion never classifies postings as volunteer. Research only for automated volunteer sources: [docs/research/volunteer-sources-2027.md](docs/research/volunteer-sources-2027.md) (none ready).
+
 ## Milestone 7 (released 2026-10-04)
 
 Released 2026-10-04: [PR #17](https://github.com/dude297/internship-finder/pull/17) rebase-merged at the approved head `64ce84d`; `main` `bc23629` (post-merge CI `37191644826` green); no migration; Render deploy `dep-db1bksjncjis73c2apr0`; Vercel production `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`; 20 ATS boards activated (description coverage 0.0% → 22.4%). Record: [deployment.md](docs/deployment.md#milestone-7-release-2026-10-04).
@@ -18,7 +22,6 @@ Released 2026-10-04: [PR #17](https://github.com/dude297/internship-finder/pull/
   - Ashby cross-source identifier on feed postings that name an Ashby board.
   - Tests: authority, takeover/fallback stress loops, provider-identity spoofing, discovery and bulk add (including concurrency), Vitest, a Playwright enrichment scenario, and `scripts/perf_sources.py`.
 
-- Milestone 7.1: volunteer opportunities. `volunteer` opportunity type (migration `f2a7c9d4e1b3`, additive, no backfill) available in manual create/edit, list, detail, eligibility, fit, and application tracking with no separate workflow; a new `opportunity_type` filter on `GET /api/opportunities` and a **Type** filter on the opportunity list. Ingestion never classifies postings as volunteer. Research only for automated volunteer sources: [docs/research/volunteer-sources-2027.md](docs/research/volunteer-sources-2027.md) (none ready).
 
 ### Fixed
 
