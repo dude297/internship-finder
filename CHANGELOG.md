@@ -18,6 +18,8 @@ Released 2026-10-04: [PR #17](https://github.com/dude297/internship-finder/pull/
   - Ashby cross-source identifier on feed postings that name an Ashby board.
   - Tests: authority, takeover/fallback stress loops, provider-identity spoofing, discovery and bulk add (including concurrency), Vitest, a Playwright enrichment scenario, and `scripts/perf_sources.py`.
 
+- Milestone 7.1: volunteer opportunities. `volunteer` opportunity type (migration `f2a7c9d4e1b3`, additive, no backfill) available in manual create/edit, list, detail, eligibility, fit, and application tracking with no separate workflow; a new `opportunity_type` filter on `GET /api/opportunities` and a **Type** filter on the opportunity list. Ingestion never classifies postings as volunteer. Research only for automated volunteer sources: [docs/research/volunteer-sources-2027.md](docs/research/volunteer-sources-2027.md) (none ready).
+
 ### Fixed
 
 - Provider identity patterns no longer accept a trailing newline.

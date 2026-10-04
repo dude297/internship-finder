@@ -100,7 +100,7 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 7.1 (volunteer opportunities), [PR #19](https://github.com/dude297/internship-finder/pull/19). Milestone 8 research, [PR #18](https://github.com/dude297/internship-finder/pull/18). Small debt fixes, [PR #20](https://github.com/dude297/internship-finder/pull/20).
+Milestone 7.1 (volunteer opportunities), [PR #19](https://github.com/dude297/internship-finder/pull/19). `OpportunityType.VOLUNTEER` (migration `f2a7c9d4e1b3`, additive, no backfill), the `opportunity_type` list filter and **Type** filter UI, Volunteer label/option, backend regression tests (type never affects eligibility or fit), a migration round-trip test, and a Playwright scenario. Automated volunteer sources: research only ([docs/research/volunteer-sources-2027.md](docs/research/volunteer-sources-2027.md)); none is ready. Release: merge → migrate Neon → Render → Vercel → synthetic volunteer smoke; create no volunteer opportunity before the new frontend is live ([data-model.md](docs/data-model.md)). Milestone 8 research, [PR #18](https://github.com/dude297/internship-finder/pull/18). Small debt fixes, [PR #20](https://github.com/dude297/internship-finder/pull/20).
 
 ## Milestone 7 (complete; released 2026-10-04 via PR #17)
 
