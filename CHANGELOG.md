@@ -30,6 +30,8 @@ Released 2026-10-04: [PR #17](https://github.com/dude297/internship-finder/pull/
 ### Fixed
 
 - Provider identity patterns no longer accept a trailing newline.
+- A Greenhouse feed posting whose link is on a Greenhouse board host but has a port, credentials, or a trailing-dot hostname no longer proves a Greenhouse identity (previously it skipped the conflicting-board check).
+- `USERNAME_PATTERN` is anchored with `\A…\Z` (its only caller already used `fullmatch`, so no behavior change).
 - The Playwright workflow spec is repeatable on a reused database.
 
 ## Milestone 6 (released 2026-10-02)

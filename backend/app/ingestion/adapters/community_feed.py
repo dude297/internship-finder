@@ -84,6 +84,20 @@ def _hosted_path(url: str | None, hosts: dict[str, str]) -> tuple[str, list[str]
     return region, [s.lower() for s in parts.path.split("/") if s]
 
 
+def _odd_board_host_link(url: str | None, hosts: dict[str, str]) -> bool:
+    """https link to one of `hosts` (ignoring a trailing dot) with a port, credentials, or a
+    trailing-dot hostname: the shapes `_hosted_path` refuses to read."""
+    try:
+        parts = urlsplit(url or "")
+        port = parts.port
+    except ValueError:
+        return False
+    hostname = (parts.hostname or "").lower()
+    if parts.scheme != "https" or hostname.rstrip(".") not in hosts:
+        return False
+    return port is not None or parts.username is not None or hostname.endswith(".")
+
+
 def provider_identity(item_id: str, url: str | None) -> Identifier | None:
     """The underlying ATS identity, only for ID formats understood exactly (ADR-008 §6,
     ADR-013 §2). A posting link on the provider's own host must agree with the ID."""
@@ -95,6 +109,10 @@ def provider_identity(item_id: str, url: str | None) -> Identifier | None:
         # a Greenhouse board host naming a different board is conflicting evidence.
         hosted = _hosted_path(url, _GREENHOUSE_HOSTS)
         if hosted is not None and hosted[1][:1] != [head]:
+            return None
+        if hosted is None and _odd_board_host_link(url, _GREENHOUSE_HOSTS):
+            # A board-host link we can't read as plain (port, credentials, trailing dot) can't
+            # be checked against the ID, so it proves nothing: no identity, never a false merge.
             return None
         return Identifier(namespace=GREENHOUSE, value=f"{head}:{tail}")
     if kind == "lever" and SLUG.match(head) and _UUID.match(tail.lower()):

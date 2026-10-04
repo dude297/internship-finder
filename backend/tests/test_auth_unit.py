@@ -142,3 +142,14 @@ def test_argon2_guard_is_released_after_errors(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.undo()
 
     assert auth.verify_password(PASSWORD, auth.hash_password(PASSWORD))  # slots still free
+
+
+@pytest.mark.parametrize(
+    ("username", "ok"),
+    [("owner", True), ("a.b_c-1", True), ("owner\n", False), ("ab", False), ("x" * 65, False)],
+)
+def test_username_pattern_is_anchored_for_any_match_method(username: str, ok: bool) -> None:
+    from app.services.auth import USERNAME_PATTERN
+
+    assert bool(USERNAME_PATTERN.fullmatch(username)) is ok
+    assert bool(USERNAME_PATTERN.match(username)) is ok  # no trailing-newline slip with match()
