@@ -46,6 +46,7 @@ export function SourcesPage() {
   const [notice, setNotice] = useState<string | null>(null)
   // The source currently syncing or saving ('all' for Sync all); one action at a time.
   const [busy, setBusy] = useState<string | null>(null)
+  const [syncCount, setSyncCount] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -92,6 +93,7 @@ export function SourcesPage() {
       async () => {
         const run = await api.syncSource(source.id)
         withRun(run)
+        setSyncCount((n) => n + 1)
         setNotice(`${source.display_name}: sync finished.`)
       },
       'The sync request failed.',
@@ -103,6 +105,7 @@ export function SourcesPage() {
       async () => {
         const runs = await api.syncAllSources()
         runs.forEach(withRun)
+        setSyncCount((n) => n + 1)
         setNotice(`Synced ${runs.length} source${runs.length === 1 ? '' : 's'}.`)
       },
       'The sync request failed.',
@@ -164,7 +167,7 @@ export function SourcesPage() {
       </div>
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {notice && <SuccessMessage>{notice}</SuccessMessage>}
-      <SourceCoverage onSourcesChanged={refreshSources} />
+      <SourceCoverage onSourcesChanged={refreshSources} syncCount={syncCount} />
       <ul className="space-y-3">
         {sources?.map((source) => (
           <li key={source.id} className="space-y-3 rounded border border-slate-200 p-4">

@@ -8,6 +8,7 @@ import {
   mockApi,
   providerCount,
   renderAt,
+  run,
   source,
   suggestion,
 } from './helpers'
@@ -138,6 +139,31 @@ describe('source coverage', () => {
     await waitFor(() =>
       expect(screen.getByText('0 selected (max 25)')).toBeInTheDocument(),
     )
+  })
+
+  it('reloads coverage and suggestions after a sync', async () => {
+    let discoveryCalls = 0
+    mockApi({
+      ...loggedIn,
+      'GET /api/sources': () => [source()],
+      'GET /api/sources/discovery': () =>
+        ++discoveryCalls === 1
+          ? discoveryResponse({ suggestions: [] })
+          : discoveryResponse(),
+      'POST /api/sources/src-feed/sync': () => run(),
+    })
+    renderAt('/sources')
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Sync Tech Internship Discovery Feed now',
+      }),
+    )
+
+    expect(
+      await screen.findByLabelText('Select greenhouse:examplerobotics'),
+    ).toBeInTheDocument()
+    expect(discoveryCalls).toBe(2)
   })
 
   it('shows a 422 error from the add endpoint', async () => {

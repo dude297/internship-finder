@@ -19,7 +19,14 @@ function providerLabel(provider: string): string {
 /** Source Coverage (ADR-013 §2, §3, §9): metrics and board suggestions derived on read from
  * the discovery feed. Adding a suggestion only creates a disabled-by-default source; it never
  * syncs it. */
-export function SourceCoverage({ onSourcesChanged }: { onSourcesChanged: () => void }) {
+export function SourceCoverage({
+  onSourcesChanged,
+  syncCount,
+}: {
+  onSourcesChanged: () => void
+  // Bumped by the page after every sync, so coverage and suggestions reflect the new data.
+  syncCount: number
+}) {
   const [data, setData] = useState<SourceDiscoveryResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -39,8 +46,8 @@ export function SourceCoverage({ onSourcesChanged }: { onSourcesChanged: () => v
 
   useEffect(() => {
     loadDiscovery()
-    // Only once on mount; addSelected() reloads explicitly after a successful add.
-  }, [])
+    // On mount and after each sync; addSelected() reloads explicitly after a successful add.
+  }, [syncCount])
 
   if (!data && !error) return <p role="status">Loading source coverage…</p>
   if (error) return <ErrorMessage>{error}</ErrorMessage>
