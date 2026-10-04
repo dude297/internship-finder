@@ -249,6 +249,11 @@ def _owns_canonical_fields(db: Session, record: OpportunitySourceRecord) -> bool
     differently (the feed has no description, a board does) would overwrite each other on every
     change of either, flip-flopping the text and making a reviewed posting look changed. When
     the owning record closes, the next highest-ranked active record takes over (§5)."""
+    # Lock the opportunity row first: a concurrent sync of another source holding it (e.g. an
+    # uncommitted ATS takeover) is waited out, so the owner query sees its committed records.
+    db.execute(
+        select(Opportunity.id).where(Opportunity.id == record.opportunity_id).with_for_update()
+    )
     owner = db.scalar(
         select(OpportunitySourceRecord.id)
         .where(
