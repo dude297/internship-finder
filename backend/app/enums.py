@@ -69,6 +69,7 @@ class OpportunityType(StrEnum):
     SUMMER_PROGRAM = "summer_program"
     SCHOLARSHIP = "scholarship"
     COMPETITION = "competition"
+    VOLUNTEER = "volunteer"
     OTHER = "other"
 
 
