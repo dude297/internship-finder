@@ -11,6 +11,7 @@ export const opportunityTypes = [
   'summer_program',
   'scholarship',
   'competition',
+  'volunteer',
   'other',
 ] as const
 export const remoteModes = ['onsite', 'remote', 'hybrid'] as const
@@ -536,6 +537,7 @@ export interface OpportunityQuery {
   eligibility?: string
   application_status?: string
   remote_mode?: string
+  opportunity_type?: string
   sort?: 'recommended' | 'newest' | 'deadline'
   requirements_assessment_status?: string
   requirement_review?: 'pending' | 'stale' | 'needs_review'
