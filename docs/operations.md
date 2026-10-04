@@ -54,11 +54,11 @@ At every size: ATS sources ran before the feed, the canonical owner didn't chang
 
 Real network fetches add roughly 1–3 s per board, so a scheduled run with 50 boards is about 1–3 minutes plus the feed sync.
 
-Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: **50** (the largest size measured). The extrapolated ceiling is around 200. Before going past 50, re-measure the elapsed time of a real scheduled run (runbook step 13).
+Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: **50** (the largest size measured). The extrapolated ceiling is around 200. Before going past 50, re-measure the elapsed time of a real scheduled run (runbook step 13). Real measurement, 2026-10-04: 20 ATS boards + the feed, a scheduled-style run of 24.6 s ([run 37234279820](https://github.com/dude297/internship-finder/actions/runs/37234279820)); first syncs of new boards took 7.6–53.6 s each (one-time creation and evaluation).
 
-## Milestone 7 production activation runbook (prepared, not executed)
+## Milestone 7 production activation runbook (executed 2026-10-04)
 
-Code release (merge, deploy) is separate from source activation (ADR-013 §9). This runbook is written ahead of both; none of its steps have run yet.
+Code release (merge, deploy) is separate from source activation (ADR-013 §9). Executed 2026-10-04 in two batches of 10 (20 ATS sources): description coverage 0.0% → 22.4%, ATS-backed 0 → 294, 88 feed postings deduplicated exactly as predicted, 4 pending suggestions, nothing closed, eligibility unchanged; the scheduled sync with 21 sources took 24.6 s. Full record: [deployment.md](deployment.md#milestone-7-release-2026-10-04). Use the same steps for any later batch.
 
 1. Merge `feature/m7-provider-enrichment` to `main`.
 2. Confirm CI is green on the merge commit.

@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+## Milestone 7 (released 2026-10-04)
+
+Released 2026-10-04: [PR #17](https://github.com/dude297/internship-finder/pull/17) rebase-merged at the approved head `64ce84d`; `main` `bc23629` (post-merge CI `37191644826` green); no migration; Render deploy `dep-db1bksjncjis73c2apr0`; Vercel production `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`; 20 ATS boards activated (description coverage 0.0% → 22.4%). Record: [deployment.md](docs/deployment.md#milestone-7-release-2026-10-04).
+
 ### Added
 
 - Milestone 7: provider enrichment and source coverage ([ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md)). No migration.

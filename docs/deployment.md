@@ -2,14 +2,14 @@
 
 Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md). This file is the runbook. It never contains secrets: no `DATABASE_URL`, proxy secret, password, hash, session or CSRF token.
 
-## Status (2026-10-02)
+## Status (2026-10-04)
 
 | Part | State |
 |---|---|
 | Neon | **Provisioned.** Migrated to `e6d1a4b8c2f9` on 2026-10-02 (`alembic check` clean). Owner created (CLI, `getpass`). 1,193 opportunities (1,117 active source records) after the first scheduled sync. |
-| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-db03iknavr4c73e10b8g` of `80257c5` live (finished 2026-10-02 23:09 UTC). Auto-deploy off, branch `main`. The only Render service (the stray `internship-finder` was deleted 2026-10-01). |
-| Vercel | **Deployed** (production `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`, `Ready`, aliased to `internship-finder-pi.vercel.app`; created 2026-10-02 23:11 UTC from a clean checkout of `80257c5` via CLI). |
-| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)); Milestone 6 release and smoke on 2026-10-02 ([below](#milestone-6-release-2026-10-02)). |
+| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-db1bksjncjis73c2apr0` of `bc23629` (Milestone 7) live (2026-10-04 20:45 UTC). Auto-deploy off, branch `main`. The only Render service. |
+| Vercel | **Deployed** (production `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`, `Ready`, aliased to `internship-finder-pi.vercel.app`; 2026-10-04 from a clean checkout of `bc23629` via CLI). |
+| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)); Milestone 6 release and smoke on 2026-10-02 ([below](#milestone-6-release-2026-10-02)); Milestone 7 release and ATS activation on 2026-10-04 ([below](#milestone-7-release-2026-10-04)). |
 | Scheduled sync | **Active.** GitHub environment `production` (deployment branches: `main` only) with secret `PRODUCTION_DATABASE_URL` (Neon pooled URL); first dispatch green 2026-10-02. |
 
 ## Topology
@@ -170,6 +170,26 @@ The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `
 | Security | Actions sync log, Render logs since the deploy (522 lines), and command output: no database URL, password, cookie, CSRF or session token, or profile data. These docs contain no secret values |
 
 Not done by design: no Ashby source in production (sources can't be deleted; Ashby is covered by CI and integration tests); no real opportunity's suggestions accepted or rejected. Rollback: as for Milestone 5, a Render/Vercel code rollback to `639e447` stays possible while no Ashby source exists ([data-model.md](data-model.md)); Neon is never downgraded.
+
+### Milestone 7 release (2026-10-04)
+
+| Step | Result |
+|---|---|
+| Merge | [PR #17](https://github.com/dude297/internship-finder/pull/17) rebase-merged at the approved head `64ce84d` (CI `37188071021`); `main` `bc23629`; post-merge CI `37191644826` green (backend, frontend, e2e). No migration (Neon stays `e6d1a4b8c2f9`) |
+| Scheduled sync on Milestone 7 code (before deploy) | [Run 37221123774](https://github.com/dude297/internship-finder/actions/runs/37221123774): feed 1,107 fetched, 59 updated (the expected one-time Ashby cross-source identifier), 7 closed, 0 invalid, 0 errors |
+| Render | `dep-db1bksjncjis73c2apr0` of `bc23629`, `live` 2026-10-04 20:45 UTC; Free, Oregon, 1 instance, one worker, auto-deploy off, branch `main`, env var names unchanged. `/api/health` `200`; `/docs`, `/openapi.json` `404`; `/api/sources/discovery` `401` (route present); synthetic wrong login `401` |
+| Vercel | `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`, `Ready`, aliased to `internship-finder-pi.vercel.app`, from a clean detached checkout of `bc23629` (`.env.local` deleted). `/api/health` `200`, `/api/nope` `404`, `/login` and `/sources` `200`; `/api/*` `Cache-Control: no-store`, `X-Frame-Options: DENY`; bundle contains Source Coverage / Suggested Sources / Add selected, no Render hostname |
+| Coverage baseline (`source-coverage`, read-only) | 1,107 open; 0 with a description (**0.0%**); 0 ATS-backed; 1,107 feed-only; 288 enrichable; 819 unsupported (Workday 595, Oracle 147, SmartRecruiters 40, other 13, Rippling 11, Workable 8). 163 suggestions (Greenhouse 106, Lever 16, Ashby 41). 1,202 opportunities, 0 curated, 0 canonical requirements, 0 candidates, 6,501 evaluations, all latest `needs_verification`, all `unassessed`; 26 MB |
+| Activation | 20 boards added through the trusted discovery service (`add_from_discovery`, the code path behind `POST /api/sources/discovery/add`; never raw inserts), all **Internships only**, ranked by feed-only coverage with exact identities; `testnisc` skipped (looks like a test board). Each synced manually with `python -m app.cli sync-source` |
+| Batch 1 (10) | Greenhouse `morsecorpcoop`, `akunacapital`, `hpiq`, `coinbase`, `robinhood`, `verkada`, `waymo`; Lever `hermeus` (global); Ashby `bedrock-robotics`, `ramp`. All `success`: 1,447 fetched, 128 created, **53 deduplicated** (exactly the 53 predicted), 0 updated/closed/invalid/errors; 9.0–53.6 s each |
+| Batch 2 (10) | Greenhouse `devtechnology`, `dvtrading`, `lyft`, `singlestore`, `thenuclearcompany`, `advancedspace`; Ashby `allen-control-systems`, `base-power`, `reflect-orbital`; Lever `kitware` (global). All `success`: 706 fetched, 78 created, **35 deduplicated** (exactly as predicted), 0 updated/closed/invalid/errors |
+| Integrity (read-only) | 88 opportunities now hold a feed record and an ATS record, all 88 with the ATS description; 0 opportunities with two active ATS records; 0 run errors / identity conflicts; all 206 new opportunities typed `internship` with intern/co-op titles; curated digest unchanged (0 curated). Same-title-and-organization groups: 71 (66 pre-existing in the feed; the 5 new ones are distinct ATS postings with different job IDs, never a feed-only row beside a matching ATS row) |
+| Requirements | 4 `pending` candidates (all `education`) on 4 opportunities; **0 accepted, 0 rejected, 0 canonical requirements**; every latest evaluation still `needs_verification`, every opportunity `unassessed`, 0 stale. Nothing was reviewed |
+| Coverage after | 1,313 open; **294 with a description (22.4%)**; 294 ATS-backed; 1,019 feed-only; 200 enrichable; 819 unsupported. 1,408 opportunities, 1,496 source records, 6,795 evaluations (+294: 206 new + 88 updated); 29 MB |
+| Scheduled sync check ([run 37234279820](https://github.com/dude297/internship-finder/actions/runs/37234279820), manual dispatch) | Green; 20 ATS sources first, the feed last; 21 run, 0 failed, 0 skipped; sync **24.6 s**, workflow 50 s (limit 20 min). Most boards answered `no_change`/unchanged |
+| Security | Command output and logs show counts only; no database URL, key, cookie, or token printed. These docs contain no secret values |
+
+Stopped at 20 sources: the next suggestions cover about 3 feed postings each. Rollback: disable a source (see [operations.md](operations.md#milestone-7-production-activation-runbook-executed-2026-10-04)); a code rollback to `80257c5` is possible (no migration), but Milestone 6 code doesn't apply ATS authority, so disable the ATS sources first.
 
 ## Rollback
 
