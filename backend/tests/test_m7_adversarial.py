@@ -83,6 +83,27 @@ def test_trailing_dot_hostname_is_not_recognized() -> None:
     assert provider_identity(item_id, url) is None
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://boards.greenhouse.io:8443/otherboard/jobs/12345",
+        "https://user@boards.greenhouse.io/otherboard/jobs/12345",
+        "https://boards.greenhouse.io./otherboard/jobs/12345",
+        "https://job-boards.eu.greenhouse.io./acme/jobs/12345",
+    ],
+)
+def test_unreadable_greenhouse_board_link_proves_nothing(url: str) -> None:
+    """A board-host link with a port, credentials or trailing dot can't be checked against the
+    feed ID, so it yields no identity rather than skipping the conflicting-board check."""
+    assert provider_identity("greenhouse:acme:12345", url) is None
+
+
+def test_plain_and_off_host_greenhouse_links_keep_the_feed_identity() -> None:
+    for url in (None, "https://boards.greenhouse.io/acme/jobs/12345", "https://acme.example/jobs"):
+        identity = provider_identity("greenhouse:acme:12345", url)
+        assert identity is not None and identity.value == "acme:12345"
+
+
 def test_case_mismatched_provider_prefix_is_rejected() -> None:
     """`kind` is compared case-sensitively against the literal "greenhouse"/"lever"/"ashby"
     strings: an uppercase or mixed-case prefix must not be recognized (exact-identifier-only,

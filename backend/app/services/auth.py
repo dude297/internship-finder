@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models import AuthSession, AuthUser
 
 MIN_PASSWORD_LENGTH = 12
-USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{3,64}$")
+USERNAME_PATTERN = re.compile(r"\A[A-Za-z0-9_.-]{3,64}\Z")
 
 _password_hash = PasswordHash.recommended()
 
