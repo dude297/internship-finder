@@ -6,7 +6,12 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession
-from app.enums import FactReviewState, RemoteMode, RequirementsAssessmentStatus
+from app.enums import (
+    FactReviewState,
+    OpportunityType,
+    RemoteMode,
+    RequirementsAssessmentStatus,
+)
 from app.models import Opportunity, OpportunityRequirementCandidate
 from app.repositories import get_profile
 from app.schemas.application import ApplicationBody, ApplicationResponse
@@ -67,6 +72,7 @@ def list_opportunities(
     eligibility: discovery.EligibilityFilter | None = None,
     application_status: discovery.ApplicationFilter | None = None,
     remote_mode: RemoteMode | None = None,
+    opportunity_type: OpportunityType | None = None,
     requirements_assessment_status: RequirementsAssessmentStatus | None = None,
     requirement_review: discovery.RequirementReviewFilter | None = None,
     deadline_within: discovery.DeadlineWithin | None = None,
@@ -92,6 +98,7 @@ def list_opportunities(
         eligibility=eligibility,
         application_status=application_status,
         remote_mode=remote_mode,
+        opportunity_type=opportunity_type,
         requirements_assessment_status=requirements_assessment_status,
         requirement_review=requirement_review,
         deadline_within=deadline_within,

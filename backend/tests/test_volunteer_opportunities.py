@@ -41,17 +41,21 @@ def test_edit_type_to_and_from_volunteer(client: TestClient) -> None:
     assert client.get(url).json()["opportunity_type"] == "internship"
 
 
-def test_list_reports_each_rows_own_type(client: TestClient) -> None:
-    # The list API has no type filter (frozen contract); each row reports its own stored type.
+def test_list_type_filter(client: TestClient) -> None:
     create(client, title=f"{TITLE} A", opportunity_type="volunteer")
     create(client, title=f"{TITLE} B", opportunity_type="internship")
 
-    items = client.get("/api/opportunities", params={"q": TITLE}).json()["items"]
+    def titles(**params: str) -> set[str]:
+        response = client.get("/api/opportunities", params={"q": TITLE, **params})
+        assert response.status_code == 200, response.text
+        return {i["title"] for i in response.json()["items"]}
 
-    assert {i["title"]: i["opportunity_type"] for i in items} == {
-        f"{TITLE} A": "volunteer",
-        f"{TITLE} B": "internship",
-    }
+    assert titles() == {f"{TITLE} A", f"{TITLE} B"}
+    assert titles(opportunity_type="volunteer") == {f"{TITLE} A"}
+    assert titles(opportunity_type="internship") == {f"{TITLE} B"}
+    assert titles(opportunity_type="research") == set()
+    bad = client.get("/api/opportunities", params={"opportunity_type": "job"})
+    assert bad.status_code == 422
 
 
 def test_unknown_type_is_still_rejected(client: TestClient) -> None:
