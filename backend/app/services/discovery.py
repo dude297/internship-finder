@@ -18,6 +18,7 @@ from app.enums import (
     EligibilityStatus,
     FactReviewState,
     OpportunitySourceType,
+    OpportunityType,
     RemoteMode,
     RequirementsAssessmentStatus,
 )
@@ -66,6 +67,7 @@ class Filters:
     eligibility: EligibilityFilter | None = None
     application_status: ApplicationFilter | None = None
     remote_mode: RemoteMode | None = None
+    opportunity_type: OpportunityType | None = None
     requirements_assessment_status: RequirementsAssessmentStatus | None = None
     requirement_review: RequirementReviewFilter | None = None
     deadline_within: DeadlineWithin | None = None
@@ -190,6 +192,8 @@ def _filtered(db: Session, filters: Filters) -> Listing:
                 Opportunity.requirements_stale_since.is_not(None),
             )
         )
+    if filters.opportunity_type is not None:
+        stmt = stmt.where(Opportunity.opportunity_type == filters.opportunity_type)
     if filters.has_deadline is True:
         stmt = stmt.where(Opportunity.application_deadline.is_not(None))
     elif filters.has_deadline is False:
