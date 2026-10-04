@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+## Milestone 7.1 (released 2026-10-04)
+
+Released 2026-10-04: [PR #19](https://github.com/dude297/internship-finder/pull/19) rebase-merged; `main` `0a636e2` (post-merge CI `37234964868` green); Neon migrated `e6d1a4b8c2f9` → `f2a7c9d4e1b3`; Render `dep-db1c2oc9v7es73eshpd0`; Vercel `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`; synthetic volunteer smoke 13/13, cleaned. Record: [deployment.md](docs/deployment.md#milestone-71-release-2026-10-04).
+
 ### Added
 
 - Milestone 7.1: volunteer opportunities. `volunteer` opportunity type (migration `f2a7c9d4e1b3`, additive, no backfill) available in manual create/edit, list, detail, eligibility, fit, and application tracking with no separate workflow; a new `opportunity_type` filter on `GET /api/opportunities` and a **Type** filter on the opportunity list. Ingestion never classifies postings as volunteer. Research only for automated volunteer sources: [docs/research/volunteer-sources-2027.md](docs/research/volunteer-sources-2027.md) (none ready).

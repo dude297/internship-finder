@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 7 (provider enrichment + source coverage) is released (2026-10-04) and activated: production runs `main` `bc23629` with 20 direct ATS boards, and description coverage rose from 0.0% to 22.4%. Next: review Milestone 7.1 (volunteer opportunities, PR #19).
+Milestone 7 (provider enrichment + source coverage) is released (2026-10-04) and activated: production runs `main` `bc23629` with 20 direct ATS boards, and description coverage rose from 0.0% to 22.4%. Milestone 7.1 (volunteer opportunity type) is released too (2026-10-04): production runs `main` `0a636e2`, Neon at `f2a7c9d4e1b3`.
 
 ## Status Summary
 
@@ -100,7 +100,7 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-Milestone 7.1 (volunteer opportunities), [PR #19](https://github.com/dude297/internship-finder/pull/19). `OpportunityType.VOLUNTEER` (migration `f2a7c9d4e1b3`, additive, no backfill), the `opportunity_type` list filter and **Type** filter UI, Volunteer label/option, backend regression tests (type never affects eligibility or fit), a migration round-trip test, and a Playwright scenario. Automated volunteer sources: research only ([docs/research/volunteer-sources-2027.md](docs/research/volunteer-sources-2027.md)); none is ready. Release: merge → migrate Neon → Render → Vercel → synthetic volunteer smoke; create no volunteer opportunity before the new frontend is live ([data-model.md](docs/data-model.md)). Milestone 8 research, [PR #18](https://github.com/dude297/internship-finder/pull/18). Small debt fixes, [PR #20](https://github.com/dude297/internship-finder/pull/20).
+Milestone 7.1 (volunteer opportunities) released 2026-10-04 ([deployment.md](docs/deployment.md#milestone-71-release-2026-10-04)): `volunteer` type (migration `f2a7c9d4e1b3`), the `opportunity_type` list filter and **Type** filter, Volunteer label/option; type never affects eligibility or fit. Automated volunteer sources: research only ([docs/research/volunteer-sources-2027.md](docs/research/volunteer-sources-2027.md)). Milestone 8 research, [PR #18](https://github.com/dude297/internship-finder/pull/18). Small debt fixes, [PR #20](https://github.com/dude297/internship-finder/pull/20).
 
 ## Milestone 7 (complete; released 2026-10-04 via PR #17)
 
@@ -206,6 +206,8 @@ None open. Fixed during hosted validation (2026-09-29):
 
 ## Database State
 
+Current (2026-10-04, after the Milestone 7.1 release): migration `f2a7c9d4e1b3`; 1,409 opportunities (1,313 open, 294 with a description); 1,496 source records; 21 ingestion sources (20 ATS + the feed); 6,796 evaluations, every latest `needs_verification`; 0 canonical requirements; 4 pending candidates; 0 applications; 29 MB. Older snapshots below.
+
 Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `c5a1e0f3d7b2` (2026-10-01, `alembic check` clean), holds the owner account, and holds 1,055 opportunities. Final counts after the Milestone 5 smoke (2026-10-01, aggregates only): 1,055 opportunities and source records; 6,330 evaluations (4,220 with fit); 1,055 latest evaluations, all with fit and scoring version `v1`; 0 profile sources; 0 profile source artifacts; 10 profile facts (all manual, all `accepted`); 1 profile; 1 owner; 1 ingestion source; 2 runs; 23 MB. Schema head: migration `c5a1e0f3d7b2` (Milestone 5: `profile_source_artifacts`; `profile_sources` upload metadata; `profile_facts.review_state`) on top of `b41e7c9d2f60` (Milestone 4: `profiles` fit preferences; nullable fit columns on `opportunity_evaluations`; `ingestion_sources.scope`; `ingestion_runs.filtered_count`; additive only, no new tables) on top of `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`), the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair.
 
 Final Neon counts (read-only, 2026-09-30): 1,055 opportunities; 1,055 source records; 4,220 evaluations (2,110 with fit); 1,055 current (latest per opportunity) evaluations, all with a non-null fit score and scoring version `v1`; 1 ingestion source (scope `all`); 2 ingestion runs (both 2026-09-29 00:37 UTC — no sync happened during the release smoke); 1 profile; 0 profile sources; 10 profile facts; 1 owner account; database size 18 MB. Evaluation arithmetic: 2,110 pre-smoke (0 with fit) + 1,055 first Match Profile save + 0 unchanged save + 1,055 changed save = 4,220 total, 2,110 with fit — matches exactly.
@@ -288,7 +290,7 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Review and release Milestone 7.1 ([PR #19](https://github.com/dude297/internship-finder/pull/19)): merge → migrate Neon (`f2a7c9d4e1b3`) → Render → Vercel → synthetic volunteer smoke. Then Milestone 8 per the research in [PR #18](https://github.com/dude297/internship-finder/pull/18).
+Review the Milestone 8 research ([PR #18](https://github.com/dude297/internship-finder/pull/18)) and the small debt PR ([#20](https://github.com/dude297/internship-finder/pull/20)); then Milestone 8 Tier 1 under a new ADR-014 (SmartRecruiters adapter + curated program registry).
 
 Previously: Review the Milestone 7 PR (`feature/m7-provider-enrichment` → `main`). After approval: merge, deploy (Render, then Vercel; no migration), then follow the [Milestone 7 activation runbook](docs/operations.md#milestone-7-production-activation-runbook-prepared-not-executed): a bounded first batch of suggested boards, manual syncs, coverage before/after, every suggestion left pending.
 
@@ -296,6 +298,7 @@ Previously: review the Milestone 6 PR. After approval, follow its release runboo
 
 ## Recent Important Decisions
 
+- 2026-10-04: Milestone 7.1 released. PR #19 → `main` `0a636e2`; Neon migrated to `f2a7c9d4e1b3`; Render `dep-db1c2oc9v7es73eshpd0`, Vercel `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`; synthetic volunteer smoke 13/13, cleaned.
 - 2026-10-04: Milestone 7 released. PR #17 rebase-merged at approved head `64ce84d`; `main` `bc23629` (post-merge CI green). Render `dep-db1bksjncjis73c2apr0`, Vercel `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`. 20 ATS boards activated in two batches; coverage 0.0% → 22.4%.
 - 2026-10-03: ADR-013 accepted (on the Milestone 7 branch): automated-source authority (ATS > feed, earliest then ID), takeover and fallback from stored payloads, network-free ATS discovery from exact feed identities, owner-only bulk add of suggestions (max 25, never syncs), Source Coverage, ATS-first scheduled ordering. No migration.
 - 2026-10-02: ADR-012 accepted (on the Milestone 6 branch): deterministic requirement suggestions with owner review, semantic identity, explicit-only completeness, source-change staleness, a GitHub Actions scheduled sync against Neon (ADR-009 amended), derived source health, Ashby public boards, shared type classification, and deadline discovery. ADR-011 amended for the M5.1 candidate identity.
