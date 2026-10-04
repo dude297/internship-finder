@@ -31,7 +31,8 @@ ASHBY = "ashby"
 URL = "url"
 
 # Board tokens and site slugs as they appear in provider URLs. Lowercased on both sides.
-SLUG = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
+# \Z, not $: $ also matches before a trailing newline.
+SLUG = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}\Z")
 
 
 class ItemError(Exception):

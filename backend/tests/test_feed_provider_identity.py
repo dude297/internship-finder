@@ -172,3 +172,13 @@ def test_unknown_provider_prefix_is_rejected() -> None:
 
 def test_feed_native_id_is_rejected() -> None:
     assert provider_identity("workday:example:/job/Synthetic-Intern_R1", None) is None
+
+
+# --- Anchors: `$` also matches before a trailing newline; identity must not ------------------
+
+
+def test_trailing_newline_in_board_or_job_is_rejected() -> None:
+    assert provider_identity(f"greenhouse:{GH_BOARD}\n:{GH_JOB}", None) is None
+    assert provider_identity(f"{GH_ID}\n", None) is None
+    assert provider_identity(f"{LEVER_ID}\n", LEVER_URL) is None
+    assert provider_identity(f"ashby:{ASHBY_BOARD}\n:{ASHBY_UUID}", ASHBY_URL) is None
