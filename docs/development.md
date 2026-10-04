@@ -69,6 +69,7 @@ These commands have all been run successfully in this repository.
 | Source sync | `python -m app.cli sync-sources` / `sync-source <id-or-key>` (live network) | — |
 | Source coverage | `python -m app.cli source-coverage` (read-only; counts only, no network) | — |
 | Performance smoke | `PERF_DATABASE_URL=<disposable db> python scripts/perf_smoke.py` (manual; replaces that database's opportunities, profile, and profile sources; also times a résumé review batch) | — |
+| Source sync performance | `PERF_DATABASE_URL=<disposable db> python scripts/perf_sources.py` (manual; wipes that database's opportunities and non-built-in sources; times 10/25/50-board syncs, discovery, and the list query, [operations.md](operations.md#operational-source-cap)) | — |
 
 ### Test boundary: unit vs PostgreSQL vs end-to-end
 
