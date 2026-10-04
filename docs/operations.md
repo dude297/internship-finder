@@ -42,15 +42,19 @@ Scheduled and manual syncs order direct ATS sources before the discovery feed (w
 
 ### Operational source cap
 
-<!-- PERF: lead fills -->
+Measured on 2026-10-04 with `scripts/perf_sources.py` (manual, never in CI): a disposable local database (Windows + Docker PostgreSQL 18), N synthetic Greenhouse/Lever/Ashby boards of 20 internship postings each, plus a synthetic 1,000-item discovery feed with one posting deduplicating onto each board. All HTTP is mocked, so these times are database and pipeline cost only.
 
-| Sources synced in one run | Elapsed time | Notes |
-|---|---|---|
-| 10 (synthetic) | <!-- PERF: lead fills --> | |
-| 25 (synthetic) | <!-- PERF: lead fills --> | |
-| 50 (synthetic) | <!-- PERF: lead fills --> | |
+| ATS sources (+ feed) | First sync (creates ~1,200–1,950) | Unchanged re-sync | Re-sync with one source failing (500) and one closing all postings | SQL statements per sync |
+|---|---|---|---|---|
+| 10 | 40.8 s | 1.3 s | 4.3 s | 132 |
+| 25 | 47.7 s | 2.2 s | 5.6 s | 312 |
+| 50 | 57.8 s | 3.2 s | 17.6 s | 612 |
 
-Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: <!-- PERF: lead fills -->.
+At every size: ATS sources ran before the feed, the canonical owner didn't change across the unchanged re-sync, the failing source produced one failed run without stopping the others, and the closing board's 20 postings fell back onto the feed (ADR-013 §5). `discover()` used 3 SQL statements (~40 ms over ~1,950 opportunities) and an opportunity list page 6, independent of N. The first-sync time is dominated by creating and evaluating ~1,000 feed postings, a one-time cost.
+
+Real network fetches add roughly 1–3 s per board, so a scheduled run with 50 boards is about 1–3 minutes plus the feed sync.
+
+Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: **50** (the largest size measured). The extrapolated ceiling is around 200. Before going past 50, re-measure the elapsed time of a real scheduled run (runbook step 13).
 
 ## Milestone 7 production activation runbook (prepared, not executed)
 
@@ -73,7 +77,7 @@ Code release (merge, deploy) is separate from source activation (ADR-013 §9). T
 
 **Expected one-time side effect:** the first full feed sync after this release adds an `ashby:<board>:<posting>` identifier to feed postings that match an Ashby board (ADR-013 §2); about 60 Ashby-backed feed postings report as `updated` once, because the identifier is part of the content hash. This is normal — nothing closes, and no requirement-extraction fingerprint input changes.
 
-**Rollback.** Disable a source rather than deleting it (toggle on the Sources page, or `UPDATE ingestion_sources SET is_enabled = false WHERE key = '<key>'`): disabling stops future syncs and leaves its existing records and opportunities untouched. A disabled source's canonical text stays as the last-owned text until another source either falls back onto the opportunity or the opportunity closes (ADR-013 §5); nothing is deleted or rewritten by disabling alone.
+**Rollback.** Disable a source rather than deleting it (toggle on the Sources page, or `UPDATE ingestion_sources SET enabled = false WHERE kind = '<kind>' AND identifier = '<board>'`): disabling stops future syncs and leaves its existing records and opportunities untouched. A disabled source's canonical text stays as the last-owned text until another source either falls back onto the opportunity or the opportunity closes (ADR-013 §5); nothing is deleted or rewritten by disabling alone.
 
 ## Source Health (implemented, Milestone 6)
 
