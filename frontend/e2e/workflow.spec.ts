@@ -88,6 +88,9 @@ test('owner workflow: profile, opportunity, eligibility, re-evaluation, tracking
   await expect(page.getByText('Application tracking saved.')).toBeVisible()
 
   await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
+  // Search by the unique title: on a reused E2E database the row can be past page one.
+  await page.getByLabel('Search title or organization').fill(title)
+  await page.getByRole('button', { name: 'Search' }).click()
   const row = page.getByRole('listitem').filter({ hasText: title })
   await expect(row).toContainText('Applied')
   await expect(row).toContainText('Ineligible')
