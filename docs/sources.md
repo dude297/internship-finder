@@ -117,6 +117,10 @@ A link with credentials or an explicit port proves nothing; hosts are compared e
 
 Discovery only suggests. `POST /api/sources/discovery/add` (CSRF-protected) creates sources only when the owner selects suggestions and submits: at most 25 per request, validated all-or-nothing; the client sends only `kind`, `identifier`, and `region`, and the server re-derives the current suggestion set and refuses anything not in it. Already-configured suggestions are skipped and reported, never duplicated (the existing unique constraint on `(kind, identifier, region)` is the final guard). New sources default to **Internships only**. Creating a source never syncs it — the owner syncs with the existing controls.
 
+### Production boards (2026-10-04)
+
+20 boards, all **Internships only**, added from discovery suggestions (ranked by feed-only coverage, exact identities): Greenhouse `morsecorpcoop`, `akunacapital`, `hpiq`, `coinbase`, `robinhood`, `verkada`, `waymo`, `devtechnology`, `dvtrading`, `lyft`, `singlestore`, `thenuclearcompany`, `advancedspace`; Lever (global) `hermeus`, `kitware`; Ashby `bedrock-robotics`, `ramp`, `allen-control-systems`, `base-power`, `reflect-orbital`. Description coverage went from 0.0% to 22.4%. Still unsupported (counted only): Workday 595, Oracle 147, SmartRecruiters 40, Rippling 11, Workable 8, other 13 feed postings.
+
 ## Common Behavior
 
 - **Network safety:** HTTPS to the five allowlisted API hosts only, public addresses only, 5 s connect / 20 s read timeouts, ≤ 3 redirects (each re-checked), ≤ 20 MB responses, ≤ 3 attempts (429/5xx/timeouts; `Retry-After` honored up to 30 s), a descriptive `User-Agent`. User-entered links are parsed into identifiers and never requested.
