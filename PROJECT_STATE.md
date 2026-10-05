@@ -3,9 +3,9 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-10-04
-Current Milestone: **Milestone 8 — Structured Source Expansion + Curated Program Registry implemented on `feature/m8-source-expansion`, awaiting review (not merged, not deployed)** ([ADR-014](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md)). Milestone 7.1 (volunteer type) and Milestone 7 (provider enrichment, [ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md)) are released. Earlier milestones: see the sections below.
-Current Production Version: Milestone 7.1 — `main` `0a636e2` code on https://internship-finder-pi.vercel.app (Neon `f2a7c9d4e1b3`; Render `dep-db1c2oc9v7es73eshpd0`; Vercel `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`); later `main` commits (`5076a73` debt fixes, `3bfbc54` research docs) are not deployed. 20 direct ATS boards + the feed, scheduled sync active.
-Active Development Branch: `feature/m8-source-expansion` (Milestone 8; PR to `main` open for review). Remote: https://github.com/dude297/internship-finder.
+Current Milestone: **Milestone 8 — Structured Source Expansion + Curated Program Registry released 2026-10-05** ([ADR-014](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md)): registry live, 6 SmartRecruiters companies active, description coverage 38.7%. Milestone 7.1 (volunteer type) and Milestone 7 (provider enrichment, [ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md)) are released. Earlier milestones: see the sections below.
+Current Production Version: Milestone 8 — `main` `9263860` on https://internship-finder-pi.vercel.app (Neon `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`; Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`). 20 Greenhouse/Lever/Ashby boards, 6 SmartRecruiters companies, the Curated Program Registry, and the feed; scheduled sync active.
+Active Development Branch: none (Milestone 8 released). Remote: https://github.com/dude297/internship-finder.
 
 ## Repository Visibility
 
@@ -100,7 +100,9 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-### Milestone 8 (implemented on `feature/m8-source-expansion`; awaiting review, not merged, not deployed)
+### Milestone 8 (released 2026-10-05 via PR #23)
+
+Release and activation record: [deployment.md](docs/deployment.md#milestone-8-release-2026-10-05). Production after activation: 1,626 open opportunities, 629 with a description (38.7%, from 22.4%), 616 ATS-backed, 997 feed-only; 13 registry programs; SmartRecruiters `abbvie`, `boschgroup`, `eurofins`, `wellmarkinc`, `keenfinity`, `llnl` (Internships only); 18 pending suggestions (none accepted or rejected, 0 canonical requirements, eligibility unchanged); scheduled sync 223.7 s with 28 sources. During activation a SmartRecruiters source synced before the feed had its new identity created 7 duplicates; they were removed and the runbook corrected (feed sync first).
 
 [ADR-014](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md). Migration `a8c3e5f7b9d1` (additive; seeds the built-in registry source). Before it: [PR #20](https://github.com/dude297/internship-finder/pull/20) (small M7 debt) merged as `5076a73`; [PR #18](https://github.com/dude297/internship-finder/pull/18) (M8 research, refreshed for the released M7/M7.1 state and the corrected SmartRecruiters classification) merged as `3bfbc54`.
 
@@ -109,7 +111,7 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 - **UI:** SmartRecruiters in Add Source and Source Coverage; "No confirmed deadline" + typical-window text; **Upcoming programs** toggle.
 - **Requirements:** every new description (SmartRecruiters detail, registry description + eligibility summary) runs the unchanged v1 extractor; candidates stay pending. Recall analysis: [requirement-extractor-recall.md](docs/research/requirement-extractor-recall.md) (v2 not implemented).
 - **Research:** [m8-provider-research-refresh.md](docs/research/m8-provider-research-refresh.md): Oracle Cloud HCM is link-out only (its candidate-experience REST resources are documented for Oracle internal use); USAJOBS future card (owner key needed, separate ADR).
-- **Production:** unchanged (Milestone 7.1). Release/activation notes: [operations.md](docs/operations.md#milestone-8-release-and-activation-notes-prepared-not-executed).
+- **Production:** released 2026-10-05 ([operations.md](docs/operations.md#milestone-8-release-and-activation-executed-2026-10-05)).
 
 ## Milestone 7 (complete; released 2026-10-04 via PR #17)
 
@@ -281,7 +283,7 @@ Known limitations and debt:
 ## Active Opportunity Sources
 
 - Tech Internship Discovery Feed (zshah101 public JSON API) — built in, manual sync.
-- Milestone 8 (not released): SmartRecruiters companies and the built-in Curated Program Registry ([docs/sources.md](docs/sources.md)).
+- SmartRecruiters companies — 6 in production since 2026-10-05 (Internships only), and the built-in Curated Program Registry (13 programs) ([docs/sources.md](docs/sources.md#production-smartrecruiters-companies-and-registry-2026-10-05)).
 - Greenhouse boards, Lever sites, and Ashby boards — 20 in production since 2026-10-04 (suggested from the feed, Internships only; [docs/sources.md](docs/sources.md#production-boards-2026-10-04)). Synced twice daily with the feed.
 - Manual entry.
 - Excluded: `SuryaHarikrishnan/2027-internship-tracker` listing data (licensing unclear).
@@ -301,7 +303,9 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Review the Milestone 8 PR (`feature/m8-source-expansion` → `main`). After approval: follow the [Milestone 8 release notes](docs/operations.md#milestone-8-release-and-activation-notes-prepared-not-executed) (pause the schedule, migrate, deploy Render then Vercel, smoke, re-enable), then owner-approved activation: sync the registry once, add a bounded batch of SmartRecruiters suggestions, accept no suggestions automatically.
+Milestone 8 is released. Watch Bosch's backlog finish (Source Health returns to healthy after its detail backlog is fetched) and the next scheduled runs' elapsed time; recheck registry programs on their `verify_by` dates. The next milestone is not started.
+
+Previously: Review the Milestone 8 PR (`feature/m8-source-expansion` → `main`). After approval: follow the [Milestone 8 release notes](docs/operations.md#milestone-8-release-and-activation-executed-2026-10-05) (pause the schedule, migrate, deploy Render then Vercel, smoke, re-enable), then owner-approved activation: sync the registry once, add a bounded batch of SmartRecruiters suggestions, accept no suggestions automatically.
 
 Previously: Review the Milestone 8 research ([PR #18](https://github.com/dude297/internship-finder/pull/18)) and the small debt PR ([#20](https://github.com/dude297/internship-finder/pull/20)); then Milestone 8 Tier 1 under a new ADR-014 (SmartRecruiters adapter + curated program registry).
 
@@ -311,6 +315,7 @@ Previously: review the Milestone 6 PR. After approval, follow its release runboo
 
 ## Recent Important Decisions
 
+- 2026-10-05: Milestone 8 released. PR #23 → `main` `9263860`; Neon migrated to `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`, Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13); 6 SmartRecruiters companies activated; coverage 22.4% → 38.7%. Runbook rule added: sync the feed on new code before adding sources whose feed identity that release introduces.
 - 2026-10-04: ADR-014 accepted (on the Milestone 8 branch): SmartRecruiters public Posting API as an ATS source with bounded detail fetching and partial-run semantics; a multi-request `collect` adapter hook; the curated program registry as a built-in automated source (own `curated_registry` provenance, so it can update its own entries while owner edits still win); verified vs typical dates and `verify_by`. Migration `a8c3e5f7b9d1`. Oracle, Workday, USAJOBS excluded from M8.
 - 2026-10-04: Milestone 7.1 released. PR #19 → `main` `0a636e2`; Neon migrated to `f2a7c9d4e1b3`; Render `dep-db1c2oc9v7es73eshpd0`, Vercel `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`; synthetic volunteer smoke 13/13, cleaned.
 - 2026-10-04: Milestone 7 released. PR #17 rebase-merged at approved head `64ce84d`; `main` `bc23629` (post-merge CI green). Render `dep-db1bksjncjis73c2apr0`, Vercel `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`. 20 ATS boards activated in two batches; coverage 0.0% → 22.4%.

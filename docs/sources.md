@@ -141,6 +141,10 @@ A link with credentials or an explicit port proves nothing; hosts are compared e
 
 Discovery only suggests. `POST /api/sources/discovery/add` (CSRF-protected) creates sources only when the owner selects suggestions and submits: at most 25 per request, validated all-or-nothing; the client sends only `kind`, `identifier`, and `region`, and the server re-derives the current suggestion set and refuses anything not in it. Already-configured suggestions are skipped and reported, never duplicated (the existing unique constraint on `(kind, identifier, region)` is the final guard). New sources default to **Internships only**. Creating a source never syncs it — the owner syncs with the existing controls.
 
+### Production SmartRecruiters companies and registry (2026-10-05)
+
+6 SmartRecruiters companies, all **Internships only**, added from discovery suggestions ranked by unique feed coverage: `abbvie`, `boschgroup`, `eurofins`, `wellmarkinc`, `keenfinity`, `llnl` (26 of the 40 SmartRecruiters feed postings; 19 deduplicated so far, Bosch's remaining matches pending its detail backlog, Eurofins' 4 closed upstream). The Curated Program Registry is enabled and synced (13 programs). Description coverage after activation: 38.7%.
+
 ### Production boards (2026-10-04)
 
 20 boards, all **Internships only**, added from discovery suggestions (ranked by feed-only coverage, exact identities): Greenhouse `morsecorpcoop`, `akunacapital`, `hpiq`, `coinbase`, `robinhood`, `verkada`, `waymo`, `devtechnology`, `dvtrading`, `lyft`, `singlestore`, `thenuclearcompany`, `advancedspace`; Lever (global) `hermeus`, `kitware`; Ashby `bedrock-robotics`, `ramp`, `allen-control-systems`, `base-power`, `reflect-orbital`. Description coverage went from 0.0% to 22.4%. Still unsupported (counted only): Workday 595, Oracle 147, SmartRecruiters 40, Rippling 11, Workable 8, other 13 feed postings.
