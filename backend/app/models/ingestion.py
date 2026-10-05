@@ -25,6 +25,10 @@ from app.enums import (
 )
 
 RUNNING_RUN_INDEX = "uq_ingestion_runs_one_running_per_source"
+# Application-owned sources (ADR-014 §5): can be disabled, never created, re-pointed or filtered.
+BUILTIN_KINDS = frozenset(
+    {IngestionSourceKind.COMMUNITY_FEED.value, IngestionSourceKind.CURATED_REGISTRY.value}
+)
 
 
 def _default_scope(context: DefaultExecutionContext) -> str:
@@ -42,13 +46,17 @@ class IngestionSource(IdMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("kind", "identifier", "region", postgresql_nulls_not_distinct=True),
         CheckConstraint("(kind = 'lever') = (region IS NOT NULL)", name="region_iff_lever"),
-        CheckConstraint("kind <> 'community_feed' OR scope = 'all'", name="builtin_scope_all"),
+        CheckConstraint(
+            "kind NOT IN ('community_feed', 'curated_registry') OR scope = 'all'",
+            name="builtin_scope_all",
+        ),
     )
 
     kind: Mapped[IngestionSourceKind] = mapped_column(
         str_enum(IngestionSourceKind, "ingestion_source_kind")
     )
-    # Greenhouse board token, Lever site slug, or the built-in feed's key.
+    # Greenhouse board token, Lever site slug, Ashby board, SmartRecruiters company identifier
+    # (all lowercased), or a built-in source's key.
     identifier: Mapped[str] = mapped_column(String(64))
     region: Mapped[SourceRegion | None] = mapped_column(str_enum(SourceRegion, "source_region"))
     display_name: Mapped[str] = mapped_column(String(200))
@@ -64,8 +72,9 @@ class IngestionSource(IdMixin, TimestampMixin, Base):
 
     @property
     def builtin(self) -> bool:
-        """The application-owned discovery feed: it can be disabled but not re-pointed."""
-        return self.kind is IngestionSourceKind.COMMUNITY_FEED
+        """The application-owned discovery feed or program registry (ADR-014 §5): it can be
+        disabled but not re-pointed."""
+        return self.kind.value in BUILTIN_KINDS
 
     @property
     def key(self) -> str:

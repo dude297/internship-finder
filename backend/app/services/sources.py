@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, selectinload
 
 from app.enums import IngestionRunStatus, IngestionSourceKind, SourceScope
-from app.ingestion.adapters import ashby, greenhouse, lever
+from app.ingestion.adapters import ashby, greenhouse, lever, smartrecruiters
 from app.models import IngestionRun, IngestionSource
 from app.schemas.sources import RunResponse, SourceCreate, SourceResponse, SourceUpdate
 from app.services.source_health import derive_health
@@ -127,6 +127,10 @@ def create_source(db: Session, body: SourceCreate) -> IngestionSource:
         if body.region is not None:
             raise ValueError("Ashby boards don't have a region.")
         identifier = ashby.parse_board_reference(body.board)
+    elif body.kind is IngestionSourceKind.SMARTRECRUITERS:
+        if body.region is not None:
+            raise ValueError("SmartRecruiters companies don't have a region.")
+        identifier = smartrecruiters.parse_company_reference(body.board)
     else:
         identifier, region = lever.parse_site_reference(body.board, body.region)
     duplicate = db.scalars(

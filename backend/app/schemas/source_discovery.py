@@ -9,7 +9,10 @@ from app.enums import IngestionSourceKind, SourceRegion
 from app.schemas.sources import SourceResponse
 
 SupportedKind = Literal[
-    IngestionSourceKind.GREENHOUSE, IngestionSourceKind.LEVER, IngestionSourceKind.ASHBY
+    IngestionSourceKind.GREENHOUSE,
+    IngestionSourceKind.LEVER,
+    IngestionSourceKind.ASHBY,
+    IngestionSourceKind.SMARTRECRUITERS,
 ]
 
 MAX_DISCOVERY_ADD = 25
@@ -24,7 +27,7 @@ class CoverageMetrics(BaseModel):
     without_description: int
     # with_description / active_opportunities * 100, one decimal; None when there are none.
     description_coverage_percent: float | None
-    # An active record from a direct ATS source (Greenhouse, Lever, Ashby).
+    # An active record from a direct ATS source (Greenhouse, Lever, Ashby, SmartRecruiters).
     ats_backed: int
     # Active automated records, all of them from the discovery feed.
     feed_only: int

@@ -9,7 +9,7 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from html import unescape
 from html.parser import HTMLParser
 from typing import Annotated, Any
@@ -28,6 +28,8 @@ ZSHAH = "zshah"
 GREENHOUSE = "greenhouse"
 LEVER = "lever"
 ASHBY = "ashby"
+SMARTRECRUITERS = "smartrecruiters"
+CURATED = "curated"  # the program registry (ADR-014 §5): curated:<slug>:<cycle>
 URL = "url"
 
 # Board tokens and site slugs as they appear in provider URLs. Lowercased on both sides.
@@ -101,6 +103,15 @@ class NormalizedOpportunity(BaseModel):
     posted_at: datetime | None = None
     source_published_at: datetime | None = None
     source_updated_at: datetime | None = None
+    # ADR-014 §6: only the curated program registry supplies these; the pipeline writes them only
+    # for a registry record. Deadline/start/end are verified dates, never typical ones.
+    application_deadline: date | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    program_cycle: Annotated[str, _truncate(20)] | None = None
+    typical_open_window: Annotated[str, _truncate(100)] | None = None
+    typical_close_window: Annotated[str, _truncate(100)] | None = None
+    verify_by: date | None = None
     raw_payload: dict[str, Any]
 
     @field_validator("title", "organization", "location", mode="before")
@@ -128,8 +139,25 @@ class NormalizedOpportunity(BaseModel):
         return value
 
     def content_hash(self) -> str:
-        """Change detector for the whole item (raw payload included); not a security control."""
-        return hashlib.sha256(canonical_json(self.model_dump(mode="json")).encode()).hexdigest()
+        """Change detector for the whole item (raw payload included); not a security control.
+        The ADR-014 registry fields are left out while unset, so items of the sources that never
+        set them hash exactly as before Milestone 8 (no mass "updated" run after the upgrade)."""
+        dumped = self.model_dump(mode="json")
+        for name in REGISTRY_FIELDS:
+            if dumped[name] is None:
+                del dumped[name]
+        return hashlib.sha256(canonical_json(dumped).encode()).hexdigest()
+
+
+REGISTRY_FIELDS = (
+    "application_deadline",
+    "start_date",
+    "end_date",
+    "program_cycle",
+    "typical_open_window",
+    "typical_close_window",
+    "verify_by",
+)
 
 
 @dataclass

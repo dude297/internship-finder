@@ -29,6 +29,7 @@ ALLOWED_HOSTS = frozenset(
         "api.lever.co",
         "api.eu.lever.co",
         "api.ashbyhq.com",
+        "api.smartrecruiters.com",
     }
 )
 USER_AGENT = (

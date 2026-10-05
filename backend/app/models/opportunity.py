@@ -87,6 +87,13 @@ class Opportunity(IdMixin, TimestampMixin, Base):
     # ADR-012 §4: SHA-256 of (extractor name, version, extraction inputs) at the last candidate
     # extraction. NULL = never extracted. The catalog scan skips rows whose value is current.
     requirement_extraction_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    # ADR-014 §6: curated program registry facts, written only by the registry source. A typical
+    # window is display text, never a date: `application_deadline` holds only a verified date.
+    program_cycle: Mapped[str | None] = mapped_column(String(20))
+    typical_open_window: Mapped[str | None] = mapped_column(String(100))
+    typical_close_window: Mapped[str | None] = mapped_column(String(100))
+    # On or after this date the dates need re-checking ("Needs date verification"). Never closes.
+    verify_by: Mapped[date | None]
 
     source_records: Mapped[list["OpportunitySourceRecord"]] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True

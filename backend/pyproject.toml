@@ -60,4 +60,7 @@ venv = ".venv"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
-markers = ["postgres: needs a disposable PostgreSQL database (TEST_DATABASE_URL)"]
+markers = [
+    "postgres: needs a disposable PostgreSQL database (TEST_DATABASE_URL)",
+    "registry: keep the migration-seeded program registry source (ADR-014 §5)",
+]

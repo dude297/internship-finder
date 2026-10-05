@@ -1,13 +1,14 @@
 """Source adapters: build the request URL from a hard-coded host + validated identifier, validate
 the response's top level, and normalize items. No database access (ADR-002, ADR-008 §2)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+import httpx2
 from pydantic import BaseModel, ValidationError
 
-from app.enums import IngestionSourceKind, OpportunitySourceType, SourceRegion
+from app.enums import IngestionSourceKind, OpportunitySourceType, SourceRegion, SourceScope
 from app.ingestion.normalize import ItemError, NormalizedOpportunity, Snapshot, SnapshotError
 
 
@@ -22,6 +23,17 @@ class SourceConfig:
 
 
 @dataclass(frozen=True)
+class CollectRequest:
+    """What a multi-request adapter (ADR-014 §2) gets instead of one `url` fetch."""
+
+    source: SourceConfig
+    scope: SourceScope
+    # external_id → this source's stored raw item (to reuse unchanged detail responses).
+    known: Mapping[str, Any]
+    transport: httpx2.BaseTransport | None
+
+
+@dataclass(frozen=True)
 class Adapter:
     source_type: OpportunitySourceType
     url: Callable[[SourceConfig], str]
@@ -30,6 +42,10 @@ class Adapter:
     # One stored raw item → its normalized form (ADR-013 §5: re-deriving a fallback owner's
     # canonical fields without a fetch). Raises ItemError/ValidationError like `parse` items.
     normalize: Callable[[dict[str, Any], SourceConfig], NormalizedOpportunity]
+    # ADR-014 §2: set for adapters that need several requests (pagination, detail) or none (the
+    # registry file). Returns the payload `parse` reads (never None); raises FetchError or
+    # SnapshotError when no complete snapshot can be built. No conditional requests then.
+    collect: Callable[["CollectRequest"], Any] | None = None
 
 
 def top_level[M: BaseModel](model: type[M], payload: Any, what: str) -> M:
@@ -67,11 +83,20 @@ def normalize_each(
 
 
 def adapter_for(kind: IngestionSourceKind) -> Adapter:
-    from app.ingestion.adapters import ashby, community_feed, greenhouse, lever
+    from app.ingestion.adapters import (
+        ashby,
+        community_feed,
+        greenhouse,
+        lever,
+        program_registry,
+        smartrecruiters,
+    )
 
     return {
         IngestionSourceKind.COMMUNITY_FEED: community_feed.ADAPTER,
         IngestionSourceKind.GREENHOUSE: greenhouse.ADAPTER,
         IngestionSourceKind.LEVER: lever.ADAPTER,
         IngestionSourceKind.ASHBY: ashby.ADAPTER,
+        IngestionSourceKind.SMARTRECRUITERS: smartrecruiters.ADAPTER,
+        IngestionSourceKind.CURATED_REGISTRY: program_registry.ADAPTER,
     }[kind]

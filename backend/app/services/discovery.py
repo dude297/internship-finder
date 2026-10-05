@@ -72,6 +72,8 @@ class Filters:
     requirement_review: RequirementReviewFilter | None = None
     deadline_within: DeadlineWithin | None = None
     has_deadline: bool | None = None
+    # ADR-014 §6: verify_by reached (true) / not reached or unset (false).
+    needs_date_verification: bool | None = None
     # "Today" for deadline filters (ADR-012 §14): the client's local date, or the server's UTC
     # date when omitted. Never read by anything else, so tests can pass it explicitly.
     today: date | None = None
@@ -198,6 +200,13 @@ def _filtered(db: Session, filters: Filters) -> Listing:
         stmt = stmt.where(Opportunity.application_deadline.is_not(None))
     elif filters.has_deadline is False:
         stmt = stmt.where(Opportunity.application_deadline.is_(None))
+    if filters.needs_date_verification is not None:
+        reached = Opportunity.verify_by <= (filters.today or datetime.now(UTC).date())
+        stmt = stmt.where(
+            reached
+            if filters.needs_date_verification
+            else or_(Opportunity.verify_by.is_(None), ~reached)
+        )
     if filters.deadline_within is not None:
         today = filters.today or datetime.now(UTC).date()
         stmt = stmt.where(
@@ -206,6 +215,11 @@ def _filtered(db: Session, filters: Filters) -> Listing:
             )
         )
     return stmt
+
+
+def needs_date_verification(verify_by: date | None, today: date | None = None) -> bool:
+    """ADR-014 §6: the registry's verify-by date has been reached."""
+    return verify_by is not None and verify_by <= (today or datetime.now(UTC).date())
 
 
 def provenance(records: list[OpportunitySourceRecord]) -> tuple[Origin, Availability]:
@@ -325,6 +339,13 @@ def list_page(
                 scoring_version=scoring_version,
                 pending_requirement_count=pending_count or 0,
                 requirements_stale=opportunity.requirements_stale_since is not None,
+                program_cycle=opportunity.program_cycle,
+                typical_open_window=opportunity.typical_open_window,
+                typical_close_window=opportunity.typical_close_window,
+                verify_by=opportunity.verify_by,
+                needs_date_verification=needs_date_verification(
+                    opportunity.verify_by, filters.today
+                ),
                 fit_coverage=breakdown["coverage"] if breakdown else None,
                 fit_components=_components(breakdown),
                 application_status=(

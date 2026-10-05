@@ -6,7 +6,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -62,10 +62,16 @@ def pg_engine(pg_url: str) -> Iterator[Engine]:
 
 
 @pytest.fixture
-def db(pg_engine: Engine) -> Iterator[Session]:
-    """A session inside a transaction that is rolled back after the test."""
+def db(pg_engine: Engine, request: pytest.FixtureRequest) -> Iterator[Session]:
+    """A session inside a transaction that is rolled back after the test.
+
+    The migration-seeded program registry source (ADR-014 §5) is removed inside that transaction
+    unless the test is marked `registry`, so tests written for a single built-in source (the
+    feed) keep their world; registry tests opt in."""
     with pg_engine.connect() as connection, connection.begin() as transaction:
         session = Session(bind=connection, join_transaction_mode="create_savepoint")
+        if request.node.get_closest_marker("registry") is None:
+            session.execute(text("DELETE FROM ingestion_sources WHERE kind = 'curated_registry'"))
         yield session
         session.close()
         transaction.rollback()

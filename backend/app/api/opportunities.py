@@ -54,6 +54,7 @@ def _detail(db: DbSession, opportunity: Opportunity) -> OpportunityDetail:
     detail.latest_evaluation = EvaluationResponse.model_validate(evaluation) if evaluation else None
     detail.profile_exists = get_profile(db) is not None
     detail.pending_requirement_count = _pending_requirement_count(db, opportunity.id)
+    detail.needs_date_verification = discovery.needs_date_verification(opportunity.verify_by)
     return detail
 
 
@@ -77,6 +78,7 @@ def list_opportunities(
     requirement_review: discovery.RequirementReviewFilter | None = None,
     deadline_within: discovery.DeadlineWithin | None = None,
     has_deadline: bool | None = None,
+    needs_date_verification: bool | None = None,
     today: date | None = None,
     sort: discovery.Sort = "newest",
 ) -> OpportunityPage:
@@ -103,6 +105,7 @@ def list_opportunities(
         requirement_review=requirement_review,
         deadline_within=deadline_within,
         has_deadline=has_deadline,
+        needs_date_verification=needs_date_verification,
         today=today,
     )
     items, total = discovery.list_page(db, filters, limit, offset, sort)
