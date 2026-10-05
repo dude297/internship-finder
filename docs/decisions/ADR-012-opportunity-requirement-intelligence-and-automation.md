@@ -127,7 +127,7 @@ A GitHub Actions workflow (`.github/workflows/sync-production.yml`) runs `python
 
 ### 11. Source health
 
-Derived on read from `last_attempted_at`, `last_success_at`, and run history; nothing new is stored. Details in [sources.md](../sources.md#source-health).
+Derived on read from `last_attempted_at`, `last_success_at`, and run history; nothing new is stored. Details in [operations.md](../operations.md#source-health-implemented-milestone-6).
 
 ### 12. Ashby
 

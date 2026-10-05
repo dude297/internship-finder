@@ -152,7 +152,7 @@ Every sync records an `ingestion_runs` row: status (`running`, `success`, `parti
 
 ## Board Scope Changes (implemented)
 
-Switching a Greenhouse/Lever board between **Internships only** and **All postings** takes effect on its next sync: the change clears the HTTP validators, so that sync fetches the whole board, closes postings the new scope excludes, and reopens ones it admits again ([sources.md](sources.md#board-scope-internships-only-greenhouse-and-lever)). A partial run closes nothing, as always.
+Switching a Greenhouse/Lever board between **Internships only** and **All postings** takes effect on its next sync: the change clears the HTTP validators, so that sync fetches the whole board, closes postings the new scope excludes, and reopens ones it admits again ([sources.md](sources.md#board-scope-internships-only-greenhouse-lever-and-ashby)). A partial run closes nothing, as always.
 
 ## Closed Postings (implemented)
 
