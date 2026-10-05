@@ -776,3 +776,44 @@ def test_milestone_7_1_volunteer_type_round_trip(pg_engine: Engine, pg_url: str)
                 text("DELETE FROM opportunities WHERE id IN (:a, :b)"),
                 {"a": VOLUNTEER_ID, "b": OTHER_ID},
             )
+
+
+def test_milestone_8_round_trip_and_downgrade_guards(pg_engine: Engine, pg_url: str) -> None:
+    """ADR-014: the migration seeds the registry source and adds the date-trust columns; the
+    downgrade refuses while a SmartRecruiters source or a registry record exists."""
+    config = alembic_config(pg_url)
+    source_id = uuid.uuid4()
+    try:
+        assert {"program_cycle", "typical_open_window", "typical_close_window", "verify_by"} <= (
+            columns(pg_engine, "opportunities")
+        )
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO ingestion_sources (id, kind, identifier, display_name, scope)"
+                    " VALUES (:id, 'smartrecruiters', 'examplerobotics', 'Example Robotics',"
+                    " 'internships_only')"
+                ),
+                {"id": source_id},
+            )
+        with pytest.raises(RuntimeError, match="SmartRecruiters"):
+            command.downgrade(config, MILESTONE_7_1_REVISION)
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM ingestion_sources WHERE id = :id"), {"id": source_id}
+            )
+        command.downgrade(config, MILESTONE_7_1_REVISION)
+        assert "verify_by" not in columns(pg_engine, "opportunities")
+        with pg_engine.begin() as connection:
+            kinds = connection.execute(text("SELECT kind FROM ingestion_sources")).scalars().all()
+        assert "curated_registry" not in kinds
+    finally:
+        command.upgrade(config, "head")
+        with pg_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM ingestion_sources WHERE id = :id"), {"id": source_id}
+            )
+            seeded = connection.execute(
+                text("SELECT enabled, scope FROM ingestion_sources WHERE kind = 'curated_registry'")
+            ).one()
+        assert tuple(seeded) == (True, "all")
