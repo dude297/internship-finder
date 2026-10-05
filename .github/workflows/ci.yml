@@ -9,6 +9,36 @@ permissions:
   contents: read
 
 jobs:
+  docs:
+    # Documentation guard (docs/README.md "Enforcement"): stdlib-only script, no secrets, no network.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the changed-path guards diff against the base
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+      - name: Checker tests
+        run: python -m unittest discover -s scripts/tests
+      - name: Repository checks
+        run: python scripts/check_docs.py
+      - name: Changed-path guards
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            base="origin/$BASE_REF"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            base="$BEFORE"
+          else
+            echo "No base to diff against; skipping changed-path guards."; exit 0
+          fi
+          python scripts/check_docs.py --base "$base"
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
