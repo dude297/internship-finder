@@ -76,7 +76,15 @@ _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+|\s*[\r\n]+\s*|\s*[•▪◦]\s*"
 _DOTTED_ABBREVIATION = re.compile(r"\b(?:[A-Za-z]{1,2}\.){2,}|\bPh\.D\b")
 
 
+_US_SENTENCE_END = re.compile(
+    r"(\bU\.S\.(?:A\.)?)[ \t]+(?=(?:Interns?|Applicants?|Candidates?|Participants?|Mentors?|"
+    r"Employees|Staff|Engineers|Managers|Supervisors|Contractors|Must|We|Our|You|Your|This|The|"
+    r"All|Full)\b)"
+)
+
+
 def _protect_abbreviations(text: str) -> str:
+    text = _US_SENTENCE_END.sub("\\1\n", text)  # "across the U.S. Mentors must" is two sentences
     return _DOTTED_ABBREVIATION.sub(lambda m: m.group().replace(".", _PLACEHOLDER), text)
 
 
@@ -104,10 +112,13 @@ _HEDGE_RE = re.compile(
     r"\b(?:preferred|prefer|prefers|preference|nice to have|bonus|ideally|ideal|desirable|desired|"
     r"favou?red|typically|generally|normally|commonly|often|sometimes|mostly|primarily|most|"
     r"usually|encouraged|welcome|might|could|unless|except|exceptions?|waivers?|depending|"
+    r"some|certain|select|several|"
     r"if)\b|\bmay\b(?!\s+(?:\d|apply\b|participate\b|be\s+(?:considered|eligible)\b))|"
     r"\bplus\b|\bcase[- ]by[- ]case\b|\ba plus\b",
     re.IGNORECASE,
 )
+# Form questions ("asked whether you are authorized to work") describe the application, not a rule.
+_QUESTION_RE = re.compile(r"\b(?:whether|asks?|asked|questions?|indicate)\b", re.IGNORECASE)
 # Negations, "does not affect", "regardless of", "all ages", and upper bounds invert or void an
 # otherwise matching phrase.
 _NEGATION_RE = re.compile(
@@ -125,7 +136,10 @@ _DATE_BOUND_NEGATION_RE = re.compile(
 # nothing about the interns, unless it also names the intern-side audience.
 _OTHER_ROLE_RE = re.compile(
     r"\b(?:employees?|staff|full[- ]time (?:hires?|employees?)|mentors?|supervisors?|managers?|"
-    r"parents?|guardians?|chaperones?|instructors?|teachers?|drivers?|alumni|judges?)\b",
+    r"parents?|guardians?|chaperones?|instructors?|teachers?|drivers?|alumni|judges?|engineers|"
+    r"scientists|developers|researchers|analysts|contractors?|consultants?|vendors?|freelancers?|"
+    r"conversions?|return\s+offers?|post[- ]graduat\w+|post[- ]internship|"
+    r"full[- ]time\s+(?:offers?|employment))\b",
     re.IGNORECASE,
 )
 _INTERN_SIDE_RE = re.compile(
@@ -143,7 +157,10 @@ _LEAD_RE = re.compile(
 )
 _LEADING_FILLER_RE = re.compile(r"[\W_]*(?:(?:and|also|a|an|current|currently)\s+)*", re.IGNORECASE)
 _FOREIGN_COUNTRY_RE = re.compile(
-    r"\b(?:Canada|Canadian|UK|United Kingdom|Europe|European|EU|Mexico|India|Germany|Australia)\b"
+    r"\b(?:Canada|Canadian|UK|United Kingdom|Europe|European|EU|Mexico|Mexican|India|Indian|"
+    r"Germany|German|Australia|Australian|British|Irish|Ireland|Japan|Japanese|China|Chinese|"
+    r"France|French|Israel|Israeli|Korea|Korean|Singapore|New Zealand|NZ|Brazil|Brazilian)\b"
+    r"|\bU\.K\."
 )
 
 
@@ -232,9 +249,16 @@ _YEARS = (
     r"(?:\s+years?(?:\s+(?:of\s+age|old))?\b(?!\s+(?:of\s+(?!age\b)|in\b|working|experience)))?"
 )
 _OLDER = r"\s*(?:\+|or\s+(?:older|over|above)|and\s+(?:older|over|above|up))"
+# "must be 21 to drive company vehicles": an age for an activity, not for the program.
+_AGE_NOT_FOR_RE = re.compile(
+    r"\s+to\s+(?:drive|operate|rent|purchase|buy|handle|serve|use|enter|attend|travel|access|"
+    r"carry|lift|work\s+(?:with|on|around|near))\b",
+    re.IGNORECASE,
+)
 _AGE_END = (
-    r"(?=\s*(?:[.,;:)]|$|\b(?:at|by|on|as of|when|before|prior to|and|to|in order|is|"
-    r"required|needed)\b))"
+    r"(?=\s*(?:[.,;:)]|$|\b(?:at|by|on|as of|when|before|prior to|and|in order|is|"
+    r"required|needed)\b|\bto\s+(?:apply|participate|join|enroll|intern|start|begin|qualify|"
+    r"be\s+(?:eligible|considered)|work\b(?!\s+(?:with|on|around|near)\b))))"
 )
 # "Interns who are 18 or older" in a sentence about peers is not a requirement: the number needs
 # an explicit requirement subject.
@@ -316,6 +340,8 @@ def _match_minimum_age(clause: str) -> list[_Hit]:
         if pattern in _NEEDS_LEAD and not _has_lead(clause, match.start()):
             continue
         years = int(match["n"])
+        if _AGE_NOT_FOR_RE.match(clause, match.end()):
+            return []
         if not MIN_PLAUSIBLE_AGE <= years <= MAX_PLAUSIBLE_AGE:
             return []  # about age, but not a usable proposal
         timing = _age_timing(clause, match.end())
@@ -346,10 +372,32 @@ _LEVEL_TOKEN = (
     r"(?P<lvl>high[- ]school|undergrad(?:uate)?|graduate|bachelor['’]?s|bachelors|master['’]?s|"
     r"masters|doctoral|ph\.?d|(?-i:BS|BA|BSc|BEng|B\.S\.|B\.A\.|MS|MSc|MA|M\.S\.))"
 )
-_LEVEL_ANY_RE = re.compile(rf"(?<!\w){_LEVEL_TOKEN.replace('?P<lvl>', '')}(?!\w)", re.IGNORECASE)
+# Counts plural forms ("undergraduates", "graduates") and associate degrees (a level with no
+# EducationLevel) so that any second level in the clause makes it a list of alternatives.
+_LEVEL_ANY_RE = re.compile(
+    rf"(?<!\w)(?:{_LEVEL_TOKEN.replace('?P<lvl>', '')}s?|associate['’]?s?(?=\s+(?:degree|program)))"
+    r"(?!\w)",
+    re.IGNORECASE,
+)
+# "bachelor's degree or higher", "undergraduate student or a bootcamp participant": the level is
+# one of several accepted statuses.
+_ALT_AFTER_LEVEL_RE = re.compile(
+    r"\s*(?:,\s*)?(?:or|and/or|/)\s+"
+    r"(?!(?:freshm\w*|sophomores?|juniors?|seniors?|first[- ]year|students?)\b)",
+    re.IGNORECASE,
+)
+_ALT_BEFORE_RE = re.compile(r"\b(?:or|and/or)(?:\s+(?:be|are))?(?:\s+an?)?\s*$", re.IGNORECASE)
+_APPLY_ACTION_RE = re.compile(
+    r"\b(?:apply|applying|application|submit\w*|deadline|due|register\w*|respond\w*|send)\b",
+    re.IGNORECASE,
+)
 _INCOMING = r"(?P<inc>incoming|rising|entering)"
 _NOUN = r"(?P<noun>students?|seniors?|juniors?|sophomores?|freshm[ae]n)"
-_EDU_ALTERNATIVE_RE = re.compile(r"\b(?:equivalent|in lieu)\b", re.IGNORECASE)
+_EDU_ALTERNATIVE_RE = re.compile(
+    r"\b(?:equivalent|in lieu)\b|\b(?:recent|new)\s+(?:grad|grads|graduates?)\b|"
+    r"\bor\s+(?:alumn\w+|career\s+changers?)\b|\brecent\s+alumn\w+",
+    re.IGNORECASE,
+)
 _TAIL = (
     r"(?:\s+(?:degree|program|programme|students?|studies|coursework|school)\b"
     r"|(?=\s*(?:[.,;:)]|$|\b(?:in|or|and|at|with|from|majoring|studying)\b)))"
@@ -420,6 +468,8 @@ def _education_timing(
     internship" and the default; explicit_date for a year-bearing date. None: a date was named
     that cannot be placed (month without year/day)."""
     explicit = _explicit_date(clause)
+    if explicit is not None and _APPLY_ACTION_RE.search(clause):
+        explicit = None  # "must apply by March 1, 2027" is a deadline, not an enrollment date
     if explicit is not None and re.search(
         r"\b(?:as of|by|before|on|starting|beginning|from)\b", clause, re.IGNORECASE
     ):
@@ -444,12 +494,33 @@ def _education_hit(
     return [_Hit(RequirementType.EDUCATION, value, position, applies_at, reference_date)]
 
 
+_FOUR_YEAR_ALT_RE = re.compile(
+    r"\s*(?:,\s*)?(?:or|and/or|/)\s+(?!(?:university|college|institution|school)\b)", re.IGNORECASE
+)
+# "... or be a current graduate student": the status is one branch of an "or" list.
+_OR_GRADUATE_BRANCH_RE = re.compile(
+    r"\bor\b[^.;]*\b(?:graduate\s+students?|alumn\w+|master['’]?s|ph\.?d|recent\s+grad\w*)",
+    re.IGNORECASE,
+)
+
+
+def _is_alternative(clause: str, match: re.Match[str]) -> bool:
+    """The matched status is one branch of an "or" list ("... or higher", "X or be a graduate
+    student"), so a single-level proposal would misstate it."""
+    return bool(
+        _ALT_AFTER_LEVEL_RE.match(clause, match.end())
+        or _ALT_BEFORE_RE.search(clause[: match.start()])
+    )
+
+
 def _match_education(clause: str) -> list[_Hit]:
     levels = {_level_of(m.group()) for m in _LEVEL_ANY_RE.finditer(clause)}
     if len(levels) > 1 or _EDU_ALTERNATIVE_RE.search(clause):
         return []
 
     match = _EDU_PURSUIT_RE.search(clause)
+    if match is not None and _is_alternative(clause, match):
+        return []
     if match is not None and _has_lead(clause, match.start()):
         level = _level_of(match["lvl"])
         if level is not None:
@@ -462,6 +533,8 @@ def _match_education(clause: str) -> list[_Hit]:
             )
 
     match = _EDU_STUDENT_RE.search(clause)
+    if match is not None and _is_alternative(clause, match):
+        return []
     if match is not None:
         level = _level_of(match["lvl"])
         noun = match["noun"].lower()
@@ -485,6 +558,8 @@ def _match_education(clause: str) -> list[_Hit]:
         )
 
     match = _EDU_FOUR_YEAR_RE.search(clause)
+    if match is not None and _FOUR_YEAR_ALT_RE.match(clause, match.end()):
+        return []
     if match is not None and _has_lead(clause, match.start()):
         return _education_hit(
             clause,
@@ -610,6 +685,9 @@ def _match_graduation(clause: str) -> list[_Hit]:
     ):
         return []
 
+    if _OR_GRADUATE_BRANCH_RE.search(clause):
+        return []
+
     match = _GRAD_RANGE_RE.search(clause)
     if match is not None:
         first, second = _my_value(match, 1), _my_value(match, 2)
@@ -703,6 +781,18 @@ _COMPLETED_RE = re.compile(
 )
 
 
+_GRADUATE_WORD_RE = re.compile(
+    r"\bgraduate\s+(?:students?|programs?|school|degrees?)\b|\bmaster['’]?s\b|\bph\.?d\b|"
+    r"\bdoctoral\b|\bmasters\b",
+    re.IGNORECASE,
+)
+_STUDY_REST_RE = re.compile(
+    r"^\s*(?:of\s+|toward\s+|towards\s+)?(?:a\s+|your\s+)?(?:college|university|undergraduate|study|studies|school|coursework|"
+    r"a\s+degree|your\s+degree|full[- ]time\s+study)|^\s*(?:[.,;:)]|$)",
+    re.IGNORECASE,
+)
+
+
 def _standing_words(text: str) -> list[str]:
     found: set[str] = set()
     for raw in re.findall(r"first[- ]year|freshm[ae]n|sophomore|junior|senior", text, re.I):
@@ -722,8 +812,12 @@ def _standing_hit(label: str, position: int) -> list[_Hit]:
 
 
 def _match_standing(clause: str) -> list[_Hit]:
-    if _HIGH_SCHOOL_CONTEXT_RE.search(clause):
-        return []
+    if (
+        _HIGH_SCHOOL_CONTEXT_RE.search(clause)
+        or _GRADUATE_WORD_RE.search(clause)
+        or _EDU_ALTERNATIVE_RE.search(clause)
+    ):
+        return []  # a standing next to a graduate/high-school branch is one option of several
     degree = bool(_DEGREE_CONTEXT_RE.search(clause))
 
     match = _RISING_STANDING_RE.search(clause)
@@ -756,10 +850,10 @@ def _match_standing(clause: str) -> list[_Hit]:
     if match is not None:
         unit = match["unit"].lower().rstrip("s")
         # "completed 2 years" can be work experience; only study context makes it standing.
-        if (
+        # "completed 2 semesters of calculus" / "2 terms of mentoring" are not class standing.
+        if not _STUDY_REST_RE.match(match["rest"]) and not (
             unit == "year"
-            and not degree
-            and not re.search(r"coursework|study|studies|school", match["rest"], re.IGNORECASE)
+            and (degree or re.search(r"coursework|study|studies|school", match["rest"], re.I))
         ):
             return []
         raw = match["n"].lower()
@@ -812,14 +906,27 @@ _OTHER_STATUS_RE = re.compile(
     re.IGNORECASE,
 )
 _ALTERNATIVE_AFTER_RE = re.compile(
-    r"\s*(?:,\s*)?(?:\(\s*)?(?:or|and/or|/|nor)\s+(?!older\b|younger\b|over\b|more\b)",
+    r"\s*(?:,\s*)?(?:[-–—]+\s*)?(?:\(\s*)?(?:or|and/or|/|nor)\s+"
+    r"(?!older\b|younger\b|over\b|more\b)"
+    r"|\s*,?\s+and\s+(?:non\b|international\b|dual\b|foreign\b|other\b|those\b|anyone\b|everyone\b)",
     re.IGNORECASE,
 )
+_CITIZEN_WORD_RE = re.compile(r"\b(?:citizens?|citizenship)\b", re.IGNORECASE)
+# A positive statement that non-citizens may take part: contradicts a "citizens only" clause
+# elsewhere in the same posting, so the citizenship proposal is withdrawn.
+_CIT_WAIVER_RE = re.compile(
+    r"\bnon[-\s]*(?:U\.S\.|US)?[-\s]*citizens?\b|\binternational\s+(?:students?|applicants?|"
+    r"candidates?)\b|\bforeign\s+(?:nationals?|students?)\b|\bdual\s+citizens?\b",
+    re.IGNORECASE,
+)
+_WAIVER_POSITIVE_RE = re.compile(r"\b(?:may|can|are|is|also|eligible|welcome|encouraged)\b", re.I)
 
 
 def _match_citizenship(clause: str) -> list[_Hit]:
     if _OTHER_STATUS_RE.search(clause) or _FOREIGN_COUNTRY_RE.search(clause):
         return []
+    if len(_CITIZEN_WORD_RE.findall(clause)) > 1:
+        return []  # "U.S. citizen, U.K. citizen, or ..." is a list of nationalities
     patterns = _CITIZENSHIP_PATTERNS
     if _MUST_RE.search(clause):
         patterns = (*patterns, _CITIZEN_IN_LIST_RE)
@@ -875,8 +982,11 @@ _US_PERSON_LEAD_RE = re.compile(
     r"restricted\s+to|limited\s+to|subject\s+to)\b",
     re.IGNORECASE,
 )
+# An export-control term alone (no "U.S. person") is a requirement on the candidate only when
+# worded as eligibility/status: "requires access to export-controlled data", "must complete export
+# control training" and "must comply with ITAR" are not.
 _EXPORT_LEAD_RE = re.compile(
-    r"\b(?:must|required?|requires?|only|eligib\w+|need\s+to|restricted\s+to|limited\s+to)\b",
+    r"\b(?:eligib\w+|only|restricted\s+to|limited\s+to|(?:must|need\s+to|required\s+to)\s+be)\b",
     re.IGNORECASE,
 )
 
@@ -916,7 +1026,8 @@ _WORK_AUTH_PATTERNS = (
 _SPONSOR_OBJECT = (
     r"(?:\s+(?:work\s+|employment\s+|student\s+|any\s+|new\s+)?"
     r"(?:visas?|H-?1B|immigration|applicants?|candidates?|interns?|employees?|"
-    r"work\s+authorization)\b|\s*(?:[.,;:)]|$)|\s+(?:now|currently|at\s+this\s+time|for\s+this)\b)"
+    r"work\s+authorization)\b(?!['’])|\s*(?:[.,;:)]|$)|\s+(?:now|currently|at\s+this\s+time|"
+    r"for\s+this)\b)"
 )
 _NO_SPONSOR_PATTERNS = (
     re.compile(
@@ -928,7 +1039,10 @@ _NO_SPONSOR_PATTERNS = (
         r"\b(?:(?:will|do|does|can|would)\s+not|won't|can't|cannot|don't|doesn't|unable\s+to|"
         r"not\s+able\s+to)\s+(?:currently\s+|now\s+)?(?:sponsor\b"
         + _SPONSOR_OBJECT
-        + r"|(?:provide|offer)\s+(?:visa\s+|employment\s+|immigration\s+|work\s+)?sponsorship\b)",
+        + r"|(?:provide|offer)\s+(?:visa\s+|employment\s+|immigration\s+|work\s+)?sponsorship\b"
+        r"(?!\s+(?:opportunit|packages?|tiers?|deals?|for\s+(?:events?|conferences?|hackathons?|"
+        r"teams?|clubs?|organi[sz]ations?|nonprofits?)))"
+        r")",
         re.IGNORECASE,
     ),
     re.compile(
@@ -1009,9 +1123,18 @@ _CLEARANCE_RE = re.compile(
 )
 
 
+# "clearance or be eligible to obtain one", "clearance-eligible", "clearance eligibility": an
+# alternative or an eligibility statement, not a held clearance.
+_CLEARANCE_QUALIFIED_RE = re.compile(
+    r"-|\s+(?:eligib\w*|process|paperwork|forms?)\b|\s*(?:,\s*)?(?:or|and/or|/)\s+"
+    r"(?!equivalent\b)",
+    re.IGNORECASE,
+)
+
+
 def _match_clearance(clause: str) -> list[_Hit]:
     match = _CLEARANCE_RE.search(clause)
-    if match is None:
+    if match is None or _CLEARANCE_QUALIFIED_RE.match(clause, match.end()):
         return []
     return [
         _Hit(RequirementType.OTHER, {"description": OTHER_SECURITY_CLEARANCE_LABEL}, match.start())
@@ -1035,7 +1158,7 @@ _MATCHERS = (
 
 
 def _clause_hits(clause: str) -> list[_Hit]:
-    if _other_role_only(clause) or _HEDGE_RE.search(clause):
+    if _other_role_only(clause) or _HEDGE_RE.search(clause) or _QUESTION_RE.search(clause):
         return []
     hits = _match_no_sponsorship(clause)  # negative in form, so before the negation guard
     if _NEGATION_RE.search(_DATE_BOUND_NEGATION_RE.sub(" ", clause)):
@@ -1068,6 +1191,41 @@ def _valid_value(requirement_type: RequirementType, value: dict[str, Any]) -> di
         return schema.model_validate(value).model_dump(mode="json")
     except ValidationError:
         return None  # defensive: a matcher produced a shape its own schema rejects
+
+
+_AGE_WAIVER_RE = re.compile(
+    r"\b(?:parental|guardian)\s+(?:consent|permission|approval)\b", re.IGNORECASE
+)
+_AGE_WAIVER_SCOPE_RE = re.compile(
+    r"\b(?:younger|under|below|minors?|or\s+have|or\s+\d+\s+with|with)\b", re.IGNORECASE
+)
+
+
+def _withdraw_contradicted(proposals: list[Proposal], clauses: list[str]) -> list[Proposal]:
+    """Posting-level contradictions: "citizens only" next to "non-U.S. citizens may also apply",
+    or "must be 18" next to "younger applicants need parental consent", means the stated rule is
+    not hard. The proposal is withdrawn (precision over recall)."""
+    non_citizens_ok = any(
+        _CIT_WAIVER_RE.search(c)
+        and _WAIVER_POSITIVE_RE.search(c)
+        and not _NEGATION_RE.search(_CIT_WAIVER_RE.sub(" ", c))
+        for c in clauses
+    )
+    waivers = [c for c in clauses if _AGE_WAIVER_RE.search(c) and _AGE_WAIVER_SCOPE_RE.search(c)]
+
+    def age_waived(years: int) -> bool:
+        for clause in waivers:
+            numbers = [int(n) for n in re.findall(r"\b\d{1,2}\b", clause)]
+            if not numbers or max(numbers) >= years:
+                return True
+        return False
+
+    return [
+        p
+        for p in proposals
+        if not (p.requirement_type is RequirementType.CITIZENSHIP and non_citizens_ok)
+        and not (p.requirement_type is RequirementType.MINIMUM_AGE and age_waived(p.value["years"]))
+    ]
 
 
 def extract_requirements(inputs: ExtractionInput) -> tuple[Proposal, ...]:
@@ -1103,6 +1261,8 @@ def extract_requirements(inputs: ExtractionInput) -> tuple[Proposal, ...]:
                 )
             )
             if len(proposals) == MAX_PROPOSALS:
-                return tuple(proposals)
+                break
+        if len(proposals) == MAX_PROPOSALS:
+            break
 
-    return tuple(proposals)
+    return tuple(_withdraw_contradicted(proposals, [c for c, _ in texts]))

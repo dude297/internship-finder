@@ -118,3 +118,35 @@ The 12 known misses: "Must be an incoming undergraduate" (no student noun), "Thi
 ## Deliberately NOT extracted
 
 Hedged or preferred wording; negated wording; upper bounds and ranges ("ages 14-18", "under 18"); alternative-level lists; bare college wording; "rising senior" without college context; ages with a year-less deadline date; clearance eligibility ("able to obtain"); peer or employer descriptions; other-role requirements; country-less citizenship or residency; descriptive export-control or ITAR mentions; hours, months, weeks and years-of-experience numbers; anything inside a title without explicit wording.
+
+## Adversarial review
+
+An independent attack pass (`backend/tests/test_requirement_extractor_v2_adversarial.py`, synthetic
+sentences only) ran 244 attack cases plus 4 structural tests across negation and hedges,
+other-role context, age, graduation, sponsorship, citizenship lists, export control, clearance,
+enrollment and standing, and structure tricks. The lead's three production spot-check patterns
+(associate degree / recent graduate disjunction, standing next to graduate programs, export-control
+mention without a U.S. person statement) are included as cases.
+
+Before fixes: 62 of the first 226 cases failed (many share a root cause), plus 3 more in a second
+probe round. By severity: BLOCKER 0, HIGH about 20 (false citizenship, age, education level or
+applies_at), MEDIUM about 40 (wrong free-text label: export control, clearance, class standing,
+no-sponsorship), LOW 5. After fixes: all pass; the v1 and v2 corpora are unchanged and green.
+
+Fixes (precision first, version not bumped): "U.S." followed by a sentence starter splits the
+sentence; hedges some/certain/select/several; other-role nouns extended (engineers, contractors,
+conversion, return offers, post-graduation); form-question guard (whether/asked/question); more
+nationality words; dash alternatives ("or hold equivalent status") and "and international
+students" lists withdraw citizenship; a posting-level "non-U.S. citizens may also apply" withdraws
+citizenship; an export-control term alone needs eligibility wording (training, compliance and
+"requires access to" no longer give a U.S. person label); clearance "or be eligible" and
+"clearance-eligible" are not held clearances; ages for an activity ("21 to drive") and parental
+consent waivers withdraw the age; education skips plural, associate, recent-graduate and
+"or" branch lists, and application deadlines are no longer enrollment dates; standing skips
+graduate, alumni and high-school branches and "completed 2 semesters of calculus"; "four-year
+university or community college" is a list.
+
+Known limitations (documented, not fixed): scope-limited citizenship ("U.S. citizen to work on the
+classified track", "for the defense team") still gives a citizenship proposal; a requirement split
+by a hard line break ("U.S.\ncitizen") is missed; "U.S. Person status (U.S. citizen or lawful
+permanent resident) is required" with a sponsorship statement yields only the sponsorship label.
