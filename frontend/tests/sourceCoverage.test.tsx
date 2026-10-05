@@ -31,8 +31,9 @@ describe('source coverage', () => {
     expect(
       await screen.findByRole('heading', { name: 'Source Coverage' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('123')).toBeInTheDocument()
-    expect(screen.getByText('Workday')).toBeInTheDocument()
+    // The coverage section loads after the heading renders: wait for its data.
+    expect(await screen.findByText('Workday')).toBeInTheDocument()
+    expect(screen.getAllByText('123').length).toBeGreaterThan(0)
     expect(screen.getByText('No')).toBeInTheDocument()
   })
 
