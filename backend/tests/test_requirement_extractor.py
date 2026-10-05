@@ -1,5 +1,7 @@
-"""`requirements-rules` v1 (ADR-012 §5). Pure; no database. Precision over recall: every case
+"""`requirements-rules` v2 (ADR-012 §5). Pure; no database. Precision over recall: every case
 here either asserts a specific proposal or asserts none."""
+
+from datetime import date
 
 import pytest
 
@@ -21,7 +23,7 @@ def extract(description: str | None, title: str = "Synthetic Internship") -> tup
 
 def test_extractor_identity() -> None:
     assert EXTRACTOR_NAME == "requirements-rules"
-    assert EXTRACTOR_VERSION == "1"
+    assert EXTRACTOR_VERSION == "2"
 
 
 # --- minimum_age ----------------------------------------------------------------------------
@@ -83,9 +85,13 @@ def test_must_be_a_us_citizen_proposes_citizenship() -> None:
     assert proposal.value == {"countries": ["US"]}
 
 
-def test_citizen_or_permanent_resident_is_work_authorization_not_citizenship() -> None:
-    (proposal,) = extract("Must be a citizen or permanent resident.")
-    assert proposal.requirement_type is RequirementType.WORK_AUTHORIZATION
+def test_citizen_or_permanent_resident_is_its_own_other_fact() -> None:
+    # v2 change (v1 mislabelled this as work_authorization "Authorized to work"): never
+    # citizenship, never work authorization, and only when the United States is named.
+    (proposal,) = extract("Must be a U.S. citizen or permanent resident.")
+    assert proposal.requirement_type is RequirementType.OTHER
+    assert proposal.value == {"description": "U.S. citizen or permanent resident"}
+    assert extract("Must be a citizen or permanent resident.") == ()
 
 
 def test_citizen_or_alternative_status_is_never_citizenship() -> None:
@@ -97,7 +103,7 @@ def test_citizen_or_alternative_status_is_never_citizenship() -> None:
     ):
         assert all(p.requirement_type is not RequirementType.CITIZENSHIP for p in extract(text))
     (proposal,) = extract("Applicants must be U.S. citizens or permanent residents.")
-    assert proposal.requirement_type is RequirementType.WORK_AUTHORIZATION
+    assert proposal.requirement_type is RequirementType.OTHER
 
 
 def test_completed_education_level_is_not_enrollment() -> None:
@@ -152,7 +158,11 @@ def test_must_be_enrolled_in_graduate_program() -> None:
 
 
 def test_rising_high_school_senior_never_undergraduate() -> None:
-    assert extract("Open to rising seniors in high school.") == ()
+    # v2 change: "rising seniors in high school" is now an explicit incoming high-school
+    # requirement (v1 proposed nothing); it is never undergraduate.
+    (proposal,) = extract("Open to rising seniors in high school.")
+    assert proposal.value == {"levels": ["high_school"], "accepts_incoming": True}
+    assert extract("Open to rising seniors.") == ()
     assert extract("She is a high school senior.") == ()
 
 
@@ -216,7 +226,6 @@ def test_dedupes_rephrased_duplicate_within_one_posting() -> None:
 
 CONTRADICTING_OR_NON_REQUIREMENTS = (
     # citizenship alternatives (the U.S. abbreviation must not hide them)
-    "Must be a U.S. citizen or U.S. permanent resident.",
     "Must be a U.S. citizen or U.S. national.",
     "Must be a U.S. citizen, permanent resident, or DACA recipient.",
     "Non-U.S. citizens only may apply.",
@@ -241,9 +250,14 @@ def test_never_proposes_a_requirement_the_text_contradicts(text: str) -> None:
     assert extract(text) == ()
 
 
-def test_age_followed_by_a_date_phrase_still_counts() -> None:
-    (proposal,) = extract("Must be at least 16 by June 1.")
+def test_age_followed_by_a_date_phrase() -> None:
+    # v2 change: v1 silently turned "by June 1" into program_start. A date without a year is
+    # unplaceable, so nothing is proposed; with a year it is an explicit date.
+    assert extract("Must be at least 16 by June 1.") == ()
+    (proposal,) = extract("Must be at least 16 by June 1, 2027.")
     assert proposal.value == {"years": 16}
+    assert proposal.applies_at is RequirementAppliesAt.EXPLICIT_DATE
+    assert proposal.reference_date == date(2027, 6, 1)
 
 
 def test_each_bullet_is_its_own_sentence() -> None:
@@ -260,7 +274,8 @@ def test_each_bullet_is_its_own_sentence() -> None:
 
 
 def test_long_sentence_excerpt_keeps_the_matched_phrase() -> None:
-    padding = "Our synthetic team builds robots and collaborates across many disciplines; " * 8
+    # (commas, not semicolons: v2 splits a sentence into clauses at ";")
+    padding = "Our synthetic team builds robots and collaborates across many disciplines, " * 8
     (proposal,) = extract(padding + "applicants must be at least 18 years old to join")
     assert len(proposal.source_text) <= MAX_EXCERPT_CHARS
     assert "at least 18 years old" in proposal.source_text
