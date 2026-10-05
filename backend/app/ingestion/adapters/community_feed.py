@@ -18,6 +18,7 @@ from app.ingestion.normalize import (
     GREENHOUSE,
     LEVER,
     SLUG,
+    SMARTRECRUITERS,
     ZSHAH,
     Identifier,
     NormalizedOpportunity,
@@ -41,6 +42,9 @@ _DIGITS = re.compile(r"^[0-9]+\Z")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 _LEVER_HOSTS = {"jobs.lever.co": "global", "jobs.eu.lever.co": "eu"}
 _ASHBY_HOSTS = {"jobs.ashbyhq.com": "global"}
+_SMARTRECRUITERS_HOSTS = {"jobs.smartrecruiters.com": "global"}
+# Same pattern as the adapter's company identifier (ADR-014 §3).
+_SR_COMPANY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}\Z")
 _GREENHOUSE_HOSTS = {
     "boards.greenhouse.io": "global",
     "job-boards.greenhouse.io": "global",
@@ -125,6 +129,18 @@ def provider_identity(item_id: str, url: str | None) -> Identifier | None:
         hosted = _hosted_path(url, _ASHBY_HOSTS)
         if hosted is not None and hosted[1][:2] == [head, tail.lower()]:
             return Identifier(namespace=ASHBY, value=f"{head}:{tail.lower()}")
+    if kind == "smartrecruiters" and _SR_COMPANY.match(head) and _DIGITS.match(tail):
+        # ADR-014 §3: the provider-shaped ID and an official posting link naming the same company
+        # and posting (`/<company>/<id>` or `/<company>/<id>-<title-slug>`). Never inferred from
+        # the company's name.
+        hosted = _hosted_path(url, _SMARTRECRUITERS_HOSTS)
+        if (
+            hosted is not None
+            and len(hosted[1]) >= 2
+            and hosted[1][0] == head
+            and (hosted[1][1] == tail or hosted[1][1].startswith(f"{tail}-"))
+        ):
+            return Identifier(namespace=SMARTRECRUITERS, value=f"{head}:{tail}")
     return None
 
 

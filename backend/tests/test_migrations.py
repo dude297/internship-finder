@@ -191,8 +191,9 @@ def test_upgrade_backfills_curation_and_seeds_the_builtin_feed(
         ).all()
         connection.execute(text("DELETE FROM opportunities"))
     assert curated is True
-    assert [tuple(row) for row in sources] == [
-        ("community_feed", "zshah-tech-internships", None, True)
+    assert sorted(tuple(row) for row in sources) == [
+        ("community_feed", "zshah-tech-internships", None, True),
+        ("curated_registry", "program-registry", None, True),  # Milestone 8 (ADR-014 §5)
     ]
 
 
@@ -285,7 +286,11 @@ def test_milestone_4_migration_round_trip(pg_engine: Engine, pg_url: str) -> Non
             connection.execute(text("SELECT identifier, scope FROM ingestion_sources")).all()
         )
         connection.execute(text("DELETE FROM ingestion_sources WHERE kind = 'greenhouse'"))
-    assert scopes == {"zshah-tech-internships": "all", "examplelegacy": "all"}
+    assert scopes == {
+        "zshah-tech-internships": "all",
+        "examplelegacy": "all",
+        "program-registry": "all",
+    }
 
 
 @pytest.mark.parametrize(

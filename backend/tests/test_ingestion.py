@@ -427,10 +427,10 @@ def test_unexpected_persist_failure_rolls_back_only_that_item(
 
     real = pipeline._write_canonical  # pyright: ignore[reportPrivateUsage]
 
-    def flaky(opportunity: Opportunity, item: Any) -> None:
+    def flaky(opportunity: Opportunity, item: Any, source_type: Any) -> None:
         if item.external_id == JOB_B["id"]:
             raise DataError("synthetic", None, Exception("synthetic"))
-        real(opportunity, item)
+        real(opportunity, item, source_type)
 
     monkeypatch.setattr(pipeline, "_write_canonical", flaky)
     web.json(FEED_URL, feed(JOB_A, JOB_B))

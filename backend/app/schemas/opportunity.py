@@ -172,6 +172,13 @@ class OpportunitySummary(BaseModel):
     # ADR-012 §8: one aggregate subquery, never per-row.
     pending_requirement_count: int = 0
     requirements_stale: bool = False
+    # ADR-014 §6: the program registry's date trust. A typical window is text, never a date;
+    # needs_date_verification = verify_by has been reached (display only, never closes).
+    program_cycle: str | None = None
+    typical_open_window: str | None = None
+    typical_close_window: str | None = None
+    verify_by: date | None = None
+    needs_date_verification: bool = False
 
 
 class OpportunityPage(BaseModel):
@@ -222,6 +229,13 @@ class OpportunityDetail(BaseModel):
     requirements_stale_since: datetime | None = None
     # Pending requirement candidates for this opportunity (ADR-012 §8).
     pending_requirement_count: int = 0
+    # ADR-014 §6: the program registry's date trust. A typical window is text, never a date;
+    # needs_date_verification = verify_by has been reached (display only, never closes).
+    program_cycle: str | None = None
+    typical_open_window: str | None = None
+    typical_close_window: str | None = None
+    verify_by: date | None = None
+    needs_date_verification: bool = False
     requirements: list[RequirementResponse]
     application: ApplicationResponse | None
     origin: Origin = "manual"

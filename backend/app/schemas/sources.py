@@ -14,15 +14,18 @@ from app.enums import (
 
 
 class SourceCreate(BaseModel):
-    """Add a Greenhouse board, a Lever job site, or an Ashby job board. `board` is a board
-    token / site name or the public board URL; only the provider identifier is extracted and
-    kept (the URL is never requested). The built-in discovery feed can't be created or
-    re-pointed."""
+    """Add a Greenhouse board, a Lever job site, an Ashby job board, or a SmartRecruiters
+    company. `board` is a board token / site name / company identifier or the public board URL;
+    only the provider identifier is extracted and kept (the URL is never requested). The
+    built-in sources (discovery feed, program registry) can't be created or re-pointed."""
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal[
-        IngestionSourceKind.GREENHOUSE, IngestionSourceKind.LEVER, IngestionSourceKind.ASHBY
+        IngestionSourceKind.GREENHOUSE,
+        IngestionSourceKind.LEVER,
+        IngestionSourceKind.ASHBY,
+        IngestionSourceKind.SMARTRECRUITERS,
     ]
     display_name: str = Field(min_length=1, max_length=200)
     board: str = Field(min_length=1, max_length=500)

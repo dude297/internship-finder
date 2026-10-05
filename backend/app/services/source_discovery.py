@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.enums import IngestionSourceKind, OpportunitySourceType, SourceRegion, SourceScope
 from app.ingestion.adapters.community_feed import provider_identity
-from app.ingestion.normalize import ASHBY, GREENHOUSE, LEVER, Identifier
+from app.ingestion.normalize import ASHBY, GREENHOUSE, LEVER, SMARTRECRUITERS, Identifier
 from app.models import IngestionSource, Opportunity, OpportunitySourceRecord
 from app.schemas.source_discovery import (
     CoverageMetrics,
@@ -39,7 +39,7 @@ _EU_GREENHOUSE_HOSTS = {"boards.eu.greenhouse.io", "job-boards.eu.greenhouse.io"
 _KNOWN_PROVIDERS = frozenset(
     {"greenhouse", "lever", "ashby", "workday", "oracle", "smartrecruiters", "workable", "rippling"}
 )
-_SUPPORTED_PROVIDERS = frozenset({"greenhouse", "lever", "ashby"})
+_SUPPORTED_PROVIDERS = frozenset({"greenhouse", "lever", "ashby", "smartrecruiters"})
 
 SuggestionKey = tuple[SupportedKind, str, SourceRegion | None]
 
@@ -65,6 +65,9 @@ def _suggestion_identity(external_id: str, source_url: str | None) -> Suggestion
     if identity.namespace == ASHBY:
         board, _, _posting = identity.value.partition(":")
         return IngestionSourceKind.ASHBY, board, None
+    if identity.namespace == SMARTRECRUITERS:
+        company, _, _posting = identity.value.partition(":")
+        return IngestionSourceKind.SMARTRECRUITERS, company, None
     return None
 
 
@@ -174,7 +177,9 @@ def _feed_rows(
 def _configured_keys(db: Session) -> set[SuggestionKey]:
     rows = db.execute(
         select(IngestionSource.kind, IngestionSource.identifier, IngestionSource.region).where(
-            IngestionSource.kind != IngestionSourceKind.COMMUNITY_FEED
+            IngestionSource.kind.not_in(
+                (IngestionSourceKind.COMMUNITY_FEED, IngestionSourceKind.CURATED_REGISTRY)
+            )
         )
     ).all()
     return {(cast(SupportedKind, kind), identifier, region) for kind, identifier, region in rows}

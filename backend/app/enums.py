@@ -85,6 +85,8 @@ class OpportunitySourceType(StrEnum):
     CAREER_PAGE = "career_page"
     BROWSER = "browser"
     MANUAL = "manual"
+    # The repository's curated program registry (ADR-014 §5): its own provenance, never `manual`.
+    CURATED_REGISTRY = "curated_registry"
     OTHER = "other"
 
 
@@ -152,6 +154,9 @@ class IngestionSourceKind(StrEnum):
     GREENHOUSE = "greenhouse"
     LEVER = "lever"
     ASHBY = "ashby"
+    SMARTRECRUITERS = "smartrecruiters"
+    # Built-in: the repository's program registry file (ADR-014 §5); no network.
+    CURATED_REGISTRY = "curated_registry"
 
 
 class SourceRegion(StrEnum):

@@ -27,8 +27,8 @@ from app.enums import (
     OpportunitySourceType,
     SourceScope,
 )
-from app.ingestion.adapters import SourceConfig, adapter_for
-from app.ingestion.http import FetchError, fetch_json
+from app.ingestion.adapters import CollectRequest, SourceConfig, adapter_for
+from app.ingestion.http import Fetched, FetchError, fetch_json
 from app.ingestion.normalize import (
     URL,
     ItemError,
@@ -155,9 +155,13 @@ def _fail(
     return _finish(db, run, IngestionRunStatus.FAILED)
 
 
-def _write_canonical(opportunity: Opportunity, item: NormalizedOpportunity) -> None:
+def _write_canonical(
+    opportunity: Opportunity, item: NormalizedOpportunity, source_type: OpportunitySourceType
+) -> None:
     """Source-derived canonical fields. Never called for curated opportunities, and never touches
-    dates, requirements, or the assessment status (the owner reviews those)."""
+    requirements or the assessment status (the owner reviews those). Dates and the date-trust
+    fields are written only by the program registry (ADR-014 §6), whose deadline/start/end are
+    verified dates; every other source leaves them alone."""
     opportunity.title = item.title
     opportunity.organization = item.organization
     opportunity.description = item.description
@@ -166,6 +170,14 @@ def _write_canonical(opportunity: Opportunity, item: NormalizedOpportunity) -> N
     opportunity.location = item.location
     opportunity.remote_mode = item.remote_mode
     opportunity.posted_at = item.posted_at
+    if source_type is OpportunitySourceType.CURATED_REGISTRY:
+        opportunity.application_deadline = item.application_deadline
+        opportunity.start_date = item.start_date
+        opportunity.end_date = item.end_date
+        opportunity.program_cycle = item.program_cycle
+        opportunity.typical_open_window = item.typical_open_window
+        opportunity.typical_close_window = item.typical_close_window
+        opportunity.verify_by = item.verify_by
 
 
 def _write_record(
@@ -310,7 +322,7 @@ def _rewrite_canonical(
     opportunity's last known text instead of erasing it."""
     before = extraction_input_fingerprint(ExtractionInput.model_validate(opportunity))
     kept_description = opportunity.description
-    _write_canonical(opportunity, item)
+    _write_canonical(opportunity, item, source_type)
     if source_type is OpportunitySourceType.PUBLIC_FEED:
         opportunity.description = kept_description
     db.flush()
@@ -407,7 +419,7 @@ def _apply(
             first_seen_at=now,
             last_seen_at=now,
         )
-        _write_canonical(opportunity, item)
+        _write_canonical(opportunity, item, adapter_for(source.kind).source_type)
         db.add(opportunity)
         outcome.created = True
     else:  # 2. deduplicated onto an existing opportunity
@@ -600,12 +612,23 @@ def _sync(
     config = SourceConfig(source.kind, source.identifier, source.region, source.display_name)
     adapter = adapter_for(source.kind)
     try:
-        fetched = fetch_json(
-            adapter.url(config),
-            etag=source.etag,
-            last_modified=source.last_modified,
-            transport=transport,
-        )
+        if adapter.collect is not None:
+            # ADR-014 §2: several requests (or none); no conditional-request validators.
+            rows = db.execute(
+                select(
+                    OpportunitySourceRecord.external_id, OpportunitySourceRecord.raw_payload
+                ).where(OpportunitySourceRecord.ingestion_source_id == source.id)
+            ).tuples()
+            known = {external_id: raw for external_id, raw in rows if external_id is not None}
+            request = CollectRequest(config, source.scope, known, transport)
+            fetched = Fetched(adapter.collect(request), None, None)
+        else:
+            fetched = fetch_json(
+                adapter.url(config),
+                etag=source.etag,
+                last_modified=source.last_modified,
+                transport=transport,
+            )
     except (FetchError, SnapshotError) as error:
         return _fail(db, run, IngestionStage.FETCH, error.code, error.message)
     if fetched.not_modified:
