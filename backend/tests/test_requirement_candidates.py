@@ -564,7 +564,7 @@ def test_extractor_version_bump_triggers_rescan(
 
     import app.services.requirement_candidates as module
 
-    monkeypatch.setattr(module, "EXTRACTOR_VERSION", "2")
+    monkeypatch.setattr(module, "EXTRACTOR_VERSION", "3")
     result = scan_catalog(db)
     assert result.refreshed == 1
     assert result.unchanged == 0
