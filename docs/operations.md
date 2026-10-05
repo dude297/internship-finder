@@ -79,9 +79,9 @@ Code release (merge, deploy) is separate from source activation (ADR-013 §9). E
 
 **Rollback.** Disable a source rather than deleting it (toggle on the Sources page, or `UPDATE ingestion_sources SET enabled = false WHERE kind = '<kind>' AND identifier = '<board>'`): disabling stops future syncs and leaves its existing records and opportunities untouched. A disabled source's canonical text stays as the last-owned text until another source either falls back onto the opportunity or the opportunity closes (ADR-013 §5); nothing is deleted or rewritten by disabling alone.
 
-## Milestone 8 release and activation notes (prepared, not executed)
+## Milestone 8 release and activation (executed 2026-10-05)
 
-Release and activation are separate, as in Milestone 7. Nothing here has run against production.
+Executed 2026-10-05: registry live (13 programs), 6 SmartRecruiters companies (AbbVie, Bosch, Eurofins, Wellmark, Keenfinity, LLNL), description coverage 22.4% → 38.7%, 18 pending suggestions (none accepted), scheduled sync 223.7 s with 28 sources. Full record: [deployment.md](deployment.md#milestone-8-release-2026-10-05). The steps below include the correction learned during that release.
 
 **Release order** (migration `a8c3e5f7b9d1`; see [data-model.md](data-model.md#milestone-8-migration-a8c3e5f7b9d1) for the compatibility rules):
 
@@ -93,15 +93,18 @@ Release and activation are separate, as in Milestone 7. Nothing here has run aga
 **Activation** (owner-approved, bounded, like the Milestone 7 runbook):
 
 1. `source-coverage` before (read-only).
-2. Sync the built-in **Curated Program Registry** once manually: expect 13 created, run `success`, and only verified dates in deadline columns. Programs needing date verification show the badge from their `verify_by` date.
-3. From Suggested Sources, add a bounded batch of SmartRecruiters companies (Internships only); sync each manually. A first sync may be `partial` if a company has more than 100 internship postings needing detail (nothing closes; later runs finish it).
-4. Verify deduplication (feed postings attach to the SmartRecruiters record, no duplicates, no closures), `source-coverage` after, count pending suggestions, accept none.
+2. **Sync the discovery feed once on Milestone 8 code before adding any SmartRecruiters source** (expect ~40 `updated`, 0 errors). Feed records imported by older code don't yet carry the `smartrecruiters:` identifier, so a SmartRecruiters source synced first creates duplicates of those postings (they then make the feed sync raise identity conflicts). This happened on 2026-10-05 and was repaired (see deployment.md); the same rule applies to any future provider whose feed identity is added by a release.
+3. Sync the built-in **Curated Program Registry** once manually: expect 13 created, run `success`, and only verified dates in deadline columns. Programs needing date verification show the badge from their `verify_by` date.
+4. From Suggested Sources, add a bounded batch of SmartRecruiters companies (Internships only); sync each manually. A first sync may be `partial` if a company has more than 100 internship postings needing detail (nothing closes; later runs finish it).
+5. Verify deduplication (feed postings attach to the SmartRecruiters record, no duplicates, no closures), `source-coverage` after, count pending suggestions, accept none.
 
 **Expected one-time side effect:** the first feed sync after the release adds a `smartrecruiters:<company>:<id>` identifier to the ~40 feed postings that name a SmartRecruiters posting, so they report as `updated` once (the identifier is part of the content hash). No requirement-extraction input changes and nothing closes. Items of every other source hash exactly as before (the new registry date fields are left out of the hash while unset).
 
 **Request bound:** a SmartRecruiters source makes at most 50 list + 100 detail requests per run (each with the HTTP client's ≤ 3 attempts); the registry makes none. The ADR-013 cap of 50 enabled ATS sources still applies, SmartRecruiters included.
 
 **Measured (2026-10-04, `scripts/perf_sources.py --sr`, local Docker PostgreSQL 18, all HTTP mocked):** 20 Greenhouse/Lever/Ashby boards + 10 SmartRecruiters sources (small, 100-posting, and 500-posting multi-page boards, Internships only) + a 1,000-item feed. First sync (1,986 created): 90.5 s, 22 SmartRecruiters list and 612 detail requests in total, at most 5 list / 100 detail per source. Unchanged re-sync: 6.8 s, 22 list and **0** detail requests, all 31 runs `success`. With failing details and a 429 (`Retry-After`): 14.1 s, the failing board `partial` with nothing closed, the rate-limited board `success` after one retry. Elapsed time is dominated by database work on first creation, not requests.
+
+**Large companies:** a company with hundreds of internship titles (Bosch: 391 of 4,832 postings, 49 list pages) fills over several runs at 100 details each; those runs are `partial`, close nothing, and Source Health shows the source as `failing` until the backlog is fetched. A company over 5,000 postings fails every run (closes nothing); disable it. Prefer companies whose feed coverage justifies the runtime (Bosch ≈ 165–230 s per run).
 
 **Rollback:** disable a SmartRecruiters source or the registry to stop its syncs (records and opportunities stay). Rolling code back to Milestone 7.1 needs the schema downgraded first, which refuses while SmartRecruiters sources or registry records exist: delete those sources' records/opportunities deliberately (or keep the Milestone 8 code).
 

@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+## Milestone 8 (released 2026-10-05)
+
+Released 2026-10-05: [PR #23](https://github.com/dude297/internship-finder/pull/23) rebase-merged at the approved head `cb4f018`; `main` `9263860` (post-merge CI `37266217728` green); Neon migrated `f2a7c9d4e1b3` → `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`; Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13 programs); 6 SmartRecruiters companies activated; description coverage 22.4% → 38.7%; 18 pending suggestions, none accepted. Record: [deployment.md](docs/deployment.md#milestone-8-release-2026-10-05).
+
 ### Added
 
 - Milestone 8: structured source expansion and the curated program registry ([ADR-014](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md)). Migration `a8c3e5f7b9d1` (additive; seeds the built-in registry source).
