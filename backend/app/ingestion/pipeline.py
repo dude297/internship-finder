@@ -618,7 +618,7 @@ def _sync(
                 select(
                     OpportunitySourceRecord.external_id, OpportunitySourceRecord.raw_payload
                 ).where(OpportunitySourceRecord.ingestion_source_id == source.id)
-            ).tuples()
+            ).all()
             known = {external_id: raw for external_id, raw in rows if external_id is not None}
             request = CollectRequest(config, source.scope, known, transport)
             fetched = Fetched(adapter.collect(request), None, None)
