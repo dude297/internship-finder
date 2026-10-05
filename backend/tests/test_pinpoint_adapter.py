@@ -139,7 +139,7 @@ def test_type_classification() -> None:
 @pytest.mark.parametrize(
     "url",
     [
-        "https://other-co.pinpointhq.com/en/postings/x",
+        # (another tenant's URL fails the whole snapshot instead: test_m81_adapters_adversarial)
         "https://example-space.pinpointhq.com.evil.com/en/postings/x",
         "https://evil.com/example-space.pinpointhq.com/x",
         "http://example-space.pinpointhq.com/en/postings/x",

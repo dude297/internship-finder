@@ -35,7 +35,7 @@ from app.ingestion.normalize import (
 
 API = "https://www.workable.com/api/accounts"
 APPLY_HOST = "apply.workable.com"
-WORKABLE = "workable"  # identifier namespace; shortcodes are global, so no account prefix
+WORKABLE = "workable"  # identifier namespace; values are `<account>:<SHORTCODE>`
 _SHORTCODE = r"^[A-Za-z0-9]{4,32}$"  # Rust regex in pydantic: no \Z, and $ is end-only
 _WORKPLACE = {
     "on_site": RemoteMode.ONSITE,
@@ -127,7 +127,16 @@ def _remote_mode(job: _Job) -> RemoteMode | None:
     return RemoteMode.REMOTE if job.telecommuting is True else None
 
 
-def _apply_url(job: _Job) -> str | None:
+def _own_path(path: str, code: str, account: str) -> bool:
+    """`/j/<CODE>[/...]` or `/<account>/j/<CODE>[/...]`: the URL must name this job (and, when it
+    names an account, this account), so a payload can't claim another job's or account's URL."""
+    segments = [s for s in path.split("/") if s]
+    if segments and segments[0].lower() == account:
+        segments = segments[1:]
+    return len(segments) >= 2 and segments[0] == "j" and segments[1].upper() == code
+
+
+def _apply_url(job: _Job, account: str) -> str | None:
     # Posting page first (what the owner reads), like Ashby; only https on apply.workable.com.
     for candidate in (job.url, job.shortlink, job.application_url):
         if not candidate:
@@ -142,6 +151,7 @@ def _apply_url(job: _Job) -> str | None:
             and (parts.hostname or "").lower() == APPLY_HOST
             and port is None
             and parts.username is None
+            and _own_path(parts.path, job.shortcode.upper(), account)
         ):
             return candidate.strip()
     return None
@@ -159,11 +169,15 @@ def _posted(value: str | None) -> datetime | None:
 def _normalize(raw: dict[str, Any], source: SourceConfig) -> NormalizedOpportunity:
     job = _Job.model_validate(raw)
     code = job.shortcode.upper()
-    url = _apply_url(job)
+    account = source.identifier.lower()
+    url = _apply_url(job, account)
     posted = _posted(job.published_on)
     return NormalizedOpportunity(
         external_id=code,
-        identifiers=(Identifier(namespace=WORKABLE, value=code), *url_identifier(url)),
+        identifiers=(
+            Identifier(namespace=WORKABLE, value=f"{account}:{code}"),
+            *url_identifier(url),
+        ),
         title=job.title,
         organization=source.display_name,
         description=html_to_text(job.description),
