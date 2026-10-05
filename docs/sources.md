@@ -83,6 +83,17 @@ Adding a company board shouldn't flood the catalog with full-time jobs ([ADR-010
 
 Excluded postings count as **Filtered** in the run (`fetched` = provider items, `filtered` = excluded by scope, `normalized` = admitted to the pipeline) and are never processed. Changing the scope clears the source's `ETag`/`Last-Modified`, so the next sync fetches the full board instead of accepting a `304`: switching to internships-only closes previously imported postings that are now filtered (through the normal closure rule; nothing is deleted), and switching back reopens them. Items that fail validation have no trustworthy title, so they stay invalid (making the run partial) rather than filtered. Boards added before Milestone 4 were migrated to **All postings**, so the upgrade itself never closes anything. The built-in discovery feed is internship-focused already and is always **All postings**.
 
+### Curated program registry (Milestone 8, ADR-014)
+
+A built-in source (`curated_registry`, identifier `program-registry`) imports `backend/data/program_registry.json`: public facts about named programs (research, fellowships, summer programs), each with an official `source_url` and a `last_verified` date. It reads the file from disk and never touches the network. It can be disabled but not created, re-pointed, or filtered.
+
+- **Schema:** `{"schema_version": 1, "programs": [...]}`, strict (unknown keys rejected). An entry has `slug`, `cycle` (`2027`, `2027-summer`), `title`, `organization`, `opportunity_type`, `application_url` (or null), `source_url`, optional `location` / `remote_mode`, `verified` (`open_date`, `deadline`, `start_date`, `end_date`), `typical_open_window` / `typical_close_window` (free text), `verify_by`, `eligibility_summary`, an owner-written paraphrased `description`, and `last_verified`. Links are plain https (no credentials, no port). A malformed file or a repeated `(slug, cycle)` fails the run and changes nothing; a malformed entry is an item error (partial run, nothing closes).
+- **Verified vs typical:** only `verified` dates become the opportunity's deadline / start / end. A typical window ("February") is display text and never a date, so deadline sorting, filters, and eligibility never see it.
+- **`verify_by`:** from that date the opportunity shows "Needs date verification" (also the `needs_date_verification` list filter). It never closes or hides anything.
+- **Updating:** a reviewed pull request to the file, then a sync (manual or scheduled; the registry syncs with the ATS tier, before the discovery feed). An unchanged entry is a no-op, an edited entry updates the same opportunity, a new cycle is a new opportunity, and a removed entry is closed (not deleted).
+- **Identity:** `curated:<slug>:<cycle>` only. There is deliberately no URL identifier, so a feed posting with the same link never merges with a program.
+- **Owner edits win:** editing a registry opportunity in the app marks it curated; later registry changes update its source record but never its fields. Requirement candidates from the description and eligibility summary stay pending.
+
 ### Manual entry
 
 Opportunities added through the app keep a `manual` source record without an external ID. They're curated from the start, never closed by a sync, and not matched by identifiers.
