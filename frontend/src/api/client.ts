@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   applicationSchema,
+  catalogResponseSchema,
   discoveryAddResponseSchema,
   evaluationSchema,
   matchProfileSaveSchema,
@@ -244,6 +245,10 @@ export const api = {
     request('GET', '/sources/discovery', sourceDiscoveryResponseSchema),
   addDiscoverySources: (sources: DiscoverySelectionInput[]) =>
     request('POST', '/sources/discovery/add', discoveryAddResponseSchema, { sources }),
+
+  getSourceCatalog: () => request('GET', '/sources/catalog', catalogResponseSchema),
+  addCatalogSources: (sources: DiscoverySelectionInput[]) =>
+    request('POST', '/sources/catalog/add', discoveryAddResponseSchema, { sources }),
 
   listProfileSources: () =>
     request('GET', '/profile/sources', z.array(profileSourceSummarySchema)),

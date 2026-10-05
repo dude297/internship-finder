@@ -26,6 +26,7 @@ export const json = (body: unknown, status = 200) =>
  * Promise (returned as is). Unhandled requests fail the test loudly. Returns the recorded calls.
  */
 export function mockApi(handlers: Record<string, Handler>): Call[] {
+  handlers = { 'GET /api/sources/catalog': () => ({ entries: [] }), ...handlers }
   const calls: Call[] = []
   vi.stubGlobal(
     'fetch',
@@ -98,6 +99,9 @@ export const summary = (changes: Record<string, unknown> = {}) => ({
   source_names: ['Manual entry'],
   pending_requirement_count: 0,
   requirements_stale: false,
+  freshness: 'manual',
+  freshness_checked_at: null,
+  program_last_verified: null,
   ...changes,
 })
 
@@ -120,6 +124,8 @@ export const manualRecord = {
   source_url: null,
   source_published_at: null,
   source_updated_at: null,
+  source_health: null,
+  source_last_success_at: null,
 }
 
 export const feedRecord = (changes: Record<string, unknown> = {}) => ({
@@ -196,6 +202,13 @@ export const coverageMetrics = (changes: Record<string, unknown> = {}) => ({
   feed_only: 90,
   enrichable: 20,
   unsupported: 70,
+  independent: 30,
+  independent_percent: 30.0,
+  direct_ats: 10,
+  first_party: 0,
+  curated_registry: 5,
+  manual_only: 15,
+  direct_fresh: 8,
   ...changes,
 })
 

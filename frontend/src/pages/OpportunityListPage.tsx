@@ -6,6 +6,7 @@ import { EligibilityBadge } from '../components/EligibilityBadge'
 import { FitBadge } from '../components/FitBadge'
 import { OpportunityFilters, type FilterName } from '../components/OpportunityFilters'
 import { DeadlineText, NeedsDateBadge, TypicalWindow } from '../components/DateTrust'
+import { FreshnessBadge, NewBadge } from '../components/FreshnessBadge'
 import { ErrorMessage } from '../components/ui'
 import { isClosingSoon, isDeadlinePassed, localToday } from '../lib/deadlines'
 import {
@@ -31,6 +32,8 @@ const FILTERS: FilterName[] = [
   'requirement_review',
   'deadline_within',
   'needs_date_verification',
+  'freshness',
+  'discovered_within',
 ]
 
 function where(o: OpportunitySummary): string {
@@ -50,6 +53,8 @@ function Provenance({ o }: { o: OpportunitySummary }) {
         <span className="rounded bg-slate-700 px-1.5 py-0.5 text-white">Closed</span>
       )}
       {o.origin === 'imported' && <span>{o.source_names.join(', ')}</span>}
+      <NewBadge firstSeenAt={o.first_seen_at} postedAt={o.posted_at} />
+      <FreshnessBadge o={o} compact />
       <span>
         {o.posted_at
           ? `Posted ${formatDay(o.posted_at)}`
@@ -147,7 +152,10 @@ export function OpportunityListPage() {
         ...deadlineParams,
         ...(needs_date_verification ? { needs_date_verification: 'true' as const } : {}),
         availability: availability as 'open' | 'closed' | 'all',
-        sort: sort as 'recommended' | 'newest' | 'deadline',
+        sort: sort as 'recommended' | 'newest' | 'deadline' | 'discovered',
+        freshness: (rest.freshness || undefined) as
+          'direct_verified' | 'needs_review' | undefined,
+        discovered_within: (rest.discovered_within || undefined) as '1' | '7' | undefined,
         requirement_review: (rest.requirement_review || undefined) as
           'pending' | 'stale' | 'needs_review' | undefined,
         limit: PAGE_SIZE,

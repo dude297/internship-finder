@@ -110,10 +110,32 @@ export function SourceCoverage({
     ['Unsupported provider count', String(coverage.unsupported)],
   ]
 
+  const independentTiles: [string, string][] = [
+    ['Direct ATS', String(coverage.direct_ats)],
+    ['Direct ATS, verified fresh', String(coverage.direct_fresh)],
+    ['First-party career pages', String(coverage.first_party)],
+    ['Curated registry', String(coverage.curated_registry)],
+    ['Manual only', String(coverage.manual_only)],
+  ]
+
   return (
     <section className="space-y-4">
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">Source Coverage</h2>
+        <p className="text-sm">
+          Independent discovery coverage: {coverage.independent.toLocaleString('en-US')}{' '}
+          of {coverage.active_opportunities.toLocaleString('en-US')}
+          {coverage.independent_percent !== null && ` (${coverage.independent_percent}%)`}
+          {' — survives without the community feed'}
+        </p>
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {independentTiles.map(([label, value]) => (
+            <div key={label} className="rounded border border-slate-200 p-3">
+              <dt className="text-xs text-slate-500">{label}</dt>
+              <dd className="text-lg font-semibold">{value}</dd>
+            </div>
+          ))}
+        </dl>
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {tiles.map(([label, value]) => (
             <div key={label} className="rounded border border-slate-200 p-3">
