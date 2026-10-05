@@ -572,3 +572,80 @@ def test_feed_identity_for_smartrecruiters(
     item_id: str, url: str | None, expected: Identifier | None
 ) -> None:
     assert provider_identity(item_id, url) == expected
+
+
+# --- detail rotation refresh and posting-URL identity (M8 hostile review M2, L5) ----------------
+
+
+def test_rotation_refreshes_due_reused_details_and_sees_edits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An edited description behind an unchanged list entry is picked up on the posting's
+    rotation day; postings not due cost no request."""
+    monkeypatch.setattr(smartrecruiters, "DETAIL_REFRESH_DAYS", 7)
+    items = [list_item(n) for n in range(1, 8)]
+    known = {e["posting"]["id"]: e for e in collect(Server(items).request())["postings"]}
+    due = {p for p in known if smartrecruiters._refresh_due(p)}  # pyright: ignore[reportPrivateUsage]
+    assert len(due) == 1  # 7 consecutive ids, period 7: exactly one due today
+    edited = Server(items)
+    target = next(iter(due))
+    edited.detail_override[target] = lambda: httpx2.Response(
+        200,
+        json=detail_for(
+            next(i for i in items if i["id"] == target),
+            jobAd={"sections": {"qualifications": {"title": "Q", "text": "<p>Now edited.</p>"}}},
+        ),
+    )
+    result = {e["posting"]["id"]: e for e in collect(edited.request(known=known))["postings"]}
+    assert [u.rsplit("/", 1)[1] for u in edited.detail_urls] == [target]
+    assert "Now edited." in json.dumps(result[target]["detail"])
+    assert all(result[p] == known[p] for p in known if p != target)
+
+
+def test_a_failed_rotation_refresh_keeps_the_stored_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(smartrecruiters, "DETAIL_REFRESH_DAYS", 1)  # everything is due
+    items = [list_item(1), list_item(2)]
+    known = {e["posting"]["id"]: e for e in collect(Server(items).request())["postings"]}
+    failing = Server(items)
+    for item in items:
+        failing.detail_override[item["id"]] = lambda: httpx2.Response(404)
+    result = run(failing, known=known)
+    assert len(ok(result)) == 2  # no item errors: the run stays complete
+    assert len(failing.detail_urls) == 2
+
+
+def test_rotation_only_uses_budget_left_after_new_postings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(smartrecruiters, "DETAIL_REFRESH_DAYS", 1)
+    monkeypatch.setattr(smartrecruiters, "MAX_DETAIL_FETCHES", 3)
+    old = [list_item(1), list_item(2)]
+    known = {e["posting"]["id"]: e for e in collect(Server(old).request())["postings"]}
+    server = Server([*old, list_item(3), list_item(4)])
+    result = run(server, known=known)
+    assert len(ok(result)) == 4
+    fetched = [u.rsplit("/", 1)[1] for u in server.detail_urls]
+    assert fetched[:2] == [pid(3), pid(4)] and len(fetched) == 3  # new first, then one refresh
+
+
+@pytest.mark.parametrize(
+    "posting_url",
+    [
+        "https://jobs.smartrecruiters.com/OtherCompany/{id}-intern",
+        "https://jobs.smartrecruiters.com/ExampleRobotics/999-intern",
+        "https://example.com/careers/{id}",
+        "http://jobs.smartrecruiters.com/ExampleRobotics/{id}",
+        "https://jobs.smartrecruiters.com:8443/ExampleRobotics/{id}",
+    ],
+)
+def test_a_foreign_posting_url_is_not_an_identity(posting_url: str) -> None:
+    item = list_item(1)
+    server = Server([item])
+    server.detail_override[item["id"]] = lambda: httpx2.Response(
+        200, json=detail_for(item, postingUrl=posting_url.format(id=item["id"]))
+    )
+    [normalized] = ok(run(server))
+    assert [i.namespace for i in normalized.identifiers] == [SMARTRECRUITERS]
+
+
+def test_the_own_posting_url_is_an_identity() -> None:
+    [normalized] = ok(run(Server([list_item(1)])))
+    assert {i.namespace for i in normalized.identifiers} == {SMARTRECRUITERS, "url"}
