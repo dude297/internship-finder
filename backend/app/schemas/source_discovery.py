@@ -13,6 +13,8 @@ SupportedKind = Literal[
     IngestionSourceKind.LEVER,
     IngestionSourceKind.ASHBY,
     IngestionSourceKind.SMARTRECRUITERS,
+    IngestionSourceKind.WORKABLE,
+    IngestionSourceKind.PINPOINT,
 ]
 
 MAX_DISCOVERY_ADD = 25

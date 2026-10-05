@@ -88,8 +88,10 @@ def adapter_for(kind: IngestionSourceKind) -> Adapter:
         community_feed,
         greenhouse,
         lever,
+        pinpoint,
         program_registry,
         smartrecruiters,
+        workable,
     )
 
     return {
@@ -99,4 +101,6 @@ def adapter_for(kind: IngestionSourceKind) -> Adapter:
         IngestionSourceKind.ASHBY: ashby.ADAPTER,
         IngestionSourceKind.SMARTRECRUITERS: smartrecruiters.ADAPTER,
         IngestionSourceKind.CURATED_REGISTRY: program_registry.ADAPTER,
+        IngestionSourceKind.WORKABLE: workable.ADAPTER,
+        IngestionSourceKind.PINPOINT: pinpoint.ADAPTER,
     }[kind]

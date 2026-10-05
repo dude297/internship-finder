@@ -95,6 +95,8 @@ export const sourceKindLabels: Record<SourceKind, string> = {
   ashby: 'Ashby',
   smartrecruiters: 'SmartRecruiters',
   curated_registry: 'Curated program registry',
+  workable: 'Workable',
+  pinpoint: 'Pinpoint',
 }
 
 export const sourceHealthLabels: Record<SourceHealth, string> = {

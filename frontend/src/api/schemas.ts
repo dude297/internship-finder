@@ -58,6 +58,8 @@ export const sourceKinds = [
   'ashby',
   'smartrecruiters',
   'curated_registry',
+  'workable',
+  'pinpoint',
 ] as const
 export const regions = ['global', 'eu'] as const
 export const runStatuses = [
@@ -497,6 +499,8 @@ export const supportedSourceKinds = [
   'lever',
   'ashby',
   'smartrecruiters',
+  'workable',
+  'pinpoint',
 ] as const
 export type SupportedSourceKind = (typeof supportedSourceKinds)[number]
 

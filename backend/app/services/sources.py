@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, selectinload
 
 from app.enums import IngestionRunStatus, IngestionSourceKind, SourceRegion, SourceScope
-from app.ingestion.adapters import ashby, greenhouse, lever, smartrecruiters
+from app.ingestion.adapters import ashby, greenhouse, lever, pinpoint, smartrecruiters, workable
 from app.models import IngestionRun, IngestionSource
 from app.schemas.sources import RunResponse, SourceCreate, SourceResponse, SourceUpdate
 from app.services.source_health import derive_health
@@ -134,6 +134,14 @@ def parse_reference(
         if region is not None:
             raise ValueError("SmartRecruiters companies don't have a region.")
         identifier = smartrecruiters.parse_company_reference(board)
+    elif kind is IngestionSourceKind.WORKABLE:
+        if region is not None:
+            raise ValueError("Workable accounts don't have a region.")
+        identifier = workable.parse_account_reference(board)
+    elif kind is IngestionSourceKind.PINPOINT:
+        if region is not None:
+            raise ValueError("Pinpoint companies don't have a region.")
+        identifier = pinpoint.parse_company_reference(board)
     elif kind is IngestionSourceKind.LEVER:
         return lever.parse_site_reference(board, region)
     else:
