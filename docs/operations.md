@@ -101,6 +101,8 @@ Release and activation are separate, as in Milestone 7. Nothing here has run aga
 
 **Request bound:** a SmartRecruiters source makes at most 50 list + 100 detail requests per run (each with the HTTP client's ≤ 3 attempts); the registry makes none. The ADR-013 cap of 50 enabled ATS sources still applies, SmartRecruiters included.
 
+**Measured (2026-10-04, `scripts/perf_sources.py --sr`, local Docker PostgreSQL 18, all HTTP mocked):** 20 Greenhouse/Lever/Ashby boards + 10 SmartRecruiters sources (small, 100-posting, and 500-posting multi-page boards, Internships only) + a 1,000-item feed. First sync (1,986 created): 90.5 s, 22 SmartRecruiters list and 612 detail requests in total, at most 5 list / 100 detail per source. Unchanged re-sync: 6.8 s, 22 list and **0** detail requests, all 31 runs `success`. With failing details and a 429 (`Retry-After`): 14.1 s, the failing board `partial` with nothing closed, the rate-limited board `success` after one retry. Elapsed time is dominated by database work on first creation, not requests.
+
 **Rollback:** disable a SmartRecruiters source or the registry to stop its syncs (records and opportunities stay). Rolling code back to Milestone 7.1 needs the schema downgraded first, which refuses while SmartRecruiters sources or registry records exist: delete those sources' records/opportunities deliberately (or keep the Milestone 8 code).
 
 ## Source Health (implemented, Milestone 6)
