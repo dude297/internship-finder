@@ -266,3 +266,15 @@ def test_the_bundled_file_is_valid() -> None:
     assert all(
         isinstance(item, NormalizedOpportunity) for item in registry.parse(payload, SOURCE).items
     )
+
+
+def test_the_bundled_programs_say_when_to_recheck_their_dates() -> None:
+    """ADR-014 §6-§7: every bundled entry was checked on a stated day, and an entry without a
+    verified deadline names a verify-by date no earlier than that day, so stale dates surface."""
+    payload = json.loads(registry.REGISTRY_PATH.read_text(encoding="utf-8"))
+    for entry in payload["programs"]:
+        program = registry.Program.model_validate(entry)
+        if program.verified.deadline is None:
+            assert program.verify_by is not None, program.slug
+        if program.verify_by is not None:
+            assert program.verify_by >= program.last_verified, program.slug
