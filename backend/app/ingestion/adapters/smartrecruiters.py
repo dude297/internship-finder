@@ -209,7 +209,12 @@ def _walk(company: str, request: CollectRequest) -> list[Any]:
     """Every list item, or SnapshotError: a partial or shifting walk must never close anything."""
     items: list[Any] = []
     total: int | None = None
+    # A provider returning short pages must not turn the walk into thousands of requests.
+    requests_left = MAX_PAGES
     while total is None or len(items) < total:
+        if requests_left <= 0:
+            raise SnapshotError("incomplete_listing", "A listing needed too many requests.")
+        requests_left -= 1
         page = _list_page(company, len(items), request)
         if total is None:
             total = page.totalFound
