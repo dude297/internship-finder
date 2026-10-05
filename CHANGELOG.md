@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Milestone 8: structured source expansion and the curated program registry ([ADR-014](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md)). Migration `a8c3e5f7b9d1` (additive; seeds the built-in registry source).
+  - SmartRecruiters companies as a direct ATS source: the documented public Posting API only (`api.smartrecruiters.com`, PUBLIC postings, no key), complete paginated list walks, bounded detail requests (≤ 100 per run, reused when unchanged), detail failures make the run partial instead of erasing text or closing. Identity `smartrecruiters:<company>:<id>`; feed postings that name a SmartRecruiters posting (ID plus matching official link) are discovered, suggested, bulk-addable, and deduplicated; ATS > feed authority applies unchanged.
+  - Curated program registry: a built-in, network-free source reading `backend/data/program_registry.json` (13 officially sourced programs, checked 2026-10-04). Identity `curated:<slug>:<cycle>`, idempotent re-import, removal closes, owner edits win. Verified dates fill deadline/start/end; typical windows stay text; `verify_by` drives a **Needs date verification** badge and `needs_date_verification` list filter.
+  - UI: SmartRecruiters in Add Source and Source Coverage; "No confirmed deadline" vs typical-window text; an **Upcoming programs** toggle on the opportunity list.
+  - Research: [provider refresh, Oracle Cloud HCM verdict, USAJOBS future card](docs/research/m8-provider-research-refresh.md) and [extractor v1 recall analysis](docs/research/requirement-extractor-recall.md) (no extractor change).
+
 ## Milestone 7.1 (released 2026-10-04)
 
 Released 2026-10-04: [PR #19](https://github.com/dude297/internship-finder/pull/19) rebase-merged; `main` `0a636e2` (post-merge CI `37234964868` green); Neon migrated `e6d1a4b8c2f9` → `f2a7c9d4e1b3`; Render `dep-db1c2oc9v7es73eshpd0`; Vercel `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`; synthetic volunteer smoke 13/13, cleaned. Record: [deployment.md](docs/deployment.md#milestone-71-release-2026-10-04).
