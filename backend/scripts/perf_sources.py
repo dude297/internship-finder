@@ -10,16 +10,25 @@ changes. All HTTP is synthetic, served by `httpx2.MockTransport`; nothing touche
 
     PERF_DATABASE_URL=postgresql+psycopg://…/if_m7_perf python scripts/perf_sources.py
 
+`--sr` runs only the SmartRecruiters mixed-fleet section (ADR-014): 20 Greenhouse/Lever/Ashby
+boards + 10 SmartRecruiters sources (small, 100-posting, and 500-posting multi-page boards,
+internships_only) + the 1,000-item feed; first sync, unchanged re-sync (zero SR detail
+requests), and a sync with detail failures and a 429 with Retry-After (sleep stubbed).
+`--no-sr` skips that section.
+
 The database is migrated to head; its non-built-in sources and all opportunities are wiped at
 the start of each N. Timings vary by machine; they are reported, never asserted.
 """
 
 import os
+import re
 import sys
 import time
 import uuid
+from collections import Counter
 from collections.abc import Generator
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +38,9 @@ from alembic.config import Config
 from sqlalchemy import create_engine, delete, event
 from sqlalchemy.orm import Session
 
-from app.enums import IngestionSourceKind, SourceRegion
-from app.ingestion.adapters import SourceConfig, adapter_for
+from app.enums import IngestionSourceKind, SourceRegion, SourceScope
+from app.ingestion.adapters import SourceConfig, adapter_for, smartrecruiters
+from app.ingestion.http import fetch_json
 from app.ingestion.pipeline import sync_enabled_sources
 from app.models import IngestionRun, IngestionSource, Opportunity
 from app.services.discovery import Filters, list_page
@@ -234,6 +244,162 @@ def timed_sync(
     return elapsed, count[0], runs
 
 
+# --- SmartRecruiters mixed fleet (ADR-014) -----------------------------------------------------
+
+SR_API = "https://api.smartrecruiters.com/v1/companies"
+SR_SHAPES = [3] * 4 + [100] * 3 + [500] * 3  # postings per SmartRecruiters source
+SR_INTERN_EVERY = 5  # in a 500-posting board, 100 are internships: exactly the detail budget
+SR_BASE = 100_000_000_000_000
+
+
+def sr_title(n: int, size: int) -> str:
+    intern = size < 500 or n % SR_INTERN_EVERY == 0
+    return f"Synthetic {'Engineering Intern' if intern else 'Staff Engineer'} {n}"
+
+
+def sr_posting(company: str, n: int, size: int) -> dict[str, Any]:
+    return {
+        "id": str(SR_BASE + n),
+        "name": sr_title(n, size),
+        "company": {"identifier": company, "name": company},
+        "releasedDate": "2040-09-20T12:00:00.000Z",
+        "visibility": "PUBLIC",
+        "location": {"city": "Example City", "country": "xx", "fullLocation": "Example City, xx"},
+    }
+
+
+class SrFleet:
+    """SmartRecruiters API fake layered on the ATS/feed transport, counting requests."""
+
+    def __init__(self, sizes: dict[str, int], base: httpx2.MockTransport) -> None:
+        self.sizes, self.base = sizes, base
+        self.lists: Counter[str] = Counter()
+        self.details: Counter[str] = Counter()
+        self.failing_details: set[tuple[str, str]] = set()
+        self.rate_limit_once: set[str] = set()
+        self.extra: dict[str, int] = {}  # company -> extra new postings
+        self.transport = httpx2.MockTransport(self._handle)
+
+    def _handle(self, request: httpx2.Request) -> httpx2.Response:
+        url = str(request.url)
+        if not url.startswith(SR_API + "/"):
+            return self.base.handle_request(request)
+        company, _, rest = url[len(SR_API) + 1 :].partition("/postings")
+        size = self.sizes[company]
+        total = size + self.extra.get(company, 0)
+        if rest.startswith("?"):
+            self.lists[company] += 1
+            if company in self.rate_limit_once:
+                self.rate_limit_once.discard(company)
+                return httpx2.Response(429, headers={"Retry-After": "2"})
+            match = re.search(r"offset=(\d+)", rest)
+            offset = int(match.group(1)) if match else 0
+            content = [
+                sr_posting(company, n, size)
+                for n in range(offset + 1, min(offset + 100, total) + 1)
+            ]
+            return httpx2.Response(
+                200, json={"offset": offset, "limit": 100, "totalFound": total, "content": content}
+            )
+        posting_id = rest.strip("/")
+        self.details[company] += 1
+        if (company, posting_id) in self.failing_details:
+            return httpx2.Response(500)
+        posting = sr_posting(company, int(posting_id) - SR_BASE, size)
+        link = f"https://jobs.smartrecruiters.com/{company}/{posting_id}"
+        sections = {"jobDescription": {"title": "Job", "text": "<p>Build synthetic things.</p>"}}
+        return httpx2.Response(
+            200,
+            json=posting | {"postingUrl": link, "jobAd": {"sections": sections}, "active": True},
+        )
+
+
+def sr_scale(engine: Any) -> None:
+    sleeps: list[float] = []
+    smartrecruiters.fetch_json = partial(fetch_json, sleep=sleeps.append)  # type: ignore[assignment]
+    print("\n=== SmartRecruiters mixed fleet: 20 ATS + 10 SR + 1,000-item feed ===")
+    with Session(engine) as db:
+        wipe(db)
+        ats = seed_sources(db, 20)
+        sizes: dict[str, int] = {}
+        for i, size in enumerate(SR_SHAPES):
+            company = f"perfsr{i}"
+            sizes[company] = size
+            db.add(
+                IngestionSource(
+                    kind=IngestionSourceKind.SMARTRECRUITERS,
+                    identifier=company,
+                    display_name=company,
+                    scope=SourceScope.INTERNSHIPS_ONLY,
+                )
+            )
+        db.commit()
+        feed_body = build_feed(ats, FEED_SIZE - len(sizes))
+        for company in sizes:  # a feed row deduping onto each source's first posting (posting 5
+            # is an internship on every board shape)
+            feed_body["jobs"].append(
+                {
+                    "id": f"smartrecruiters:{company}:{SR_BASE + 5}",
+                    "company": company,
+                    "title": f"Synthetic Engineering Intern {5}",
+                    "url": f"https://jobs.smartrecruiters.com/{company}/{SR_BASE + 5}",
+                    "posted_at": "2040-09-20T00:00:00Z",
+                    "program": "Internship",
+                }
+            )
+        feed_body["count"] = len(feed_body["jobs"])
+
+        def fresh() -> SrFleet:
+            return SrFleet(sizes, transport_for(ats, feed_body))
+
+        def report(label: str, fleet: SrFleet, elapsed: float, runs: list[IngestionRun]) -> None:
+            worst_list = max(fleet.lists.values(), default=0)
+            worst_detail = max(fleet.details.values(), default=0)
+            statuses = dict(Counter(r.status.value for r in runs))
+            print(
+                f"  {label:<24} {elapsed:6.3f} s  SR list={sum(fleet.lists.values())}"
+                f" (max/source {worst_list}) detail={sum(fleet.details.values())}"
+                f" (max/source {worst_detail})  runs={len(runs)} {statuses}"
+            )
+            assert worst_list <= 50 and worst_detail <= 100, "SR request bound exceeded"
+
+        fleet = fresh()
+        started = time.perf_counter()
+        runs = sync_enabled_sources(db, transport=fleet.transport)
+        report("first sync", fleet, time.perf_counter() - started, runs)
+        print(f"    created={sum(r.created_count for r in runs)}")
+        for company, size in sizes.items():
+            print(
+                f"    {company:<8} size={size:>3} list={fleet.lists[company]}"
+                f" detail={fleet.details[company]}"
+            )
+
+        fleet = fresh()
+        started = time.perf_counter()
+        runs = sync_enabled_sources(db, transport=fleet.transport)
+        report("unchanged re-sync", fleet, time.perf_counter() - started, runs)
+        assert sum(fleet.details.values()) == 0, "unchanged re-sync fetched SR details"
+        assert all(r.created_count == 0 and r.updated_count == 0 for r in runs)
+
+        fleet = fresh()
+        fleet.rate_limit_once.add("perfsr1")  # 429 + Retry-After: 2 (sleep stubbed)
+        fleet.extra["perfsr0"] = 5  # five new postings, three of whose details fail
+        fleet.failing_details |= {("perfsr0", str(SR_BASE + n)) for n in (4, 5, 6)}
+        sleeps.clear()
+        started = time.perf_counter()
+        runs = sync_enabled_sources(db, transport=fleet.transport)
+        report("detail failures + 429", fleet, time.perf_counter() - started, runs)
+        by_source = {r.source.identifier: r for r in runs}
+        print(
+            f"    perfsr0 {by_source['perfsr0'].status.value} closed="
+            f"{by_source['perfsr0'].closed_count}; perfsr1 {by_source['perfsr1'].status.value};"
+            f" sleeps={sleeps}"
+        )
+        assert by_source["perfsr1"].status.value == "success" and sleeps == [2.0, *[1.0, 2.0] * 3]
+        assert by_source["perfsr0"].closed_count == 0
+        db.commit()
+
+
 def main() -> None:
     url = os.environ.get("PERF_DATABASE_URL")
     if not url:
@@ -245,8 +411,9 @@ def main() -> None:
 
     engine = create_engine(url)
     results: dict[int, dict[str, Any]] = {}
+    sr_only = "--sr" in sys.argv
 
-    for n in (10, 25, 50):
+    for n in () if sr_only else (10, 25, 50):
         print(f"\n=== N = {n} ATS sources ===")
         with Session(engine) as db:
             wipe(db)
@@ -307,6 +474,11 @@ def main() -> None:
                 "t2": t2,
                 "t3": t3,
             }
+
+    if "--no-sr" not in sys.argv:
+        sr_scale(engine)
+    if sr_only:
+        return
 
     print("\n=== Summary ===")
     print(
