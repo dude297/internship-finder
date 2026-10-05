@@ -7,7 +7,7 @@ identity parser), so discovery can never disagree with deduplication (ADR-013 §
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from sqlalchemy import exists, func, or_, select
@@ -28,6 +28,7 @@ from app.schemas.source_discovery import (
     SourceSuggestion,
     SupportedKind,
 )
+from app.services.freshness import DIRECT_SOURCE_TYPES, healthy_source_ids, source_evidence
 from app.services.sources import to_response, utcnow
 
 # ADR-013 §2: the EU Greenhouse Job Board hosts aren't fetched (US API only), so a link naming
@@ -130,20 +131,51 @@ _active_ats = _active.where(_record.source_type == OpportunitySourceType.ATS)
 _active_non_feed = _active.where(_record.source_type != OpportunitySourceType.PUBLIC_FEED)
 
 
-def _coverage_row(db: Session) -> tuple[int, int, int, int]:
-    """active_opportunities, with_description, ats_backed, feed_only (one query)."""
+@dataclass(frozen=True)
+class _Coverage:
+    active: int
+    with_description: int
+    ats_backed: int
+    feed_only: int
+    independent: int
+    first_party: int
+    curated_registry: int
+    manual_only: int
+    direct_fresh: int
+
+
+def _coverage_row(db: Session, healthy: list[uuid.UUID]) -> _Coverage:
+    """Every coverage count in one query (ADR-013 §3, ADR-015 §5). Each opportunity is counted
+    once per metric however many source records it has."""
     has_text = func.length(func.btrim(Opportunity.description)) > 0
+
+    def active_of(source_type: OpportunitySourceType) -> Any:
+        return exists(_active.where(_record.source_type == source_type))
+
+    direct_fresh = exists(
+        _active.where(
+            _record.source_type.in_(list(DIRECT_SOURCE_TYPES)),
+            _record.ingestion_source_id.in_(healthy),
+        )
+    )
     row = db.execute(
         select(
             func.count(),
             func.count().filter(Opportunity.description.is_not(None), has_text),
             func.count().filter(exists(_active_ats)),
             func.count().filter(exists(_active), ~exists(_active_non_feed)),
+            # Independent of the community feed: an active non-feed automated record, or
+            # managed by hand (no automated record at all).
+            func.count().filter(or_(exists(_active_non_feed), ~exists(_automated))),
+            func.count().filter(active_of(OpportunitySourceType.CAREER_PAGE)),
+            func.count().filter(active_of(OpportunitySourceType.CURATED_REGISTRY)),
+            func.count().filter(~exists(_automated)),
+            func.count().filter(direct_fresh),
         )
         .select_from(Opportunity)
         .where(_open)
     ).one()
-    return row[0], row[1], row[2], row[3]
+    return _Coverage(*row)
 
 
 def _feed_rows(
@@ -187,7 +219,9 @@ def _configured_keys(db: Session) -> set[SuggestionKey]:
 
 def discover(db: Session) -> SourceDiscoveryResponse:
     """Zero network calls. Three queries total, regardless of catalog size."""
-    active_opportunities, with_description, ats_backed, feed_only_sql = _coverage_row(db)
+    counts = _coverage_row(db, healthy_source_ids(source_evidence(db, utcnow())))
+    active_opportunities, with_description = counts.active, counts.with_description
+    feed_only_sql = counts.feed_only
     rows = _feed_rows(db)
     configured = _configured_keys(db)
 
@@ -255,10 +289,21 @@ def discover(db: Session) -> SourceDiscoveryResponse:
             if active_opportunities
             else None
         ),
-        ats_backed=ats_backed,
+        ats_backed=counts.ats_backed,
         feed_only=feed_only_sql,
         enrichable=enrichable_total,
         unsupported=feed_only_sql - enrichable_total,
+        independent=counts.independent,
+        independent_percent=(
+            round(counts.independent / active_opportunities * 100, 1)
+            if active_opportunities
+            else None
+        ),
+        direct_ats=counts.ats_backed,
+        first_party=counts.first_party,
+        curated_registry=counts.curated_registry,
+        manual_only=counts.manual_only,
+        direct_fresh=counts.direct_fresh,
     )
     return SourceDiscoveryResponse(
         coverage=coverage, providers=provider_list, suggestions=suggestion_list

@@ -19,6 +19,7 @@ from app.opportunities.eligibility.schemas import REQUIREMENT_VALUE_SCHEMAS
 from app.opportunities.scoring import ScoreBreakdown
 from app.schemas.application import ApplicationResponse
 from app.schemas.common import BlankToNone, CountryCode
+from app.services.source_health import SourceHealthStatus
 
 _countries = TypeAdapter(list[CountryCode])
 
@@ -138,6 +139,24 @@ Origin = Literal["imported", "manual"]
 # open: an automated record is active; closed: automated records exist, none active;
 # manual: managed by hand (no automated records).
 Availability = Literal["open", "closed", "manual"]
+# ADR-015 listing freshness: how strong the evidence is that it is still listed.
+FreshnessState = Literal[
+    # An active record from a direct source (company ATS, or an approved first-party career
+    # source) whose latest finished sync is a complete snapshot within the healthy window.
+    "direct_verified",
+    # A curated registry program whose verify-by date hasn't been reached.
+    "program_listed",
+    # A curated registry program whose verify-by date has been reached.
+    "program_recheck",
+    # Only the discovery feed currently vouches for it (healthy feed).
+    "feed_current",
+    # Open, but none of its listing sources is currently healthy (partial/failed/stale/disabled).
+    "source_warning",
+    # Owner-managed: no automated source.
+    "manual",
+    # No active automated record.
+    "closed",
+]
 
 
 class FitComponentSummary(BaseModel):
@@ -179,6 +198,11 @@ class OpportunitySummary(BaseModel):
     typical_close_window: str | None = None
     verify_by: date | None = None
     needs_date_verification: bool = False
+    # ADR-015: derived listing freshness (evidence strength, never a guarantee it's open).
+    freshness: FreshnessState = "manual"
+    freshness_checked_at: datetime | None = None
+    # Registry programs: the date the program's official pages were last hand-checked.
+    program_last_verified: date | None = None
 
 
 class OpportunityPage(BaseModel):
@@ -201,6 +225,9 @@ class SourceRecordResponse(BaseModel):
     source_url: str | None
     source_published_at: datetime | None
     source_updated_at: datetime | None
+    # ADR-015: the record's source's current health and last complete success (null: manual).
+    source_health: SourceHealthStatus | None = None
+    source_last_success_at: datetime | None = None
 
 
 class OpportunityDetail(BaseModel):
@@ -236,6 +263,11 @@ class OpportunityDetail(BaseModel):
     typical_close_window: str | None = None
     verify_by: date | None = None
     needs_date_verification: bool = False
+    # ADR-015: derived listing freshness (evidence strength, never a guarantee it's open).
+    freshness: FreshnessState = "manual"
+    freshness_checked_at: datetime | None = None
+    # Registry programs: the date the program's official pages were last hand-checked.
+    program_last_verified: date | None = None
     requirements: list[RequirementResponse]
     application: ApplicationResponse | None
     origin: Origin = "manual"

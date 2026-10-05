@@ -35,6 +35,20 @@ class CoverageMetrics(BaseModel):
     enrichable: int
     # Feed-only without a supported, proven provider identity (Workday, Oracle, unknown, ...).
     unsupported: int
+    # ADR-015 §5 Independent Discovery Coverage: open opportunities that would survive the
+    # community feed disappearing (an active record from a non-feed automated source, or
+    # owner-managed). Never counts feed-only postings, however they were enriched.
+    independent: int = 0
+    independent_percent: float | None = None
+    # Breakdown (one opportunity can be in several): active direct ATS record (== ats_backed),
+    # active approved first-party career source record, active curated registry record, and
+    # owner-managed only (no automated record).
+    direct_ats: int = 0
+    first_party: int = 0
+    curated_registry: int = 0
+    manual_only: int = 0
+    # Open with a direct record whose source is currently healthy (freshness direct_verified).
+    direct_fresh: int = 0
 
 
 class ProviderCount(BaseModel):
