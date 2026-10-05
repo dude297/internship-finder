@@ -86,14 +86,14 @@ Last reviewed: 2026-10-03 (Milestone 7 source authority and discovery; Ashby add
 
 - **Key:** `workable:<account>`; added as an account name or an `https://apply.workable.com/<account>` (or `<account>.workable.com`) link, parsed and never requested
 - **Endpoint:** the documented jobs widget API `https://www.workable.com/api/accounts/<account>?details=true` (no key), which redirects to `apply.workable.com/api/v1/widget/accounts/<account>`; both hosts are allowlisted. One request per run; the response is the whole board
-- **Stable ID:** the job `shortcode` (uppercased); identity `workable:<SHORTCODE>` plus the posting page URL. Posted date = `published_on`; no deadline; remote/hybrid only when stated; `employment_type` `intern` → internship
+- **Stable ID:** the job `shortcode` (uppercased); identity `workable:<account>:<SHORTCODE>` plus the posting page URL, accepted only when its path names this account's own shortcode. Posted date = `published_on`; no deadline; remote/hybrid only when stated; `employment_type` `intern` → internship
 - **Closure:** a 200 with a `jobs` list is a complete snapshot. Unknown account → 404 → failed run, nothing closes. A 200 with an empty list closes everything (same accepted limitation as other single-request providers)
 
 ### Pinpoint companies (Milestone 8.1, ADR-015 §7)
 
 - **Key:** `pinpoint:<company>`; added as the company subdomain label or an `https://<company>.pinpointhq.com/...` link
 - **Endpoint:** the documented `https://<company>.pinpointhq.com/postings.json` (no key, no pagination). The network boundary allows exactly one DNS label under `pinpointhq.com` (`ALLOWED_HOST_PATTERN`); posting URLs are accepted only on the same company's subdomain
-- **Stable ID:** the posting `id`; identity `pinpoint:<company>:<id>` plus the posting URL. No posted date exists in the API, so none is set; `deadline_at` → deadline only when present; `workplace_type` → remote mode; `employment_type` `internship` → internship
+- **Stable ID:** the posting `id`; identity `pinpoint:<company>:<id>` plus the posting URL. No posted date exists in the API, so none is set; `deadline_at` is parsed but, like every ATS deadline field today, not written to the canonical opportunity (only the registry writes deadlines, ADR-014 §6); `workplace_type` → remote mode; `employment_type` `internship` → internship
 - **Closure:** as Workable; unknown company → 404
 
 ### Direct Source Catalog (Milestone 8.1, ADR-015 §6)
