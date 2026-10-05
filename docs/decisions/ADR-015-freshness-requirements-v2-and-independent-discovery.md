@@ -81,6 +81,14 @@ No company-specific source passed the gate in this milestone: Apple, Amazon, Mic
 
 With the feed disabled or failing, direct boards, the registry, and manual entry still discover, deduplicate, rank, evaluate eligibility and fit, and track applications; the scheduled sync never needs it (`test_feed_off_resilience.py`). What still depends on the feed: board *suggestions* (ADR-013 §2 discovery) and the ~780 feed-only postings whose employers use unsupported platforms (Workday, Oracle, custom sites).
 
+### 10. An empty snapshot can't mass-close a large source
+
+A fetch that parses to zero items, from a source that still has **10 or more** open records (`EMPTY_SNAPSHOT_GUARD`), fails with `empty_snapshot` and closes nothing. An empty answer of that kind is far likelier a provider fault, a renamed identifier (SmartRecruiters, Workable, Pinpoint answer 200/empty or 404), or a placeholder feed than every posting vanishing at once; a false open beats a mass false close. The source turns `failing` in Source Health, so the owner sees it. Smaller sources can still legitimately empty out. Found by the feed-independence architecture review (the feed's ~1,000 postings could all close on one `{"jobs": []}`).
+
+### 11. Known gaps toward full self-sufficiency (not in this milestone)
+
+From the same review: no way to *retire* the feed cleanly (disabling it leaves its records active, so feed-only postings stay open as `source_warning`); feed records behind direct postings outlive a direct closure the same way; new identity rules backfill feed records only on a feed sync (the M8 runbook ordering rule); new-company discovery without the feed is the hand-verified catalog or manual Add Source only; tests and first-run docs assume the seeded feed row. A retire command (close a source's records through the normal closure path, then disable it) and a feed-free bootstrap are the next steps.
+
 ## Consequences
 
 - The owner sees how much to trust "open" at a glance and can filter to direct-verified or needs-review postings.
