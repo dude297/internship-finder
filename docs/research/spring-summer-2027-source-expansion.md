@@ -2,7 +2,9 @@
 
 > Local examples use the San Francisco Bay Area as an example region; adapters would be region-agnostic. Claims were checked on 2026-10-04 and decay: re-verify terms, robots.txt, API docs and every company-to-ATS mapping before building anything. Volunteer sources are covered separately in `volunteer-sources-2027.md` (Milestone 7.1).
 
-Research only. No code, accounts, API-key signups, or form submissions were made. The only network contact beyond reading docs was one anonymous GET of `https://api.smartrecruiters.com/v1/companies/smartrecruiters/postings?limit=1` to confirm that SmartRecruiters' public postings endpoint answers without credentials.
+Research only. No code, accounts, API-key signups, or form submissions were made. The only network contact beyond reading docs was anonymous GETs of SmartRecruiters' public Posting API (`/v1/companies/smartrecruiters/postings?limit=1` and that posting's detail) to confirm the documented public access and the response shape.
+
+> **Updated 2026-10-04 (after the Milestone 7 / 7.1 release).** Milestone 7 (provider enrichment and source authority, [ADR-013](../decisions/ADR-013-provider-enrichment-and-source-authority.md)) and Milestone 7.1 (volunteer type) are released. Production now has **20 direct ATS boards** (13 Greenhouse, 2 Lever, 5 Ashby), and description coverage is **22.4% (294 / 1,313 open opportunities)**. Production numbers below that predate activation are labelled *historical*. The SmartRecruiters classification was corrected against SmartRecruiters' own authentication guide (§5.2). The decisions taken from this research are recorded in ADR-014 (Milestone 8, `docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md`).
 
 Evidence labels: **[official]** = fetched from the vendor/agency page cited; **[3rd-party]** = vendor-adjacent blog/scraper listing, not authoritative; **[unverified]** = could not confirm.
 
@@ -33,9 +35,11 @@ Therefore the best investment is **breadth of eligibility-aware discovery plus a
 9. **Workday-hosted semiconductor/lab postings** reached only via the existing discovery feed's links (no Workday scraping).
 10. **National-lab career portals** (LBNL/LLNL/SLAC/ANL/ORNL/NREL/Sandia): link-out only; most are Workday/custom.
 
-### Production evidence (read-only `source-coverage`, 2026-10-04, before any ATS source was added)
+### Production evidence
 
-The discovery feed's 1,113 open postings by apply-link provider: Workday 601, Greenhouse 207, **Oracle (Cloud HCM) 147**, Ashby 58, **SmartRecruiters 40**, Lever 28, other 13, Rippling 11, Workable 8. Greenhouse/Lever/Ashby (288 enrichable) are already covered by ADR-013 discovery. This supports SmartRecruiters as the next ATS adapter: once it exists, discovery could map those 40 feed postings exactly as it does for the other three. Oracle Cloud HCM is the second-largest unsupported provider and was **not researched here**. Follow-up task: check whether its candidate-experience REST endpoints are documented for anonymous public use; if not, Oracle stays link-out like Workday.
+**Current (2026-10-04, after M7 activation):** 1,313 open opportunities; 20 direct ATS boards active (13 Greenhouse, 2 Lever, 5 Ashby); 294 / 1,313 (22.4%) have descriptions. The feed still names about 40 SmartRecruiters postings that no adapter can enrich.
+
+**Historical (read-only `source-coverage`, 2026-10-04, before any ATS source was added):** the discovery feed's 1,113 open postings by apply-link provider: Workday 601, Greenhouse 207, **Oracle (Cloud HCM) 147**, Ashby 58, **SmartRecruiters 40**, Lever 28, other 13, Rippling 11, Workable 8. Greenhouse/Lever/Ashby (288 enrichable) are already covered by ADR-013 discovery. This supports SmartRecruiters as the next ATS adapter: once it exists, discovery could map those 40 feed postings exactly as it does for the other three. Oracle Cloud HCM is the second-largest unsupported provider and was **not researched here**. Follow-up task: check whether its candidate-experience REST endpoints are documented for anonymous public use; if not, Oracle stays link-out like Workday.
 
 ### Recommendation
 
@@ -79,7 +83,7 @@ Columns condensed. Cost is $0 and card is none for every row unless stated. "Sta
 
 | # | Source | Official URL | Category | E | 2027 season | Access / auth | Stable source / opportunity ID | Description / deadline / start / min age / education / citizenship text | Pagination / rate / closure | Terms / robots | Dedupe | Complexity | Value |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | SmartRecruiters Posting API | developers.smartrecruiters.com (posting-api) | ATS API | FY (varies) | both | JSON GET `api.smartrecruiters.com/v1/companies/{id}/postings`; doc says credentials, but anonymous GET answered (observed 2026-10-04) | company identifier / posting `id`+`uuid` | list has no description; detail GET needed; no deadline field; `releasedDate`; `typeOfEmployment`, `experienceLevel`, `location` | `limit`/`offset`, `totalFound`; max limit unverified; rate limit unverified; closed = absent from list | Docs say key/OAuth for the API; anonymous public use is observed, not documented: **unverified terms** | `smartrecruiters:{company}:{id}` vs feed IDs only if feed names it (it does not today) | MEDIUM | MEDIUM |
+| 1 | SmartRecruiters Posting API | developers.smartrecruiters.com (posting-api) | ATS API | FY (varies) | both | JSON GET `api.smartrecruiters.com/v1/companies/{id}/postings`; **public data, no authentication by design** [official: the authentication guide names the Posting API]; only the INTERNAL destination needs a scope | company identifier / posting `id`+`uuid` | list has no description; detail GET (`/postings/{id}`) has `jobAd.sections`; no deadline field; `releasedDate`; `typeOfEmployment`, `experienceLevel`, `location` | `limit` (max 100) / `offset`, `totalFound`; rate limit unpublished; closed = absent from list | Documented public-data API; PUBLIC postings only | `smartrecruiters:{company}:{id}`; the feed names ~40 (`smartrecruiters:<Company>:<id>` + a `jobs.smartrecruiters.com` link) | MEDIUM | MEDIUM |
 | 2 | USAJOBS Search API | developer.usajobs.gov | Government API | FY (student path) | both | JSON GET `data.usajobs.gov/api/search`; headers Host, User-Agent=requester email, Authorization-Key; free key via request form [official] | `MatchedObjectId` (control number) / `PositionID` | `QualificationSummary`, `MajorDuties`, `Requirements`, `Education`, `ApplicationCloseDate`, `PositionStartDate`, `HiringPath`; citizenship text in `WhoMayApply`/requirements | `Page`, `ResultsPerPage` max 500, max 10,000 rows/query [official rate-limit guide]; closure by `ApplicationCloseDate` and absence | Terms page: authorized-use, monitored; no commercial/redistribution wording seen; **review in full before ADR** | Unique to USAJOBS; Pathways postings do not exist elsewhere | MEDIUM | MEDIUM |
 | 3 | Curated program registry (repo data) | n/a (each program's own page) | Manual/curated | HS, IF | both | none (data file) | `curated:{slug}:{cycle}` | whatever the owner transcribes with source URL | n/a; closure by `verified_until` date | owner-transcribed facts + link out; no copying of page prose | n/a | LOW | HIGH |
 | 4 | NSF REU Directory | nsf.gov/funding/initiatives/reu/search | Federal directory | not eligible | Summer | HTML search; no export stated [official] | none | per-site pages | n/a | Government site; per-site terms | link-out only | n/a | MEDIUM (awareness) |
@@ -112,7 +116,9 @@ Columns condensed. Cost is $0 and card is none for every row unless stated. "Sta
 ### 5.2 SmartRecruiters Posting API (value MEDIUM, complexity MEDIUM)
 
 - Public GET list per company identifier, JSON, paginated by `limit`/`offset` with `totalFound` [observed 2026-10-04 on the `smartrecruiters` company; fields: `id`, `name`, `uuid`, `refNumber`, `company`, `releasedDate`, `location` incl. `city/region/country/remote/hybrid/fullLocation`, `typeOfEmployment`, `experienceLevel`, `department`, `function`, `ref`, `language`].
-- Official docs state API key/OAuth authentication for the Posting API [official: developers.smartrecruiters.com/docs/posting-api], and state the internal scope applies only to INTERNAL destinations [official: reference page]. The anonymous result is observed behavior; terms for unauthenticated aggregation are **unverified**. The ADR must record this and require the same conservative posture used for Lever (GET only, published postings only, never the apply endpoints).
+- **Corrected classification: Tier 1, documented public-data access, no customer API key for PUBLIC postings.** SmartRecruiters' authentication guide states: "Some APIs provide access to public data and don't require authentication by design", naming the **Posting API** [official: developers.smartrecruiters.com/docs/authentication]. `GET /v1/companies/{companyIdentifier}/postings` lists a company's active public postings; the `internal_postings_read` scope is required only for the INTERNAL destination [official: reference page]. (An earlier draft of this note read the Posting API page's key/OAuth wording as covering public postings; that wording is about authenticated/internal access.)
+- PUBLIC posting data only: never the INTERNAL or INTERNAL_OR_PUBLIC destinations, candidate APIs, application APIs, or job administration APIs. GET only.
+- Verified on the live endpoint (2026-10-04): company identifiers are case-insensitive; a nonexistent company answers 200 with `totalFound: 0`; detail responses carry `jobAd.sections.{companyDescription,jobDescription,qualifications,additionalInformation}.{title,text}` (HTML), `postingUrl`, `applyUrl`, `company.identifier`.
 - Description text requires a per-posting detail GET (N+1). The adapter must cap detail fetches per sync (see task card).
 
 ### 5.3 USAJOBS Search API (value MEDIUM, complexity MEDIUM, owner-gated)
@@ -167,7 +173,7 @@ Keep ADR-013 discovery as the way to add Greenhouse/Lever/Ashby boards, and add 
 | Greenhouse | Yes, `boards-api.greenhouse.io/v1/boards/{board}/jobs` | existing adapter, sources.md | Supported |
 | Lever | Yes, `api.lever.co/v0/postings/{site}` (+ EU) | existing adapter; [3rd-party] public, unauthenticated | Supported |
 | Ashby | Yes, `api.ashbyhq.com/posting-api/job-board/{board}` | existing adapter | Supported |
-| SmartRecruiters | Observed yes (anonymous GET worked); docs describe key/OAuth | [official docs] + direct observation | Tier 1 with terms caveat |
+| SmartRecruiters | Yes: the Posting API is documented as public data without authentication (PUBLIC destination) | [official] authentication guide + reference | Tier 1 (ADR-014) |
 | Recruitee | Careers Site API exists; auth statement unclear | [official, incomplete] | Tier 2 |
 | Personio | XML feed, no credentials, customer-enabled | [official support] | Tier 2 (EU) |
 | Breezy | `{co}.breezy.hr/json` | [3rd-party] only | Tier 2/3 |
@@ -217,9 +223,9 @@ Conclusion: the semiconductor tier is overwhelmingly Workday-family, so direct i
 
 - **Adapter/source type:** new `smartrecruiters` kind, `source_type=ats` (authority rank 0 under ADR-013).
 - **Network host allowlist:** `api.smartrecruiters.com` only (exact match; HTTPS, no userinfo, default port per `http.py`). Posting links go out to `jobs.smartrecruiters.com` (link only, not fetched, not allowlisted).
-- **Safe source configuration:** owner enters a company identifier or a `jobs.smartrecruiters.com/{company}` URL. Validation: parse host exactly, take the first path segment, apply the shared slug pattern; refuse everything else. Default scope Internships only, like ADR-013. Identifier is case-sensitive: store as entered after validation (observed identifier was mixed-case-tolerant: unverified).
-- **Identity model:** `smartrecruiters:{company}:{posting-id}`; `uuid` kept in the raw payload.
-- **Normalization mapping:** title=`name`; org=configured display name; location=`location.fullLocation` (+ `remote`/`hybrid` flags into remote mode); description=detail endpoint job-ad sections concatenated as text (structure unverified: confirm on one real response); deadline=none (no field observed); start date=none; type from `typeOfEmployment.label` and `experienceLevel.label` plus title keywords; posted date=`releasedDate`; application URL=posting `ref`/public posting URL.
+- **Safe source configuration:** owner enters a company identifier or a `jobs.smartrecruiters.com/{company}` URL. Validation: parse host exactly, take the first path segment, apply the shared slug pattern; refuse everything else. Default scope Internships only, like ADR-013. Identifiers are case-insensitive at the provider (verified 2026-10-04), so store them lowercased like the other providers.
+- **Identity model:** `smartrecruiters:{company}:{posting-id}`; `uuid` kept in the raw payload. The feed already names these postings (`smartrecruiters:<Company>:<id>` with a matching `jobs.smartrecruiters.com/<Company>/<id>` link), so discovery can map them exactly.
+- **Normalization mapping:** title=`name`; org=configured display name; location=`location.fullLocation` (+ `remote`/`hybrid` flags into remote mode); description=detail endpoint `jobAd.sections` concatenated as text (structure verified on a live response, 2026-10-04); deadline=none (no field observed); start date=none; type from `typeOfEmployment.label` and `experienceLevel.label` plus title keywords; posted date=`releasedDate`; application URL=posting `ref`/public posting URL.
 - **Closure behavior:** list returns active postings; absence from a complete paginated walk means closed; a partial/failed walk must never close records (same rule as other adapters).
 - **Requirement-text availability:** only with the detail GET. Cap detail fetches per sync (e.g. 100/run), prioritize new/changed `id`s, skip when the title filter already excludes.
 - **Tests:** fixture of a synthetic list response and detail response; pagination across `totalFound`; slug/URL validation negatives (trailing newline, userinfo, port, lookalike host); closure on complete vs incomplete walk; detail failure degrades to no-description, not a failed sync.
@@ -255,7 +261,7 @@ Decision gate: first confirm each vendor's terms and a real sample response. All
 **Title:** Additional structured sources and the curated program registry.
 
 **Decides:**
-1. SmartRecruiters is an `ats`-class source (authority rank 0) with host `api.smartrecruiters.com`, public GET only, never the authenticated Posting/Candidate APIs; records the observed-vs-documented auth discrepancy and the conservative-use rule.
+1. SmartRecruiters is an `ats`-class source (authority rank 0) with host `api.smartrecruiters.com`, the documented public Posting API only (PUBLIC destination, no key); never INTERNAL destinations, candidate, application, or job administration APIs.
 2. Government API class (USAJOBS): allowed to hold one owner-supplied free key as a server-side env secret; rules for redaction, disabled-until-configured state, and authority rank.
 3. Curated program registry: committed public-facts data file, imported as curated opportunities, with `typical` vs `verified` date semantics and a stale-after rule.
 4. Host-allowlist policy for per-tenant subdomains (needed only if Tier 2 proceeds): exact hosts only, or a documented suffix rule; default exact.
@@ -279,12 +285,12 @@ Decision gate: first confirm each vendor's terms and a real sample response. All
 4. Which 5 to 10 Bay Area hardware/AI/robotics startups do you want checked first for Greenhouse/Lever/Ashby/SmartRecruiters boards?
 5. Is a hand-maintained registry file in the public repo acceptable (facts + links only), or should it live in the private DB only?
 6. Should the registry include programs you probably cannot apply to (e.g. RSI juniors-only) as "future/sibling" reference, or hide them?
-7. Is it acceptable to ship SmartRecruiters despite documentation that describes key/OAuth auth, based on observed anonymous access? If not, Tier 1 shrinks to T1 and T3.
+7. ~~Is it acceptable to ship SmartRecruiters based only on observed anonymous access?~~ Resolved: SmartRecruiters documents the Posting API as public data without authentication.
 8. Do you want a reminder mechanism for "verify by" dates (a UI banner is zero cost; email is out of scope)?
 
 ## Appendix: key official URLs
 
-- SmartRecruiters Posting API: https://developers.smartrecruiters.com/docs/posting-api ; https://developers.smartrecruiters.com/reference/getpostings-1
+- SmartRecruiters Posting API: https://developers.smartrecruiters.com/docs/authentication ; https://developers.smartrecruiters.com/docs/posting-api ; https://developers.smartrecruiters.com/reference/getpostings-1
 - USAJOBS: https://developer.usajobs.gov/ ; /guides/authentication ; /guides/rate-limiting ; /guides/terms-of-use ; /api-reference/get-api-search
 - NASA internships: https://www.nasa.gov/learning-resources/internships/
 - DOE Spring 2027 SULI/CCI: https://www.energy.gov/science/articles/discover-science-applications-open-spring-2027-undergraduate-internships ; portal https://science.osti.gov/wdts
