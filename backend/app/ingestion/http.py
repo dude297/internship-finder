@@ -7,6 +7,7 @@ validated identifier; nothing user-supplied is ever requested.
 import ipaddress
 import json
 import logging
+import re
 import socket
 import time
 from collections.abc import Callable
@@ -30,8 +31,14 @@ ALLOWED_HOSTS = frozenset(
         "api.eu.lever.co",
         "api.ashbyhq.com",
         "api.smartrecruiters.com",
+        # Workable's documented widget API answers on www and redirects to apply (ADR-015 §7).
+        "www.workable.com",
+        "apply.workable.com",
     }
 )
+# Providers that serve each customer's public board from its own subdomain of a fixed provider
+# domain (ADR-015 §7). The label is validated by the adapter; this is the network boundary.
+ALLOWED_HOST_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.pinpointhq\.com\Z")
 USER_AGENT = (
     "PersonalInternshipFinder/0.1 (single-user; +https://github.com/dude297/internship-finder)"
 )
@@ -82,7 +89,7 @@ def check_url(url: str, resolve: Resolver | None = _resolve) -> None:
     if parts.username or parts.password or parts.port not in (None, 443):
         raise FetchError("blocked_url", "Source URLs can't carry credentials or custom ports.")
     host = (parts.hostname or "").lower()
-    if host not in ALLOWED_HOSTS:
+    if host not in ALLOWED_HOSTS and not ALLOWED_HOST_PATTERN.fullmatch(host):
         raise FetchError("blocked_url", "The source host isn't on the allowlist.")
     if resolve is None:
         return
