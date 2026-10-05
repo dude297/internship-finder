@@ -317,6 +317,9 @@ class SrFleet:
 def sr_scale(engine: Any) -> None:
     sleeps: list[float] = []
     smartrecruiters.fetch_json = partial(fetch_json, sleep=sleeps.append)  # type: ignore[assignment]
+    # Measure the deterministic steady state; the rotation refresh adds at most ~1/7 of reused
+    # details per run, from spare budget (ADR-014 §2).
+    smartrecruiters.DETAIL_REFRESH_DAYS = 0
     print("\n=== SmartRecruiters mixed fleet: 20 ATS + 10 SR + 1,000-item feed ===")
     with Session(engine) as db:
         wipe(db)

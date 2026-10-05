@@ -31,7 +31,7 @@ SmartRecruiters `collect`:
 
 1. **List.** Walks `offset` in pages of 100 (the documented maximum) until `totalFound` is reached. The walk must be complete and consistent: an empty page before `totalFound`, a `totalFound` that changes mid-walk, a page that isn't the expected shape, or more than 50 pages (5,000 postings) fails the snapshot. A failed walk never closes anything.
 2. **Admission.** Under `internships_only`, the same title matcher as the pipeline (`is_internship_title`) selects which postings get a detail request; the pipeline filters again after normalization, so filtering is identical either way.
-3. **Detail.** For each admitted posting, the stored detail is reused when the stored list item equals the new one exactly; otherwise one detail GET, at most **100 per run**. A detail must name the same posting ID and company as the list item.
+3. **Detail.** For each admitted posting, the stored detail is reused when the stored list item equals the new one exactly; otherwise one detail GET, at most **100 per run**. A detail must name the same posting ID and company as the list item. Because the list has no "updated" field, each reused detail is also refetched once every 7 days (a fixed rotation by posting ID), only from budget left after new and changed postings; a failed refresh keeps the stored detail and doesn't make the run partial.
 4. **Partial semantics.** A detail that fails, mismatches, or exceeds the budget turns that posting into an item error: the run is `partial`, so nothing closes, the posting's existing record and canonical text are untouched, and the next run retries it. A posting never becomes canonical with a missing or wrong description because of a detail failure.
 
 Request bound per SmartRecruiters source and run: ≤ 50 list + ≤ 100 detail requests (each with the client's existing ≤ 3 attempts). A first sync of a large internship board may need several partial runs to fetch every detail; that is deliberate (no closures until complete).
@@ -40,7 +40,7 @@ Closure: only a complete list walk with every admitted posting resolved closes r
 
 ### 3. SmartRecruiters identity and discovery
 
-- Identifier `smartrecruiters:<company>:<posting-id>` (company lowercased, ID digits), plus the posting page URL identifier.
+- Identifier `smartrecruiters:<company>:<posting-id>` (company lowercased, ID digits), plus the posting page URL identifier only when that URL is the company's own posting page (`https://jobs.smartrecruiters.com/<company>/<id>[-slug]`): the tenant controls `postingUrl`, so a link elsewhere never becomes a dedupe identity.
 - The feed proves a SmartRecruiters identity only when **both** its ID is `smartrecruiters:<company>:<digits>` and its link is a plain `https://jobs.smartrecruiters.com/<company>/<id>` (optionally `-<title-slug>`) naming the same company and posting, exactly like Ashby (ADR-013 §2). No identity is ever inferred from an organization name.
 - Discovery (`GET /api/sources/discovery`, `source-coverage`, Source Coverage, bulk add) gains SmartRecruiters through that one function, with every ADR-013 §2–§3 rule unchanged: derived on read, zero network, bulk add creates configuration only, owner selects, default `internships_only`.
 
@@ -62,7 +62,7 @@ The registry is a repository data file, `backend/data/program_registry.json`, im
 
 | Registry field | Stored as | Meaning |
 |---|---|---|
-| `verified.deadline`, `verified.start_date`, `verified.end_date` | canonical `application_deadline`, `start_date`, `end_date` | Published by the program for this cycle and checked on `last_verified` |
+| `verified.deadline`, `verified.start_date`, `verified.end_date` | canonical `application_deadline`, `start_date`, `end_date` | Published by the program for this cycle as firm dates and checked on `last_verified`. A date the program itself calls tentative, pending approval, or subject to change is **not** verified: it goes in the description or a typical window |
 | `typical_open_window`, `typical_close_window` | text columns of the same names | What past cycles did ("February"); display text, **never a date** |
 | `verify_by` | `verify_by` date | From this date on, the UI shows **Needs date verification** |
 | `cycle` | `program_cycle` | The cycle the entry describes |
@@ -93,9 +93,9 @@ Not implemented and not allowed by this ADR: Workday, Oracle Cloud HCM internal 
 
 ## Consequences
 
-- Two migrations' worth of enum widening and four nullable opportunity columns in one migration (`a8c3e5f7b9d1`); no backfill. Downgrade refuses while SmartRecruiters sources or registry records exist.
+- One migration (`a8c3e5f7b9d1`): enum widening, four nullable opportunity columns, the seeded registry source; no backfill. Downgrade refuses while SmartRecruiters sources or registry records exist.
 - The built-in source list now has two entries (feed and registry).
-- A large SmartRecruiters internship board may take several runs to fill every description; runs in between are `partial` (Source Health shows a warning) and close nothing.
+- A large SmartRecruiters internship board may take several runs to fill every description; runs in between are `partial` (Source Health shows a warning) and close nothing. Likewise, a posting whose detail fails on every run keeps that source partial, so its removed postings stay open until it resolves (the existing "recurring partial run blocks closure" limitation, now reachable through detail failures; false-open, never false-closed).
 - Registry dates are only as current as the file. `verify_by` makes the staleness visible instead of hiding it.
 
 ## Alternatives Considered

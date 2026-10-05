@@ -7,6 +7,8 @@ SmartRecruiters/postings` and `/companies/smartrecruiters/postings` return the s
 so they're lowercased and stored like the other providers' board names."""
 
 import re
+from contextlib import suppress
+from datetime import UTC, date, datetime
 from typing import Any, cast
 from urllib.parse import quote, urlsplit
 
@@ -39,6 +41,10 @@ POSTING_ID = re.compile(r"^[0-9]{1,30}\Z")
 PAGE_SIZE = 100  # the documented maximum
 MAX_PAGES = 50
 MAX_DETAIL_FETCHES = 100
+# The list has no "updated" field, so an edited description behind an unchanged list entry would
+# never be seen. Each reused detail is refetched once every this many days (a fixed rotation by
+# posting ID), only from budget left after new and changed postings; 0 disables it.
+DETAIL_REFRESH_DAYS = 7
 # Only these provider keys are ever stored (ADR-014 §2): never `creator` (a person's name),
 # `customField`, or `referralUrl`.
 _LIST_KEYS = (
@@ -243,12 +249,24 @@ def _fetch_detail(company: str, posting_id: str, request: CollectRequest) -> dic
     return _subset(detail, _DETAIL_KEYS)
 
 
+def _today() -> date:
+    return datetime.now(UTC).date()
+
+
+def _refresh_due(posting_id: str) -> bool:
+    return (
+        DETAIL_REFRESH_DAYS > 0
+        and (int(posting_id) + _today().toordinal()) % DETAIL_REFRESH_DAYS == 0
+    )
+
+
 def collect(request: CollectRequest) -> Any:
     company = request.source.identifier
     internships_only = request.scope is SourceScope.INTERNSHIPS_ONLY
     listed = _walk(company, request)
     seen: set[str] = set()
     entries: list[Any] = []
+    reused: list[tuple[str, dict[str, Any]]] = []
     budget = MAX_DETAIL_FETCHES
     for item in listed:
         if not isinstance(item, dict):
@@ -276,6 +294,7 @@ def collect(request: CollectRequest) -> Any:
             old = cast(dict[str, Any], stored)
             if old.get("posting") == posting and isinstance(old.get("detail"), dict):
                 entry["detail"] = old["detail"]
+                reused.append((posting_id, entry))
                 continue
         if budget <= 0:
             entry["error"] = {
@@ -293,7 +312,36 @@ def collect(request: CollectRequest) -> Any:
                 "code": "detail_mismatch",
                 "message": "The posting detail didn't match its listing.",
             }
+    # Rotation refresh (spare budget only). A failed refresh keeps the stored detail: it was
+    # valid, so it neither erases text nor makes the run partial.
+    for posting_id, entry in reused:
+        if budget <= 0:
+            break
+        if not _refresh_due(posting_id):
+            continue
+        budget -= 1
+        with suppress(FetchError, LookupError):
+            entry["detail"] = _fetch_detail(company, posting_id, request)
     return {"postings": entries}
+
+
+def _is_own_posting_url(url: str | None, company: str, posting_id: str) -> bool:
+    """https://jobs.smartrecruiters.com/<company>/<id>[-slug], no credentials or port."""
+    try:
+        parts = urlsplit(url or "")
+        port = parts.port
+    except ValueError:
+        return False
+    segments = parts.path.split("/")[1:]
+    return (
+        parts.scheme == "https"
+        and parts.hostname == JOBS_HOST
+        and parts.username is None
+        and port is None
+        and len(segments) >= 2
+        and segments[0].lower() == company
+        and (segments[1] == posting_id or segments[1].startswith(f"{posting_id}-"))
+    )
 
 
 def _remote_mode(location: _Location | None) -> RemoteMode | None:
@@ -340,12 +388,15 @@ def _normalize(raw: dict[str, Any], source: SourceConfig) -> NormalizedOpportuni
         else None
     )
     posting_url = entry.detail.postingUrl if entry.detail else None
+    # The tenant controls postingUrl: it becomes a dedupe identity only when it is this company's
+    # own posting page on the official host (never another opportunity's link).
+    own_url = _is_own_posting_url(posting_url, source.identifier, posting.id)
     employment, level = posting.typeOfEmployment, posting.experienceLevel
     return NormalizedOpportunity(
         external_id=posting.id,
         identifiers=(
             Identifier(namespace=SMARTRECRUITERS, value=f"{source.identifier}:{posting.id}"),
-            *url_identifier(posting_url),
+            *(url_identifier(posting_url) if own_url else ()),
         ),
         title=posting.name,
         organization=source.display_name,

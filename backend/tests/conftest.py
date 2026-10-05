@@ -24,6 +24,14 @@ for _name in Settings.model_fields:
 
 
 @pytest.fixture(autouse=True)
+def _no_smartrecruiters_detail_rotation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keeps request counts clock-independent; the rotation has its own tests (ADR-014 §2)."""
+    from app.ingestion.adapters import smartrecruiters
+
+    monkeypatch.setattr(smartrecruiters, "DETAIL_REFRESH_DAYS", 0)
+
+
+@pytest.fixture(autouse=True)
 def _fresh_settings() -> Iterator[None]:
     get_settings.cache_clear()
     yield
