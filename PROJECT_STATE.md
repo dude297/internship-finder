@@ -86,8 +86,8 @@ None in progress. The documentation governance change (`chore/docs-governance`) 
 
 ## Known Operational Issues
 
-- SmartRecruiters `boschgroup` is still filling its detail backlog (98 postings deferred after the 2026-10-05 21:07 UTC run): runs are `partial`, Source Health shows it as failing, its ~300 postings show **Verification incomplete**, and nothing of it closes until a complete run. Expected to clear in one or two runs.
-- Scheduled-sync wall time is dominated by GitHub runner queueing/setup (14 min for a 205 s sync on 2026-10-05); one post-release dispatch sat queued with no job for 36 min and was re-dispatched.
+- SmartRecruiters `boschgroup` cleared its detail backlog on 2026-10-05 (first complete `success` run, 5 closed); its postings move from **Verification incomplete** to **ATS verified** as of that run.
+- Scheduled-sync wall time is dominated by GitHub runner queueing/setup (14 min for a 205 s sync on 2026-10-05). A dispatch fired seconds after re-enabling the workflow sat queued with no job for 36 min; re-dispatching fixed it (latest sync 147.1 s).
 - Owner-gated, not yet run: the `requirements-rules` v2 catalog re-scan (stored suggestions are still v1) and Direct Source Catalog activation.
 
 ## Known Bugs
