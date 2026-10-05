@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Milestone 8.1: listing freshness, requirement extraction v2, and independent discovery ([ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)). Migration `b7e3d9f1a2c4` (CHECK only).
+  - Derived listing freshness (`direct_verified`, `program_listed`, `program_recheck`, `feed_current`, `source_warning`, `manual`, `closed`) on list and detail, with per-source health on the detail page; filters **Direct ATS verified** / **Needs freshness review**; never stored, never "guaranteed open".
+  - **New** badge (first found by Internship Finder < 7 days, distinct from the company's posted date), **New today / this week** filter, **Recently discovered** sort.
+  - `requirements-rules` v2: enrollment/degree pursuit with application-time vs program-start timing, graduation windows, class standing, return-to-school, and a citizenship / permanent residency / U.S. person / work authorization / sponsorship split (fixes v1 labeling "citizens or permanent residents" as work authorization). 258-sentence synthetic corpus plus an adversarial suite; candidates stay pending.
+  - Independent Discovery Coverage on Source Coverage (opportunities that survive without the community feed) with a direct/registry/manual/feed-only breakdown.
+  - Direct Source Catalog (`backend/data/direct_source_catalog.json`, 36 officially verified boards) with **Verified Direct Sources** bulk add on the Sources page.
+  - Workable and Pinpoint adapters (documented, keyless public job-board APIs).
+  - Research: [catalog freshness audit](docs/research/catalog-freshness-audit.md), [direct company source matrix](docs/research/direct-company-source-matrix.md), [tracker gap audit](docs/research/tracker-gap-audit.md), [extractor v2](docs/research/requirement-extractor-v2.md).
+
 ## Milestone 8 (released 2026-10-05)
 
 Released 2026-10-05: [PR #23](https://github.com/dude297/internship-finder/pull/23) rebase-merged at the approved head `cb4f018`; `main` `9263860` (post-merge CI `37266217728` green); Neon migrated `f2a7c9d4e1b3` → `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`; Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13 programs); 6 SmartRecruiters companies activated; description coverage 22.4% → 38.7%; 18 pending suggestions, none accepted. Record: [deployment.md](docs/deployment.md#milestone-8-release-2026-10-05).
