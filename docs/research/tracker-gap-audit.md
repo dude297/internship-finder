@@ -1,5 +1,8 @@
 # Tracker Gap Audit
 
+> **Research only (non-normative).** Date: 2026-10-05. Last verified: 2026-10-05.
+> Used by / superseded by: [ADR-015](../decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md) (items 1-4 of the table adopted in Milestone 8.1); the remaining items not yet acted on.
+
 Date: 2026-10-05. Public repo: ideas and counts only.
 
 **No tracker data or code was imported.** Trackers were read as feature references only (READMEs and the GitHub license API). No listing data from any tracker was copied, and no tracker was used as evidence for any company or source claim (see `direct-company-source-matrix.md`). Per ADR-005, aggregated data of unclear license stays excluded; the only tracker data already consumed is the MIT-licensed zshah101 feed, as an enrichment/discovery source.

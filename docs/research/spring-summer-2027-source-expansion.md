@@ -1,5 +1,8 @@
 # Spring/Summer 2027 Source Expansion (M8 research, 2026-10-04)
 
+> **Research only (non-normative).** Date: 2026-10-04. Last verified: 2026-10-04.
+> Used by / superseded by: [ADR-014](../decisions/ADR-014-structured-source-expansion-and-program-registry.md) (SmartRecruiters adapter, curated program registry); other candidates not yet acted on.
+
 > Local examples use the San Francisco Bay Area as an example region; adapters would be region-agnostic. Claims were checked on 2026-10-04 and decay: re-verify terms, robots.txt, API docs and every company-to-ATS mapping before building anything. Volunteer sources are covered separately in `volunteer-sources-2027.md` (Milestone 7.1).
 
 Research only. No code, accounts, API-key signups, or form submissions were made. The only network contact beyond reading docs was anonymous GETs of SmartRecruiters' public Posting API (`/v1/companies/smartrecruiters/postings?limit=1` and that posting's detail) to confirm the documented public access and the response shape.

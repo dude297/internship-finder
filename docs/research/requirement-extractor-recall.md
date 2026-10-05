@@ -1,6 +1,9 @@
 # Requirement extractor v1 recall analysis
 
-Offline and read-only. Date: 2026-10-04. Extractor: `requirements-rules` v1 (`backend/app/opportunities/requirements/extractor.py`, `extract_requirements(ExtractionInput)`). No product code changed; the throwaway script is not committed. **v2 is not implemented in M8; it needs its own review (ADR-012 precision-over-recall stance).**
+> **Research only (non-normative).** Date: 2026-10-04. Last verified: 2026-10-04.
+> Used by / superseded by: superseded by [requirement-extractor-v2.md](requirement-extractor-v2.md) and [ADR-015 §4](../decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md) (extractor v2, implemented in Milestone 8.1).
+
+Offline and read-only. Date: 2026-10-04. Extractor: `requirements-rules` v1 (`backend/app/opportunities/requirements/extractor.py`, `extract_requirements(ExtractionInput)`). No product code changed; the throwaway script is not committed. v2 was implemented later in Milestone 8.1 ([requirement-extractor-v2.md](requirement-extractor-v2.md)); the recommendations below are the input to it.
 
 Why this matters: production produced only 4 pending candidates (all education) after M7. Eligibility reads only canonical (owner-accepted) requirements, so every missed or wrong candidate costs owner review time or leaves eligibility at "unknown". Also per `eligibility/schemas.py`, value schemas exist only for `minimum_age`, `education`, `citizenship`; `work_authorization` and `other` are free-text and not evaluated, and there is **no graduation-year requirement type at all**.
 
@@ -48,7 +51,7 @@ Why this matters: production produced only 4 pending candidates (all education) 
 
 Take-aways: precision guards behave as designed (no false positives found in the 69 sentences except the two work-authorization label cases and the dropped age cutoff date). Recall loss for the target user (high-school senior / incoming freshman) is mainly (1) phrasing variants of a level statement ("current", "pursuing", "rising ... senior"), (2) plural/spelling variants of citizenship, (3) bare "N or older".
 
-## Recommended v2 rules (not for M8)
+## Recommended v2 rules (implemented in Milestone 8.1)
 
 Ranked by expected value for a high-school senior or incoming freshman. Each needs unit tests with the negative cases listed, a rules version bump to `requirements-rules` v2, and review before building.
 

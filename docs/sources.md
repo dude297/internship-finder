@@ -18,13 +18,17 @@ Priority 3 is strategically the most important layer for this user, even though 
 
 ## Source Review and Attribution
 
-Last reviewed: 2026-10-03 (Milestone 7 source authority and discovery; Ashby added 2026-10-02; earlier rows 2026-09-27).
+Last reviewed: 2026-10-05 (through Milestone 8.1; earlier rows 2026-09-27).
 
 | Source | Role | API / docs | License / usage basis | Attribution | Implemented? | Notes |
 |---|---|---|---|---|---|---|
 | zshah101 Summer/Fall Tech Internships feed | Broad discovery (layer 1), built in | Public JSON feed: `https://zshah101.github.io/Automated-List-Of-Summer-2027-and-Fall-2026-Tech-Internships/api/jobs.json` ([repository](https://github.com/zshah101/Automated-List-Of-Summer-2027-and-Fall-2026-Tech-Internships)) | Repository is MIT-licensed. We consume only the published API; none of its code is copied | Listed here and shown as "Tech Internship Discovery Feed" on every imported record; each record keeps the original posting link | **Yes** (Milestone 3) | Factual listing metadata; external source links retained. Source-provided sponsorship, H-1B, skill, and category classifications are **not** hard eligibility; they stay in the raw payload only |
 | Greenhouse Job Board API | Direct ATS (layer 2), per-company boards | `GET https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true` ([docs](https://developers.greenhouse.io/job-board.html)) | Public GET endpoints, no authentication, intended for publishing a company's board | The configured organization name; original posting link kept | **Yes** (Milestone 3) | Published board data only. The application-submission endpoint is never used |
 | Ashby Job Postings API | Direct ATS (layer 2), per-company hosted job boards | `GET https://api.ashbyhq.com/posting-api/job-board/{board}?includeCompensation=false` ([docs](https://developers.ashbyhq.com/docs/public-job-posting-api)) | Public GET endpoint, no authentication, intended for publishing a company's hosted job board | The configured organization name; original posting link (`jobUrl`) kept | **Yes** (Milestone 6) | Listed postings (`isListed: true`) only. The authenticated Ashby API and application submission are never used |
+| SmartRecruiters Posting API | Direct ATS (layer 2), per-company | `GET https://api.smartrecruiters.com/v1/companies/{company}/postings` and `.../postings/{id}` ([docs](https://developers.smartrecruiters.com/docs/authentication)) | Documented public data, no authentication | The configured organization name; original posting link kept | **Yes** (Milestone 8) | PUBLIC destination only; see the section below |
+| Workable widget API | Direct ATS (layer 2), per-account | `GET https://www.workable.com/api/accounts/{account}?details=true` | Documented public jobs widget, no key | The configured organization name; original posting link kept | **Yes** (Milestone 8.1) | See the section below |
+| Pinpoint postings JSON | Direct ATS (layer 2), per-company | `GET https://{company}.pinpointhq.com/postings.json` | Documented public endpoint, no key | The configured organization name; original posting link kept | **Yes** (Milestone 8.1) | See the section below |
+| Curated program registry | Layer 3, built in | Reads `backend/data/program_registry.json` from disk; no network | Owner-written facts with official source links | Each entry's official `source_url` | **Yes** (Milestone 8) | See the section below |
 | Lever Postings API | Direct ATS (layer 2), per-company sites | `GET https://api.lever.co/v0/postings/{site}?mode=json` and `https://api.eu.lever.co/...` ([docs](https://github.com/lever/postings-api)) | Public postings API, no authentication | The configured organization name; original posting link kept | **Yes** (Milestone 3) | Published postings only. The authenticated Data API and candidate submission are never used |
 | [`SuryaHarikrishnan/2027-internship-tracker`](https://github.com/SuryaHarikrishnan/2027-internship-tracker) | Reference only | — | Its software license doesn't clearly cover the aggregated listing data | — | **No, excluded** | Its listing data must not be imported. Its ideas may be read as a reference; no code is copied |
 | [`pleasedodisturb/kestrel`](https://github.com/pleasedodisturb/kestrel) | Architectural reference only | — | AGPL-3.0 | — | No | No code copying unless licensing is separately reviewed and approved |
@@ -104,9 +108,9 @@ Last reviewed: 2026-10-03 (Milestone 7 source authority and discovery; Ashby add
 
 One shared rule for every adapter ([ADR-012 §13](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md#13-opportunity-type)): a structured provider field that says intern wins (Lever `commitment`, Ashby `employmentType`, the feed's `program`); otherwise the internship title matcher below; otherwise `other`. Type is a display and discovery aid, never eligibility. Because this changes the normalized form of existing imported postings whose titles match, the first sync after the release reports them as `updated` once; nothing is closed or lost, and since title and description are unchanged it doesn't make any requirement review stale.
 
-### Board scope: internships only (Greenhouse, Lever, and Ashby)
+### Board scope: internships only (every ATS board)
 
-Adding a company board shouldn't flood the catalog with full-time jobs ([ADR-010 §10](decisions/ADR-010-fit-scoring-v1.md#10-ats-scope-internships-only-by-default)). Each Greenhouse, Lever, or Ashby source has a scope, chosen when it's added and changeable on the Sources page:
+Adding a company board shouldn't flood the catalog with full-time jobs ([ADR-010 §10](decisions/ADR-010-fit-scoring-v1.md#10-ats-scope-internships-only-by-default)). Each ATS source has a scope, chosen when it's added and changeable on the Sources page:
 
 - **Internships only** (default): a posting is kept only when its **title** contains, as a whole word (case- and Unicode-normalized), `intern`, `interns`, `internship(s)`, `co-op(s)`, `co op`, `coop(s)`, `apprentice(s)`, or `apprenticeship(s)`. Descriptions are never searched, because full-time postings often mention internship programs. `student`, `new grad`, `junior`, and `entry level` don't count. Limitations: an internship titled without those words is filtered, and a title such as "Internship Program Manager" is kept; choose **All postings** for boards where that matters.
 - **All postings:** everything the board publishes.
@@ -134,7 +138,7 @@ Canonical fields (title, organization, description, application URL, location, r
 
 | Rank | `source_type` | |
 |---|---|---|
-| 0 | `ats` (Greenhouse, Lever, Ashby) | the original posting, with its text |
+| 0 | `ats` (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Pinpoint) | the original posting, with its text |
 | 1 | `public_feed` (the discovery feed) | discovery metadata about someone else's posting |
 | 2 | anything else | |
 
@@ -155,21 +159,15 @@ A feed record proves a board only through the same `provider_identity` function 
 - **Ashby:** ID exactly `ashby:<board>:<uuid>` **and** a matching `https` posting link on `jobs.ashbyhq.com` (same board and posting ID).
 - **SmartRecruiters (Milestone 8):** ID exactly `smartrecruiters:<company>:<digits>` **and** a matching `https` posting link on `jobs.smartrecruiters.com` (`/<company>/<id>` or `/<company>/<id>-<title-slug>`, company compared case-insensitively). Never inferred from the company name.
 
-A link with credentials or an explicit port proves nothing; hosts are compared exactly. Workday, Oracle, Rippling, Workable, and every other provider named in feed IDs are **counted only** (by a fixed list of known ID prefixes; anything else is `other`) — never fetched, scraped, or reverse-engineered. The feed's company label is only a *suggested display name*: when feed rows for one board disagree, the most common label wins (ties alphabetically) and the suggestion is flagged ambiguous. Company names are never identity.
+A link with credentials or an explicit port proves nothing; hosts are compared exactly. Workday, Oracle, Rippling, Workable, and every other provider named in feed IDs are **counted only** (Workable and Pinpoint have adapters since Milestone 8.1, but discovery doesn't suggest them from feed IDs) (by a fixed list of known ID prefixes; anything else is `other`) — never fetched, scraped, or reverse-engineered. The feed's company label is only a *suggested display name*: when feed rows for one board disagree, the most common label wins (ties alphabetically) and the suggestion is flagged ambiguous. Company names are never identity.
 
 Discovery only suggests. `POST /api/sources/discovery/add` (CSRF-protected) creates sources only when the owner selects suggestions and submits: at most 25 per request, validated all-or-nothing; the client sends only `kind`, `identifier`, and `region`, and the server re-derives the current suggestion set and refuses anything not in it. Already-configured suggestions are skipped and reported, never duplicated (the existing unique constraint on `(kind, identifier, region)` is the final guard). New sources default to **Internships only**. Creating a source never syncs it — the owner syncs with the existing controls.
 
-### Production SmartRecruiters companies and registry (2026-10-05)
-
-6 SmartRecruiters companies, all **Internships only**, added from discovery suggestions ranked by unique feed coverage: `abbvie`, `boschgroup`, `eurofins`, `wellmarkinc`, `keenfinity`, `llnl` (26 of the 40 SmartRecruiters feed postings; 19 deduplicated so far, Bosch's remaining matches pending its detail backlog, Eurofins' 4 closed upstream). The Curated Program Registry is enabled and synced (13 programs). Description coverage after activation: 38.7%.
-
-### Production boards (2026-10-04)
-
-20 boards, all **Internships only**, added from discovery suggestions (ranked by feed-only coverage, exact identities): Greenhouse `morsecorpcoop`, `akunacapital`, `hpiq`, `coinbase`, `robinhood`, `verkada`, `waymo`, `devtechnology`, `dvtrading`, `lyft`, `singlestore`, `thenuclearcompany`, `advancedspace`; Lever (global) `hermeus`, `kitware`; Ashby `bedrock-robotics`, `ramp`, `allen-control-systems`, `base-power`, `reflect-orbital`. Description coverage went from 0.0% to 22.4%. Still unsupported (counted only): Workday 595, Oracle 147, SmartRecruiters 40, Rippling 11, Workable 8, other 13 feed postings.
+Which boards are enabled in production, and when each batch was added: [deployment.md](deployment.md), [operations.md](operations.md), [CHANGELOG.md](../CHANGELOG.md), and `GET /api/sources` (the live source list).
 
 ## Common Behavior
 
-- **Network safety:** HTTPS to the five allowlisted API hosts only, public addresses only, 5 s connect / 20 s read timeouts, ≤ 3 redirects (each re-checked), ≤ 20 MB responses, ≤ 3 attempts (429/5xx/timeouts; `Retry-After` honored up to 30 s), a descriptive `User-Agent`. User-entered links are parsed into identifiers and never requested.
+- **Network safety:** HTTPS to the allowlisted provider hosts only (`ALLOWED_HOSTS` in `ingestion/http.py`: the feed host, Greenhouse, Lever global/EU, Ashby, SmartRecruiters, `www.`/`apply.workable.com`, plus exactly one label under `pinpointhq.com`), public addresses only, 5 s connect / 20 s read timeouts, ≤ 3 redirects (each re-checked), ≤ 20 MB responses, ≤ 3 attempts (429/5xx/timeouts; `Retry-After` honored up to 30 s), a descriptive `User-Agent`. User-entered links are parsed into identifiers and never requested.
 - **Deduplication:** same source + external ID first, then exact identifiers; no fuzzy matching. Conflicting identities are recorded as errors and nothing is merged ([ADR-008 §7](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#7-deduplication-order)).
 - **Failure behavior:** fetch, format, and completeness failures fail the run without changing data. One bad item makes the run `partial` and is recorded; other items still import. Only a complete successful snapshot closes postings it no longer contains. Closed postings reopen if they return.
 - **Fit:** adapters never score. Imported postings are scored by the shared evaluation step like any other opportunity ([scoring.md](scoring.md)); feed hints such as sponsorship, H-1B counts, or skill tags stay discovery metadata in the raw payload and affect neither eligibility nor fit.
@@ -184,8 +182,8 @@ Implemented in `backend/app/ingestion/adapters/` ([ADR-008 §2](decisions/ADR-00
 
 | Source | Layer | Status | Notes |
 |---|---|---|---|
-| University/research programs | 3 | Planned | Often seasonal and deadline-driven; start dates matter for time-aware eligibility |
-| Government / nonprofit STEM programs, fellowships | 3 | Planned | Often high-school or incoming-freshman eligible |
+| University/research programs | 3 | Partly implemented | A curated subset ships in the program registry (Milestone 8); automated per-university sources are not built |
+| Government / nonprofit STEM programs, fellowships | 3 | Partly implemented (registry only) | Often high-school or incoming-freshman eligible |
 | Selected company career pages | 4 | Research (ADR-015 §8) | No first-party source passed the gate in M8.1; Netflix/Microsoft (Eightfold sitemap + JSON-LD) are the top YELLOW candidates; provenance would be `career_page` |
 
 ## Required Definition per Source
