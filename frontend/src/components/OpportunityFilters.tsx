@@ -28,6 +28,7 @@ export type FilterName =
   | 'requirements_assessment_status'
   | 'requirement_review'
   | 'deadline_within'
+  | 'needs_date_verification'
 
 interface Props {
   values: Record<FilterName, string>
@@ -217,6 +218,16 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
             ['14', 'Closing within 14 days'],
             ['30', 'Closing within 30 days'],
             ['has_deadline', 'Has a deadline'],
+          ]}
+        />
+        <Select
+          id="filter-date-verification"
+          label="Date verification"
+          value={values.needs_date_verification}
+          onChange={(v) => onChange('needs_date_verification', v)}
+          options={[
+            ['', 'Any'],
+            ['true', 'Needs date verification'],
           ]}
         />
       </div>

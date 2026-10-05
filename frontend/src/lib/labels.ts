@@ -93,6 +93,8 @@ export const sourceKindLabels: Record<SourceKind, string> = {
   greenhouse: 'Greenhouse',
   lever: 'Lever',
   ashby: 'Ashby',
+  smartrecruiters: 'SmartRecruiters',
+  curated_registry: 'Curated program registry',
 }
 
 export const sourceHealthLabels: Record<SourceHealth, string> = {

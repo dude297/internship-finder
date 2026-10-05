@@ -5,6 +5,7 @@ import type { OpportunityPage, OpportunitySummary, Source } from '../api/schemas
 import { EligibilityBadge } from '../components/EligibilityBadge'
 import { FitBadge } from '../components/FitBadge'
 import { OpportunityFilters, type FilterName } from '../components/OpportunityFilters'
+import { DeadlineText, NeedsDateBadge, TypicalWindow } from '../components/DateTrust'
 import { ErrorMessage } from '../components/ui'
 import { isClosingSoon, isDeadlinePassed, localToday } from '../lib/deadlines'
 import {
@@ -29,6 +30,7 @@ const FILTERS: FilterName[] = [
   'requirements_assessment_status',
   'requirement_review',
   'deadline_within',
+  'needs_date_verification',
 ]
 
 function where(o: OpportunitySummary): string {
@@ -72,6 +74,7 @@ function ReviewBadges({ o, today }: { o: OpportunitySummary; today: string }) {
           Closing soon
         </span>
       )}
+      {o.needs_date_verification && <NeedsDateBadge verifyBy={o.verify_by} />}
       {o.pending_requirement_count > 0 && (
         <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-900">
           {o.pending_requirement_count} suggestion
@@ -124,11 +127,10 @@ export function OpportunityListPage() {
     // Ignore responses that arrive after unmount or a newer query, so a slow response can't
     // overwrite the page the user is now looking at.
     let active = true
-    const { availability, sort, deadline_within, ...rest } = JSON.parse(
-      query,
-    ) as typeof values & {
-      offset: number
-    }
+    const { availability, sort, deadline_within, needs_date_verification, ...rest } =
+      JSON.parse(query) as typeof values & {
+        offset: number
+      }
     // The single "Deadline" select carries either a day count or "has a deadline"; both need
     // the browser's local date so the backend's day math matches what the badges show.
     const deadlineParams =
@@ -136,13 +138,14 @@ export function OpportunityListPage() {
         ? { has_deadline: 'true' as const, today: localToday() }
         : deadline_within
           ? { deadline_within: deadline_within as '7' | '14' | '30', today: localToday() }
-          : sort === 'deadline'
+          : sort === 'deadline' || needs_date_verification
             ? { today: localToday() }
             : {}
     api
       .listOpportunities({
         ...rest,
         ...deadlineParams,
+        ...(needs_date_verification ? { needs_date_verification: 'true' as const } : {}),
         availability: availability as 'open' | 'closed' | 'all',
         sort: sort as 'recommended' | 'newest' | 'deadline',
         requirement_review: (rest.requirement_review || undefined) as
@@ -179,6 +182,7 @@ export function OpportunityListPage() {
   )
   const items = page?.items
   const today = localToday()
+  const registry = sources.find((s) => s.kind === 'curated_registry')
 
   return (
     <section className="space-y-4">
@@ -188,6 +192,24 @@ export function OpportunityListPage() {
           Add opportunity
         </Link>
       </div>
+      {registry && (
+        <p>
+          <button
+            type="button"
+            className={secondaryButtonClass}
+            aria-pressed={values.source === registry.id}
+            onClick={() =>
+              update(
+                values.source === registry.id
+                  ? { source: '', sort: '', offset: '' }
+                  : { source: registry.id, sort: 'deadline', offset: '' },
+              )
+            }
+          >
+            Upcoming programs
+          </button>
+        </p>
+      )}
       <OpportunityFilters
         values={values}
         sources={sources}
@@ -236,6 +258,14 @@ export function OpportunityListPage() {
                     <dt className="inline text-slate-500">Where: </dt>
                     <dd className="inline">{where(o)}</dd>
                   </div>
+                  {(o.application_deadline || o.typical_close_window) && (
+                    <div>
+                      <dt className="inline text-slate-500">Deadline: </dt>
+                      <dd className="inline">
+                        <DeadlineText deadline={o.application_deadline} />
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt className="inline text-slate-500">Requirements: </dt>
                     <dd className="inline">
@@ -251,6 +281,7 @@ export function OpportunityListPage() {
                     </dd>
                   </div>
                 </dl>
+                <TypicalWindow o={o} />
               </li>
             ))}
           </ul>
