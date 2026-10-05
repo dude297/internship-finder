@@ -6,6 +6,15 @@ A personal, single-user tool for finding internship and research opportunities, 
 
 > ⚠️ **Status: listing freshness, requirement extraction v2, and independent discovery (Milestone 8.1, released 2026-10-05).** Deployed on Vercel → Render → Neon ([docs/deployment.md](docs/deployment.md)). Log in, keep a private eligibility profile and a Match Profile (skills, courses, projects, interests, location and schedule preferences), sync a broad internship feed plus any Greenhouse, Lever, Ashby, SmartRecruiters, Workable, or Pinpoint company boards you add (internship postings only by default), pick boards from a catalog of officially verified company job boards, see a curated calendar of research and summer programs whose unconfirmed dates are marked as such, and browse opportunities in recommended order: eligibility first, then a deterministic fit score with a "Why this match?" breakdown. Each listing shows how fresh its evidence is (verified on the company's own board, current in the feed, or verification incomplete) and whether it was newly found. Review an imported posting's requirements (deterministic suggestions from its description count only after you accept them), filter by deadline, see eligibility evaluated automatically with plain-language explanations, and track applications. Production sources sync twice a day on a GitHub Actions schedule; the Sources page shows each source's health and how much of the catalog would survive without the community feed. Upload a plain-text or text-based PDF résumé privately; its parsed facts count toward fit only after you accept them. There is no AI, and nothing becomes a requirement without your review. See [PROJECT_STATE.md](PROJECT_STATE.md) for the current state.
 
+<!-- BEGIN GENERATED STATUS (scripts/check_docs.py --write-status) -->
+| | |
+|---|---|
+| **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
+| Production `main` | `203a562` |
+| Production schema | `b7e3d9f1a2c4` |
+| **Current Development** | none |
+<!-- END GENERATED STATUS -->
+
 ## Stack
 
 **Implemented, and provisioned on free plans** ([ADR-004](docs/decisions/ADR-004-technology-stack.md), hosting in [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md)):
