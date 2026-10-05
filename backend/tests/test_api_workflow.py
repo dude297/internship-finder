@@ -303,6 +303,12 @@ def test_list_shows_latest_status_and_tracking(client: TestClient) -> None:
         "source_names",
         "pending_requirement_count",
         "requirements_stale",
+        # ADR-014 §6 (program registry date trust)
+        "program_cycle",
+        "typical_open_window",
+        "typical_close_window",
+        "verify_by",
+        "needs_date_verification",
     }
     assert listed["First Synthetic"]["origin"] == "manual"
     assert listed["First Synthetic"]["availability"] == "manual"
