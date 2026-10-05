@@ -32,7 +32,7 @@ Measured locally on 2026-09-27 against the live discovery feed (disposable datab
 `python -m app.cli source-coverage` and the Sources page's coverage section report, derived on read over open opportunities (nothing stored, [ADR-013 §2](decisions/ADR-013-provider-enrichment-and-source-authority.md#2-ats-source-discovery)):
 
 - **Description coverage %**: active opportunities with a non-empty canonical description, over all active opportunities.
-- **ATS-backed**: active opportunities with an active record from a direct ATS source (Greenhouse, Lever, Ashby).
+- **ATS-backed**: active opportunities with an active record from a direct ATS source (Greenhouse, Lever, Ashby, SmartRecruiters).
 - **Feed-only**: active opportunities whose only active automated records are from the discovery feed.
 - **Enrichable**: feed-only opportunities whose feed record proves a supported provider identity a source suggestion covers.
 
@@ -78,6 +78,30 @@ Code release (merge, deploy) is separate from source activation (ADR-013 §9). E
 **Expected one-time side effect:** the first full feed sync after this release adds an `ashby:<board>:<posting>` identifier to feed postings that match an Ashby board (ADR-013 §2); about 60 Ashby-backed feed postings report as `updated` once, because the identifier is part of the content hash. This is normal — nothing closes, and no requirement-extraction fingerprint input changes.
 
 **Rollback.** Disable a source rather than deleting it (toggle on the Sources page, or `UPDATE ingestion_sources SET enabled = false WHERE kind = '<kind>' AND identifier = '<board>'`): disabling stops future syncs and leaves its existing records and opportunities untouched. A disabled source's canonical text stays as the last-owned text until another source either falls back onto the opportunity or the opportunity closes (ADR-013 §5); nothing is deleted or rewritten by disabling alone.
+
+## Milestone 8 release and activation notes (prepared, not executed)
+
+Release and activation are separate, as in Milestone 7. Nothing here has run against production.
+
+**Release order** (migration `a8c3e5f7b9d1`; see [data-model.md](data-model.md#milestone-8-migration-a8c3e5f7b9d1) for the compatibility rules):
+
+1. Disable the scheduled sync workflow for the window (`gh workflow disable sync-production.yml`): the migration seeds a `curated_registry` source the Milestone 7.1 code can't read, so a scheduled run between migrate and deploy would fail.
+2. Merge; confirm CI green on the merge commit.
+3. Migrate Neon to `a8c3e5f7b9d1`, then deploy Render immediately, then Vercel (the 7.1 bundle rejects a source list containing the registry). Hard-reload open tabs.
+4. Hosted smoke; re-enable the workflow.
+
+**Activation** (owner-approved, bounded, like the Milestone 7 runbook):
+
+1. `source-coverage` before (read-only).
+2. Sync the built-in **Curated Program Registry** once manually: expect 13 created, run `success`, and only verified dates in deadline columns. Programs needing date verification show the badge from their `verify_by` date.
+3. From Suggested Sources, add a bounded batch of SmartRecruiters companies (Internships only); sync each manually. A first sync may be `partial` if a company has more than 100 internship postings needing detail (nothing closes; later runs finish it).
+4. Verify deduplication (feed postings attach to the SmartRecruiters record, no duplicates, no closures), `source-coverage` after, count pending suggestions, accept none.
+
+**Expected one-time side effect:** the first feed sync after the release adds a `smartrecruiters:<company>:<id>` identifier to the ~40 feed postings that name a SmartRecruiters posting, so they report as `updated` once (the identifier is part of the content hash). No requirement-extraction input changes and nothing closes. Items of every other source hash exactly as before (the new registry date fields are left out of the hash while unset).
+
+**Request bound:** a SmartRecruiters source makes at most 50 list + 100 detail requests per run (each with the HTTP client's ≤ 3 attempts); the registry makes none. The ADR-013 cap of 50 enabled ATS sources still applies, SmartRecruiters included.
+
+**Rollback:** disable a SmartRecruiters source or the registry to stop its syncs (records and opportunities stay). Rolling code back to Milestone 7.1 needs the schema downgraded first, which refuses while SmartRecruiters sources or registry records exist: delete those sources' records/opportunities deliberately (or keep the Milestone 8 code).
 
 ## Source Health (implemented, Milestone 6)
 
