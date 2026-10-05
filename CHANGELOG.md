@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+## Milestone 8.1 (released 2026-10-05)
+
+Released 2026-10-05: [PR #25](https://github.com/dude297/internship-finder/pull/25) merged at the approved head `178fb47`; `main` `203a562` (post-merge CI `37386512685` green); Neon migrated `a8c3e5f7b9d1` → `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`; Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`; hosted smoke 14/14. The v2 requirement scan and catalog activation are owner-gated and not yet run. Record: [deployment.md](docs/deployment.md#milestone-81-release-2026-10-05).
+
 ### Added
 
 - Milestone 8.1: listing freshness, requirement extraction v2, and independent discovery ([ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)). Migration `b7e3d9f1a2c4` (CHECK only).
@@ -13,6 +17,7 @@ All notable changes to this project are documented here.
   - Independent Discovery Coverage on Source Coverage (opportunities that survive without the community feed) with a direct/registry/manual/feed-only breakdown.
   - Direct Source Catalog (`backend/data/direct_source_catalog.json`, 36 officially verified boards) with **Verified Direct Sources** bulk add on the Sources page.
   - Workable and Pinpoint adapters (documented, keyless public job-board APIs).
+  - An empty snapshot from a source with 10+ open postings fails instead of closing them all.
   - Research: [catalog freshness audit](docs/research/catalog-freshness-audit.md), [direct company source matrix](docs/research/direct-company-source-matrix.md), [tracker gap audit](docs/research/tracker-gap-audit.md), [extractor v2](docs/research/requirement-extractor-v2.md).
 
 ## Milestone 8 (released 2026-10-05)

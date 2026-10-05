@@ -62,9 +62,9 @@ Same harness, on the M8.1 branch: 50 ATS boards + feed — first sync 122.2 s (2
 
 Activating the whole Direct Source Catalog would bring production to 26 + 33 = 59 direct sources, above the measured cap of 50. Activate in batches (largest-internship boards first), watch the scheduled run's elapsed time after each batch, and re-measure before passing 50.
 
-## Milestone 8.1 activation notes (prepared, not executed)
+## Milestone 8.1 release and activation (release executed 2026-10-05; activation pending)
 
-Production stays on Milestone 8 until the owner approves. After merge: migrate Neon to `b7e3d9f1a2c4` (CHECK only; the M8 app is unaffected), deploy Render then Vercel, smoke (freshness badges, filters, Source Coverage independent metric, Verified Direct Sources list). Then, only with owner approval: `python -m app.cli scan-requirements` re-extracts every opportunity with `requirements-rules` v2 (read-only measurement on 2026-10-05: 18 → 244 pending suggestions over 194 opportunities; reviewed decisions are kept, nothing is auto-accepted); add catalog sources in bounded batches from **Verified Direct Sources**.
+Released 2026-10-05 ([record](deployment.md#milestone-81-release-2026-10-05)): scheduler paused, merge, migrate Neon to `b7e3d9f1a2c4` (CHECK only; the M8 app is unaffected), Render, Vercel, read-only smoke, scheduler re-enabled. Still pending, only with owner approval: `python -m app.cli scan-requirements` re-extracts every opportunity with `requirements-rules` v2 (read-only measurement on 2026-10-05: 18 → 244 pending suggestions over 194 opportunities; reviewed decisions are kept, nothing is auto-accepted); add catalog sources in bounded batches from **Verified Direct Sources**.
 
 ## Milestone 7 production activation runbook (executed 2026-10-04)
 

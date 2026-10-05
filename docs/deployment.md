@@ -6,10 +6,10 @@ Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.
 
 | Part | State |
 |---|---|
-| Neon | **Provisioned.** Migrated to `a8c3e5f7b9d1` on 2026-10-05 (Milestone 8, `alembic check` clean). Owner created (CLI, `getpass`). 1,724 opportunities (1,626 open) after the Milestone 8 activation. |
-| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-db1j19hsrm7s73bu01dg` of `9263860` (Milestone 8) live (2026-10-05 05:08 UTC). Auto-deploy off, branch `main`. The only Render service. |
-| Vercel | **Deployed** (production `dpl_CNabjmvDw2fyAus25jqVa781D1a3`, `Ready`, aliased to `internship-finder-pi.vercel.app`; 2026-10-05 from a clean checkout of `9263860` via CLI). |
-| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)); Milestone 6 release and smoke on 2026-10-02 ([below](#milestone-6-release-2026-10-02)); Milestone 7 release and ATS activation on 2026-10-04 ([below](#milestone-7-release-2026-10-04)); Milestone 8 release and activation on 2026-10-05 ([below](#milestone-8-release-2026-10-05)). |
+| Neon | **Provisioned.** Migrated to `b7e3d9f1a2c4` on 2026-10-05 (Milestone 8.1, `alembic check` clean). Owner created (CLI, `getpass`). 1,847 opportunities (1,749 open) at the Milestone 8.1 release. |
+| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-db22sfvlot8c73dki4lg` of `203a562` (Milestone 8.1) live (2026-10-05 23:10 UTC). Auto-deploy off, branch `main`. The only Render service. |
+| Vercel | **Deployed** (production `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`, `Ready`, aliased to `internship-finder-pi.vercel.app`; 2026-10-05 from a clean checkout of `203a562` via CLI). |
+| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)); Milestone 6 release and smoke on 2026-10-02 ([below](#milestone-6-release-2026-10-02)); Milestone 7 release and ATS activation on 2026-10-04 ([below](#milestone-7-release-2026-10-04)); Milestone 8 release and activation on 2026-10-05 ([below](#milestone-8-release-2026-10-05)); Milestone 8.1 release on 2026-10-05 ([below](#milestone-81-release-2026-10-05)). |
 | Scheduled sync | **Active.** GitHub environment `production` (deployment branches: `main` only) with secret `PRODUCTION_DATABASE_URL` (Neon pooled URL); first dispatch green 2026-10-02. |
 
 ## Topology
@@ -202,6 +202,25 @@ Stopped at 20 sources: the next suggestions cover about 3 feed postings each. Ro
 | Synthetic smoke (app service layer against Neon: the functions the API routes call, no raw SQL writes) | `ZZZ M7.1 RELEASE SMOKE — Synthetic STEM Tutor Volunteer …`, `Synthetic Example Org`, minimum age 16, deadline 2999-01-01: created as `volunteer` and manually curated; Type filter `volunteer` finds it, `internship` excludes it; `has_deadline` finds it; evaluated on create (`needs_verification`, `ELIG-AGE-001` ran); application tracked as `saved`; edited to `other` and back. 13/13 PASS |
 | Cleanup | Exact UUID + title + organization + curated guards, then the same delete as `DELETE /api/opportunities/{id}`. 0 rows left in opportunities, evaluations, requirements, source records, applications; 0 volunteer opportunities; opportunity and evaluation counts identical to before the smoke |
 | Not done by design | No automated volunteer source (research only: [volunteer-sources-2027.md](research/volunteer-sources-2027.md)) |
+
+### Milestone 8.1 release (2026-10-05)
+
+Read-only aggregates only; no row contents or connection details were printed.
+
+| Step | Result |
+|---|---|
+| Pre-check | Last scheduled run [37373902749](https://github.com/dude297/internship-finder/actions/runs/37373902749) (21:07 UTC) green: 28 run, 0 failed, sync 204.6 s (workflow 14 min, mostly outside the sync: runner queue and setup); Bosch `partial`, deferred backlog 191 → 98 |
+| Scheduler pause | `sync-production.yml` disabled (`disabled_manually`) before the merge; no run in progress |
+| Baseline | `a8c3e5f7b9d1`; 1,847 opportunities (1,749 open); 1,955 source records; 28 sources; 0 requirements; 19 candidates, all pending (v1); 7,257 evaluations; 0 applications; 34 MB |
+| Merge | [PR #25](https://github.com/dude297/internship-finder/pull/25) merged with a merge commit (the branch contains merges from parallel lanes) at the approved head `178fb47`; `main` `203a562`, tree identical to the head; post-merge CI [37386512685](https://github.com/dude297/internship-finder/actions/runs/37386512685) green (backend, frontend, e2e) |
+| Migration | `a8c3e5f7b9d1` → `b7e3d9f1a2c4` at 23:09:31 UTC (CHECK only: `workable`, `pinpoint` kinds); `alembic current` at head, `alembic check` clean |
+| Render | `dep-db22sfvlot8c73dki4lg` of `203a562` via the deploys API, `live` 23:10:51 UTC (80 s after migrating); `/api/health` `200`, `/docs` and `/openapi.json` `404`, `/api/sources` and `/api/sources/catalog` `401` unauthenticated |
+| Vercel | `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`, `Ready`, aliased, from a clean detached checkout of `203a562` (`.env.local` and checkout deleted). `/api/health`, `/login`, `/sources`, `/opportunities` `200`; `/api/nope` `404`; `/api/sources/catalog` `401`; `/api/*` `Cache-Control: no-store`, `X-Frame-Options: DENY`; bundle contains "ATS verified", "Verification incomplete", "Verified Direct Sources", "Independent discovery coverage", "Recently discovered", Workable, Pinpoint; no Render hostname; no "guaranteed"/"definitely open" wording |
+| Hosted smoke (service layer against Neon, `READ ONLY` transaction, rolled back) | 28 sources load; the list serializes freshness for every sort (`recommended`, `newest`, `deadline`, `discovered`); freshness across all 1,847: 419 `direct_verified`, 1,020 `feed_current`, 297 `source_warning` (Bosch: never completed a full snapshot), 13 `program_listed`, 98 `closed`; filters: 419 direct verified, 297 needs review, 1,749 new within 7 days (the catalog is about a week old), 438 within 1 day; Independent Discovery Coverage **732 / 1,749 (41.9%)**, feed-only 1,017, `independent + feed_only == open`; catalog 36 entries, 3 configured (Waymo, Lyft, Coinbase); Workable/Pinpoint links parse, lookalike/nested/`http` Pinpoint hosts refused. **14/14 PASS.** No owner login (the password isn't available to the release shell) |
+| Scheduler | Re-enabled; a manual dispatch ([run 37387224375](https://github.com/dude297/internship-finder/actions/runs/37387224375)) was still queued for a GitHub runner 25+ minutes later. Result to be recorded |
+| Not done (owner-gated) | `requirements-rules` v2 catalog scan (19 → ~244 pending suggestions, read-only estimate); adding catalog boards. Production requirements, assessment statuses, and eligibility are unchanged by the release |
+
+Rollback: Render/Vercel rollback to the Milestone 8 deploys works on the migrated schema (the CHECK only widened). Downgrading Neon refuses while a Workable or Pinpoint source exists (none do).
 
 ### Milestone 8 release (2026-10-05)
 

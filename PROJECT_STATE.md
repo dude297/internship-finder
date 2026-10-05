@@ -3,9 +3,9 @@
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
 Last Updated: 2026-10-05
-Current Milestone: **Milestone 8 — Structured Source Expansion + Curated Program Registry released 2026-10-05** ([ADR-014](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md)): registry live, 6 SmartRecruiters companies active, description coverage 38.7%. Milestone 7.1 (volunteer type) and Milestone 7 (provider enrichment, [ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md)) are released. Earlier milestones: see the sections below.
-Current Production Version: Milestone 8 — `main` `9263860` on https://internship-finder-pi.vercel.app (Neon `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`; Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`). 20 Greenhouse/Lever/Ashby boards, 6 SmartRecruiters companies, the Curated Program Registry, and the feed; scheduled sync active.
-Active Development Branch: `feature/m8-1-freshness-requirements` (Milestone 8.1, [ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md); PR open for owner review, not merged or deployed). Remote: https://github.com/dude297/internship-finder.
+Current Milestone: **Milestone 8.1 — Listing Freshness, Requirement Extraction v2, Independent Discovery released 2026-10-05** ([ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)): derived freshness, New/discovered filters, `requirements-rules` v2 (deployed; catalog re-scan not yet run), Independent Discovery Coverage, the Direct Source Catalog (36 verified boards, none newly activated), Workable and Pinpoint adapters. Milestone 8 (SmartRecruiters + curated registry, [ADR-014](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md)) and earlier: see the sections below.
+Current Production Version: Milestone 8.1 — `main` `203a562` on https://internship-finder-pi.vercel.app (Neon `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`; Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`). 13 Greenhouse, 2 Lever, 5 Ashby, 6 SmartRecruiters sources, the Curated Program Registry, and the feed (28 sources); scheduled sync active.
+Active Development Branch: none (Milestone 8.1 released). Remote: https://github.com/dude297/internship-finder.
 
 ## Repository Visibility
 
@@ -19,7 +19,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 7 (provider enrichment + source coverage) is released (2026-10-04) and activated: production runs `main` `bc23629` with 20 direct ATS boards, and description coverage rose from 0.0% to 22.4%. Milestone 7.1 (volunteer opportunity type) is released too (2026-10-04): production runs `main` `0a636e2`, Neon at `f2a7c9d4e1b3`.
+Milestone 8.1 is released (2026-10-05, [PR #25](https://github.com/dude297/internship-finder/pull/25)). Production shows derived listing freshness and Independent Discovery Coverage (732 / 1,749 open = 41.9% at release). Two owner-gated activation steps are pending: the `requirements-rules` v2 catalog scan (read-only estimate: 19 → ~244 pending suggestions) and adding Direct Source Catalog boards in batches (keep enabled direct sources ≤ 50 until re-measured).
 
 ## Status Summary
 
@@ -32,7 +32,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
 | Opportunity ingestion | **Implemented and deployed** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`). Since Milestone 6: Ashby boards (no production Ashby source), a scheduled GitHub Actions sync (active since 2026-10-02), derived source health ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) |
-| Requirement suggestions and review | **Implemented and deployed** (`requirements-rules` v1, migration `e6d1a4b8c2f9`, applied to Neon 2026-10-02; [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). Suggestions never affect eligibility until accepted |
+| Requirement suggestions and review | **Implemented and deployed** (`requirements-rules` v2 deployed 2026-10-05; the catalog re-scan hasn't run, so stored suggestions are still v1; v1 since migration `e6d1a4b8c2f9`, applied to Neon 2026-10-02; [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). Suggestions never affect eligibility until accepted |
 | Eligibility | **Implemented** v1 (rules version `v1`), evaluated automatically (only when inputs change) |
 | Fit scoring and ranking | **Implemented and deployed** (scoring `v1`, [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`, applied to Neon 2026-09-30) |
 | Application tracking | **Implemented** |
@@ -40,6 +40,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local and hosted) |
 | Profile source ingestion | **Implemented and deployed** ([ADR-011](docs/decisions/ADR-011-profile-source-ingestion-and-review.md), migration `c5a1e0f3d7b2`, applied to Neon 2026-10-01) |
+| Listing freshness and independent discovery | **Implemented and deployed** (Milestone 8.1, [ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)): derived freshness, New/discovered filters, Independent Discovery Coverage, Direct Source Catalog (36 boards), Workable and Pinpoint adapters, empty-snapshot closure guard |
 | Provider enrichment and source coverage | **Implemented, deployed, activated** (Milestone 7, released 2026-10-04, 20 production ATS boards; [ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md); no migration). ATS > feed authority with fallback, network-free ATS discovery from the feed, bulk add of suggested boards, Source Coverage on the Sources page, ATS-first sync ordering |
 
 ### Selected stack
@@ -100,7 +101,9 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 
 ## In Progress
 
-### Milestone 8.1 (in review; not merged, not deployed)
+### Milestone 8.1 (released 2026-10-05 via PR #25)
+
+Release record: [deployment.md](docs/deployment.md#milestone-81-release-2026-10-05).
 
 [ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md). Migration `b7e3d9f1a2c4` (CHECK only: `workable`, `pinpoint` source kinds).
 
@@ -112,7 +115,7 @@ Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests 
 - **Workable and Pinpoint adapters** (documented keyless APIs), hostile-reviewed.
 - **Feed-off resilience** test: feed disabled or failing → direct sources, registry, ranking, eligibility, fit, applications, scheduled sync all work.
 - **Research:** [freshness audit](docs/research/catalog-freshness-audit.md), [company source matrix](docs/research/direct-company-source-matrix.md) (87 companies), [tracker gap audit](docs/research/tracker-gap-audit.md) (live-link pings rejected).
-- **Production:** unchanged on Milestone 8.
+- **Production:** released 2026-10-05 (`main` `203a562`, Neon `b7e3d9f1a2c4`). v2 scan and catalog activation not run (owner-gated).
 
 
 ### Milestone 8 (released 2026-10-05 via PR #23)
@@ -141,7 +144,7 @@ Milestone 7 review ([ADR-013](docs/decisions/ADR-013-provider-enrichment-and-sou
 - **Scheduler:** direct ATS sources sync before the feed; one failing source doesn't stop the others.
 - **Requirements:** a takeover that changes the description runs the existing `refresh_candidates()`; candidates stay pending and eligibility is unchanged until owner review.
 - **Validation (2026-10-04, local):** backend ruff/format/pyright clean, 992 tests at `b1dd456` plus focused suites after later fixes (identity/discovery 60, authority/ingestion 68, stress 6); frontend lint/format/typecheck/109 Vitest/build; Playwright 10/10 twice on one reused database. Two independent hostile reviews found no BLOCKER/HIGH; the one MEDIUM (trailing newline accepted by `$`-anchored identity patterns) is fixed. Performance: [operations.md](docs/operations.md#operational-source-cap) (recommended cap 50 ATS sources).
-- **Production:** still Milestone 6. Activation follows the [Milestone 7 runbook](docs/operations.md#milestone-7-production-activation-runbook-prepared-not-executed) after merge.
+- **Production:** released 2026-10-04; activation followed the [Milestone 7 runbook](docs/operations.md#milestone-7-production-activation-runbook-executed-2026-10-04).
 
 ## Milestone 4 (complete; merged via PR #9)
 
@@ -233,7 +236,9 @@ None open. Fixed during hosted validation (2026-09-29):
 
 ## Database State
 
-Current (2026-10-04, after the Milestone 7.1 release): migration `f2a7c9d4e1b3`; 1,409 opportunities (1,313 open, 294 with a description); 1,496 source records; 21 ingestion sources (20 ATS + the feed); 6,796 evaluations, every latest `needs_verification`; 0 canonical requirements; 4 pending candidates; 0 applications; 29 MB. Older snapshots below.
+Current (2026-10-05, at the Milestone 8.1 release): migration `b7e3d9f1a2c4`; 1,847 opportunities (1,749 open); 1,955 source records; 28 ingestion sources; 7,257 evaluations, every latest `needs_verification`; 0 canonical requirements; 19 pending candidates (all v1); 0 applications; 34 MB.
+
+After Milestone 7.1 (2026-10-04): migration `f2a7c9d4e1b3`; 1,409 opportunities (1,313 open, 294 with a description); 1,496 source records; 21 ingestion sources (20 ATS + the feed); 6,796 evaluations; 0 canonical requirements; 4 pending candidates; 29 MB. Older snapshots below.
 
 Neon Free (project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`) is migrated to `c5a1e0f3d7b2` (2026-10-01, `alembic check` clean), holds the owner account, and holds 1,055 opportunities. Final counts after the Milestone 5 smoke (2026-10-01, aggregates only): 1,055 opportunities and source records; 6,330 evaluations (4,220 with fit); 1,055 latest evaluations, all with fit and scoring version `v1`; 0 profile sources; 0 profile source artifacts; 10 profile facts (all manual, all `accepted`); 1 profile; 1 owner; 1 ingestion source; 2 runs; 23 MB. Schema head: migration `c5a1e0f3d7b2` (Milestone 5: `profile_source_artifacts`; `profile_sources` upload metadata; `profile_facts.review_state`) on top of `b41e7c9d2f60` (Milestone 4: `profiles` fit preferences; nullable fit columns on `opportunity_evaluations`; `ingestion_sources.scope`; `ingestion_runs.filtered_count`; additive only, no new tables) on top of `92a17353e5a8` (Milestone 3.5 reconciliation of `uq_ingestion_runs_one_running_per_source`), the immutable `726372d627b8` (15 tables), `7d7f4f8b9a3c`, and `3b9c6b57bb60` ([data-model.md](docs/data-model.md)). Verified on disposable PostgreSQL 18 (local Docker; CI on the PR): upgrade, `alembic check`, downgrade through every revision to base, upgrade again, and the stale-`7d7f4f8b9a3c` repair.
 
@@ -300,6 +305,7 @@ Known limitations and debt:
 - Tech Internship Discovery Feed (zshah101 public JSON API) — built in, manual sync.
 - SmartRecruiters companies — 6 in production since 2026-10-05 (Internships only), and the built-in Curated Program Registry (13 programs) ([docs/sources.md](docs/sources.md#production-smartrecruiters-companies-and-registry-2026-10-05)).
 - Greenhouse boards, Lever sites, and Ashby boards — 20 in production since 2026-10-04 (suggested from the feed, Internships only; [docs/sources.md](docs/sources.md#production-boards-2026-10-04)). Synced twice daily with the feed.
+- Workable and Pinpoint: adapters available since Milestone 8.1; none configured. The Direct Source Catalog lists 36 verified boards (3 configured: Waymo, Lyft, Coinbase) for owner-approved activation ([docs/sources.md](docs/sources.md#direct-source-catalog-milestone-81-adr-015-6)).
 - Manual entry.
 - Excluded: `SuryaHarikrishnan/2027-internship-tracker` listing data (licensing unclear).
 
@@ -318,7 +324,12 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Review the Milestone 8.1 PR. After approval: migrate Neon to `b7e3d9f1a2c4`, deploy Render then Vercel, smoke; then (owner-approved) run the v2 requirement scan and add catalog sources in batches, keeping enabled direct sources ≤ 50 until re-measured ([operations.md](docs/operations.md#milestone-81-activation-notes-prepared-not-executed)).
+Milestone 8.1 is released. Pending, owner-approved only:
+
+1. Run the `requirements-rules` v2 catalog scan (`python -m app.cli scan-requirements`; read-only estimate 19 → ~244 pending suggestions, nothing auto-accepted).
+2. Add Direct Source Catalog boards from **Verified Direct Sources** in batches, keeping enabled direct sources ≤ 50 until a scheduled run is re-measured.
+
+Also watch Bosch's backlog (98 deferred at 2026-10-05 21:07 UTC) clear and its Source Health return to healthy. Recommended next milestone: a source-retirement command and a feed-free first run ([ADR-015 §11](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)).
 
 Previously: Milestone 8 is released. Watch Bosch's backlog finish (Source Health returns to healthy after its detail backlog is fetched) and the next scheduled runs' elapsed time; recheck registry programs on their `verify_by` dates. The next milestone is not started.
 
@@ -326,12 +337,14 @@ Previously: Review the Milestone 8 PR (`feature/m8-source-expansion` → `main`)
 
 Previously: Review the Milestone 8 research ([PR #18](https://github.com/dude297/internship-finder/pull/18)) and the small debt PR ([#20](https://github.com/dude297/internship-finder/pull/20)); then Milestone 8 Tier 1 under a new ADR-014 (SmartRecruiters adapter + curated program registry).
 
-Previously: Review the Milestone 7 PR (`feature/m7-provider-enrichment` → `main`). After approval: merge, deploy (Render, then Vercel; no migration), then follow the [Milestone 7 activation runbook](docs/operations.md#milestone-7-production-activation-runbook-prepared-not-executed): a bounded first batch of suggested boards, manual syncs, coverage before/after, every suggestion left pending.
+Previously: Review the Milestone 7 PR (`feature/m7-provider-enrichment` → `main`). After approval: merge, deploy (Render, then Vercel; no migration), then follow the [Milestone 7 activation runbook](docs/operations.md#milestone-7-production-activation-runbook-executed-2026-10-04): a bounded first batch of suggested boards, manual syncs, coverage before/after, every suggestion left pending.
 
 Previously: review the Milestone 6 PR. After approval, follow its release runbook (merge → migrate Neon → deploy Render and Vercel → hosted smoke → configure the `production` environment and secret → one manual sync dispatch → verify health → candidate scan only with explicit approval). Separately, the owner replaces the hosted synthetic Match Profile with the real one through the app.
 
 ## Recent Important Decisions
 
+- 2026-10-05: Milestone 8.1 released. PR #25 merged (merge commit) as `main` `203a562`; Neon migrated to `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`, Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`; hosted smoke 14/14. v2 scan and catalog activation deferred to the owner.
+- 2026-10-05: ADR-015 accepted: derived listing freshness (never stored), first-seen "New", live-link pings rejected, `requirements-rules` v2, Independent Discovery Coverage, the Direct Source Catalog, Workable and Pinpoint adapters, an empty-snapshot closure guard; no first-party company adapter yet. Migration `b7e3d9f1a2c4`.
 - 2026-10-05: Milestone 8 released. PR #23 → `main` `9263860`; Neon migrated to `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`, Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13); 6 SmartRecruiters companies activated; coverage 22.4% → 38.7%. Runbook rule added: sync the feed on new code before adding sources whose feed identity that release introduces.
 - 2026-10-04: ADR-014 accepted (on the Milestone 8 branch): SmartRecruiters public Posting API as an ATS source with bounded detail fetching and partial-run semantics; a multi-request `collect` adapter hook; the curated program registry as a built-in automated source (own `curated_registry` provenance, so it can update its own entries while owner edits still win); verified vs typical dates and `verify_by`. Migration `a8c3e5f7b9d1`. Oracle, Workday, USAJOBS excluded from M8.
 - 2026-10-04: Milestone 7.1 released. PR #19 → `main` `0a636e2`; Neon migrated to `f2a7c9d4e1b3`; Render `dep-db1c2oc9v7es73eshpd0`, Vercel `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`; synthetic volunteer smoke 13/13, cleaned.

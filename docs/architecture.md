@@ -2,7 +2,7 @@
 
 ## Current
 
-Milestones 0–4 are merged. Milestone 4 (Match Profile, fit scoring v1, eligibility-first ranking, internships-only board scope, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)) is released from `main`. Milestone 3.5 (hosted deployment foundation, [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md)) is deployed from `main`: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL). No schedulers in released production. Milestone 6 (unreleased, [ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) adds requirement suggestions and review, a GitHub Actions source-sync schedule that talks to Neon directly, derived source health, Ashby boards, shared type classification, and deadline discovery. The local topology below is unchanged; the hosted one is in [deployment.md](deployment.md#topology).
+Released through Milestone 8.1 (2026-10-05, [ADR-015](decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)). Production: Vercel (static build + same-origin `/api` rewrite) → Render (FastAPI) → Neon (PostgreSQL), plus a twice-daily GitHub Actions source sync that talks to Neon directly ([deployment.md](deployment.md#topology)). Sources: the community discovery feed (optional, supplemental), direct ATS adapters (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Pinpoint), the curated program registry, and manual entry, all through one ingestion pipeline (ADR-002, ADR-008) with ATS > feed authority (ADR-013). Derived on read, never stored: source health (ADR-012), listing freshness and Independent Discovery Coverage (ADR-015). Requirement suggestions (`requirements-rules` v2) stay pending until the owner reviews them (ADR-012). The local topology below is unchanged except for the added provider hosts.
 
 ```text
 Browser ── same origin ──► Vite dev server (localhost:5173)
@@ -19,6 +19,9 @@ Browser ── same origin ──► Vite dev server (localhost:5173)
    │                                  ▼         ▼                 boards-api.greenhouse.io
    └───────────────────────── PostgreSQL 18 (Docker Compose)      api.lever.co / api.eu.lever.co
                                                                   api.ashbyhq.com (Milestone 6)
+                                                                  api.smartrecruiters.com (M8)
+                                                                  www./apply.workable.com (M8.1)
+                                                                  <company>.pinpointhq.com (M8.1)
 ```
 
 ### Backend (`backend/app/`)
