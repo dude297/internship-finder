@@ -309,6 +309,9 @@ def test_list_shows_latest_status_and_tracking(client: TestClient) -> None:
         "typical_close_window",
         "verify_by",
         "needs_date_verification",
+        "freshness",
+        "freshness_checked_at",
+        "program_last_verified",
     }
     assert listed["First Synthetic"]["origin"] == "manual"
     assert listed["First Synthetic"]["availability"] == "manual"

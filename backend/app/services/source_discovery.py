@@ -72,7 +72,7 @@ def _suggestion_identity(external_id: str, source_url: str | None) -> Suggestion
     return None
 
 
-def _key(kind: SupportedKind, identifier: str, region: SourceRegion | None) -> str:
+def suggestion_key(kind: SupportedKind, identifier: str, region: SourceRegion | None) -> str:
     """Same format as IngestionSource.key."""
     parts = [kind.value, *([region.value] if region else []), identifier]
     return ":".join(parts)
@@ -206,7 +206,7 @@ def _feed_rows(
     return [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows]
 
 
-def _configured_keys(db: Session) -> set[SuggestionKey]:
+def configured_keys(db: Session) -> set[SuggestionKey]:
     rows = db.execute(
         select(IngestionSource.kind, IngestionSource.identifier, IngestionSource.region).where(
             IngestionSource.kind.not_in(
@@ -223,7 +223,7 @@ def discover(db: Session) -> SourceDiscoveryResponse:
     active_opportunities, with_description = counts.active, counts.with_description
     feed_only_sql = counts.feed_only
     rows = _feed_rows(db)
-    configured = _configured_keys(db)
+    configured = configured_keys(db)
 
     suggestions: dict[SuggestionKey, _SuggestionAgg] = {}
     providers: dict[str, _ProviderAgg] = {}
@@ -258,7 +258,7 @@ def discover(db: Session) -> SourceDiscoveryResponse:
                 kind=kind,
                 identifier=identifier,
                 region=region,
-                key=_key(kind, identifier, region),
+                key=suggestion_key(kind, identifier, region),
                 suggested_display_name=name,
                 display_name_ambiguous=ambiguous,
                 matching_opportunities=len(agg.opportunity_ids),
@@ -320,7 +320,7 @@ def add_from_discovery(db: Session, request: DiscoveryAddRequest) -> DiscoveryAd
     for selection in request.sources:
         selection_key: SuggestionKey = (selection.kind, selection.identifier, selection.region)
         if selection_key in seen:
-            raise ValueError(f"Duplicate selection: {_key(*selection_key)}")
+            raise ValueError(f"Duplicate selection: {suggestion_key(*selection_key)}")
         seen.add(selection_key)
 
     current = discover(db)
@@ -334,7 +334,7 @@ def add_from_discovery(db: Session, request: DiscoveryAddRequest) -> DiscoveryAd
         selection_key = (selection.kind, selection.identifier, selection.region)
         suggestion = by_key.get(selection_key)
         if suggestion is None:
-            raise ValueError(f"{_key(*selection_key)} is not a current suggestion.")
+            raise ValueError(f"{suggestion_key(*selection_key)} is not a current suggestion.")
         if suggestion.already_configured:
             skipped.append(DiscoveryAddSkipped(key=suggestion.key, reason="already_configured"))
             continue

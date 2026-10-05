@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "organization": "Anthropic",
+      "kind": "greenhouse",
+      "identifier": "anthropic",
+      "region": null,
+      "careers_url": "https://www.anthropic.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/anthropic/jobs (documented public API, HTTP 200, board name \"Anthropic\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "ai"
+      ]
+    },
+    {
+      "organization": "Databricks",
+      "kind": "greenhouse",
+      "identifier": "databricks",
+      "region": null,
+      "careers_url": "https://www.databricks.com/company/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/databricks/jobs (documented public API, HTTP 200, board name \"Databricks\"; posting links on databricks.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "ai",
+        "cloud",
+        "software"
+      ]
+    },
+    {
+      "organization": "Cloudflare",
+      "kind": "greenhouse",
+      "identifier": "cloudflare",
+      "region": null,
+      "careers_url": "https://www.cloudflare.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs (documented public API, HTTP 200, board name \"Cloudflare\"; posting links on boards.greenhouse.io)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "cloud",
+        "software"
+      ]
+    },
+    {
+      "organization": "Stripe",
+      "kind": "greenhouse",
+      "identifier": "stripe",
+      "region": null,
+      "careers_url": "https://stripe.com/jobs",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/stripe/jobs (documented public API, HTTP 200, board name \"Stripe\"; posting links on stripe.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "fintech",
+        "software"
+      ]
+    },
+    {
+      "organization": "MongoDB",
+      "kind": "greenhouse",
+      "identifier": "mongodb",
+      "region": null,
+      "careers_url": "https://www.mongodb.com/company/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/mongodb/jobs (documented public API, HTTP 200, board name \"MongoDB\"; posting links on www.mongodb.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "cloud",
+        "software"
+      ]
+    },
+    {
+      "organization": "Datadog",
+      "kind": "greenhouse",
+      "identifier": "datadog",
+      "region": null,
+      "careers_url": "https://careers.datadoghq.com/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/datadog/jobs (documented public API, HTTP 200, board name \"Datadog\"; posting links on careers.datadoghq.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "cloud",
+        "software"
+      ]
+    },
+    {
+      "organization": "Figma",
+      "kind": "greenhouse",
+      "identifier": "figma",
+      "region": null,
+      "careers_url": "https://www.figma.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/figma/jobs (documented public API, HTTP 200, board name \"Figma\"; posting links on boards.greenhouse.io)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "software"
+      ]
+    },
+    {
+      "organization": "Reddit",
+      "kind": "greenhouse",
+      "identifier": "reddit",
+      "region": null,
+      "careers_url": "https://www.redditinc.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/reddit/jobs (documented public API, HTTP 200, board name \"Reddit\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "software"
+      ]
+    },
+    {
+      "organization": "OpenAI",
+      "kind": "ashby",
+      "identifier": "openai",
+      "region": null,
+      "careers_url": "https://openai.com/careers/",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/openai (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "ai"
+      ]
+    },
+    {
+      "organization": "Snowflake",
+      "kind": "ashby",
+      "identifier": "snowflake",
+      "region": null,
+      "careers_url": "https://careers.snowflake.com/",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/snowflake (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "ai",
+        "cloud",
+        "software"
+      ]
+    },
+    {
+      "organization": "Coinbase",
+      "kind": "greenhouse",
+      "identifier": "coinbase",
+      "region": null,
+      "careers_url": "https://www.coinbase.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/coinbase/jobs (documented public API, HTTP 200, board name \"Coinbase\"; posting links on www.coinbase.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "fintech",
+        "software"
+      ]
+    },
+    {
+      "organization": "Dropbox",
+      "kind": "greenhouse",
+      "identifier": "dropbox",
+      "region": null,
+      "careers_url": "https://jobs.dropbox.com/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/dropbox/jobs (documented public API, HTTP 200, board name \"Dropbox\"; posting links on jobs.dropbox.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "cloud",
+        "software"
+      ]
+    },
+    {
+      "organization": "Scale AI",
+      "kind": "greenhouse",
+      "identifier": "scaleai",
+      "region": null,
+      "careers_url": "https://scale.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/scaleai/jobs (documented public API, HTTP 200, board name \"Scale AI\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "ai"
+      ]
+    },
+    {
+      "organization": "Spotify",
+      "kind": "lever",
+      "identifier": "spotify",
+      "region": "global",
+      "careers_url": "https://www.lifeatspotify.com/",
+      "evidence": "https://api.lever.co/v0/postings/spotify (documented public API, HTTP 200; posting links on jobs.lever.co)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "software"
+      ]
+    },
+    {
+      "organization": "Jane Street",
+      "kind": "greenhouse",
+      "identifier": "janestreet",
+      "region": null,
+      "careers_url": "https://www.janestreet.com/join-jane-street/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/janestreet/jobs (documented public API, HTTP 200, board name \"Jane Street\"; posting links on www.janestreet.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "fintech"
+      ]
+    },
+    {
+      "organization": "Waymo",
+      "kind": "greenhouse",
+      "identifier": "waymo",
+      "region": null,
+      "careers_url": "https://careers.withwaymo.com/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/waymo/jobs (documented public API, HTTP 200, board name \"Waymo\"; posting links on careers.withwaymo.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "mobility",
+        "robotics",
+        "ai"
+      ]
+    },
+    {
+      "organization": "Lyft",
+      "kind": "greenhouse",
+      "identifier": "lyft",
+      "region": null,
+      "careers_url": "https://www.lyft.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/lyft/jobs (documented public API, HTTP 200, board name \"Lyft\"; posting links on app.careerpuck.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "mobility",
+        "marketplace"
+      ]
+    },
+    {
+      "organization": "DoorDash",
+      "kind": "greenhouse",
+      "identifier": "doordashusa",
+      "region": null,
+      "careers_url": "https://careersatdoordash.com/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/doordashusa/jobs (documented public API, HTTP 200, board name \"DoorDash USA\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "marketplace"
+      ]
+    },
+    {
+      "organization": "Airbnb",
+      "kind": "greenhouse",
+      "identifier": "airbnb",
+      "region": null,
+      "careers_url": "https://careers.airbnb.com/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/airbnb/jobs (documented public API, HTTP 200, board name \"Airbnb\"; posting links on careers.airbnb.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "marketplace"
+      ]
+    },
+    {
+      "organization": "Instacart",
+      "kind": "greenhouse",
+      "identifier": "instacart",
+      "region": null,
+      "careers_url": "https://instacart.careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/instacart/jobs (documented public API, HTTP 200, board name \"Instacart\"; posting links on instacart.careers)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "marketplace"
+      ]
+    },
+    {
+      "organization": "Pinterest",
+      "kind": "greenhouse",
+      "identifier": "pinterest",
+      "region": null,
+      "careers_url": "https://www.pinterestcareers.com/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/pinterest/jobs (documented public API, HTTP 200, board name \"Pinterest\"; posting links on www.pinterestcareers.com)",
+      "verified_at": "2026-10-05",
+      "tags": [
+        "software"
+      ]
+    }
+  ]
+}
