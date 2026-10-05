@@ -110,7 +110,7 @@ def test_parses_fabricated_payload() -> None:
     assert item.source_published_at == item.posted_at  # created_at is not used
     assert item.application_url == f"https://apply.workable.com/j/{CODE}"
     assert {(i.namespace, i.value) for i in item.identifiers} == {
-        ("workable", CODE),
+        ("workable", f"example-robotics:{CODE}"),
         ("url", f"https://apply.workable.com/j/{CODE}"),
     }
     assert item.raw_payload["shortcode"] == CODE

@@ -133,9 +133,12 @@ def _parse_json(response: httpx2.Response, body: bytes) -> Any:
     if content_type != "application/json" and not content_type.endswith("+json"):
         raise FetchError("unexpected_content_type", "The source didn't return JSON.")
     try:
-        return json.loads(body)
+        parsed = json.loads(body)
     except ValueError as error:
         raise FetchError("invalid_json", "The source returned malformed JSON.") from error
+    if parsed is None:  # JSON null is not a snapshot (and None would read as 304 Not Modified)
+        raise FetchError("invalid_json", "The source returned an empty document.")
+    return parsed
 
 
 def fetch_json(
@@ -174,7 +177,13 @@ def fetch_json(
                     with client.stream("GET", target) as response:
                         location = response.headers.get("Location")
                         if response.status_code in REDIRECT_STATUSES and location:
+                            origin = (urlsplit(target).hostname or "").lower()
                             target = urljoin(target, location)
+                            # A redirect may only reach another fixed provider host or stay on
+                            # the same host: never hop to another tenant's subdomain.
+                            hop = (urlsplit(target).hostname or "").lower()
+                            if hop != origin and hop not in ALLOWED_HOSTS:
+                                raise FetchError("blocked_url", "The source redirected elsewhere.")
                             continue
                         if response.status_code in RETRY_STATUSES and not last:
                             break  # retried below

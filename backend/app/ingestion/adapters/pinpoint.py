@@ -14,6 +14,8 @@ Closure semantics (ADR-008 §5):
   fetcher raises as a FetchError, so a typo or a company that left Pinpoint never closes anything.
 - A missing/non-list `data` is a schema_mismatch SnapshotError (nothing closes). A bad posting is
   an item error, so the run is partial and nothing closes.
+- A posting whose URL is on another company's pinpointhq.com subdomain is a wrong_company
+  SnapshotError (nothing imported or closed); http.py also refuses redirects between tenants.
 - Request budget: 1 GET per sync; 429/5xx handled by the shared fetcher (retry, then fail).
 
 There is no publication date in the payload, so `posted_at` is never set (first-seen is the
@@ -22,7 +24,7 @@ calendar date is kept as the provider wrote it, with no timezone conversion."""
 
 import re
 from datetime import date, datetime
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
@@ -34,6 +36,7 @@ from app.ingestion.normalize import (
     Identifier,
     NormalizedOpportunity,
     Snapshot,
+    SnapshotError,
     classify_opportunity_type,
     html_to_text,
     url_identifier,
@@ -164,8 +167,24 @@ def _normalize(raw: dict[str, Any], source: SourceConfig) -> NormalizedOpportuni
     )
 
 
+def _check_company(body: _Payload, company: str) -> None:
+    """A posting linking to another Pinpoint tenant means the response isn't this company's
+    (a renamed or redirected tenant): fail the snapshot so nothing is imported or closed."""
+    for raw in body.data:
+        url = cast(dict[str, Any], raw).get("url") if isinstance(raw, dict) else None
+        if not isinstance(url, str):
+            continue
+        try:
+            host = (urlsplit(url.strip()).hostname or "").lower()
+        except ValueError:
+            continue
+        if host.endswith(HOST_SUFFIX) and host != f"{company}{HOST_SUFFIX}":
+            raise SnapshotError("wrong_company", "The response belongs to another company.")
+
+
 def parse(payload: Any, source: SourceConfig) -> Snapshot:
     body = top_level(_Payload, payload, "Pinpoint postings")
+    _check_company(body, source.identifier)
     return Snapshot(
         items=normalize_each(
             body.data,
