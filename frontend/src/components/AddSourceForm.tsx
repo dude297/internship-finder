@@ -5,7 +5,8 @@ import { describedBy, issueFor } from '../lib/forms'
 import { buttonClass, fieldsetClass, inputClass, legendClass } from '../lib/styles'
 import { ErrorMessage, Field } from './ui'
 
-type Provider = 'greenhouse' | 'lever' | 'ashby' | 'smartrecruiters'
+type Provider =
+  'greenhouse' | 'lever' | 'ashby' | 'smartrecruiters' | 'workable' | 'pinpoint'
 
 const boardHints: Record<Provider, string> = {
   greenhouse: 'For example https://job-boards.greenhouse.io/exampleboard',
@@ -13,6 +14,9 @@ const boardHints: Record<Provider, string> = {
   ashby: 'For example https://jobs.ashbyhq.com/exampleboard, or just the board name',
   smartrecruiters:
     'For example https://jobs.smartrecruiters.com/ExampleCompany, or just the company identifier',
+  workable:
+    'For example https://apply.workable.com/examplecompany, or just the account name',
+  pinpoint: 'For example https://examplecompany.pinpointhq.com, or just the company name',
 }
 
 export const SCOPE_HINT =
@@ -74,6 +78,8 @@ export function AddSourceForm({ onAdded }: { onAdded: (source: Source) => void }
             <option value="lever">Lever</option>
             <option value="ashby">Ashby</option>
             <option value="smartrecruiters">SmartRecruiters</option>
+            <option value="workable">Workable</option>
+            <option value="pinpoint">Pinpoint</option>
           </select>
         </Field>
         <Field id="source-name" label="Organization name" error={nameError}>

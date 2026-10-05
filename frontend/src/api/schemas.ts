@@ -58,6 +58,8 @@ export const sourceKinds = [
   'ashby',
   'smartrecruiters',
   'curated_registry',
+  'workable',
+  'pinpoint',
 ] as const
 export const regions = ['global', 'eu'] as const
 export const runStatuses = [
@@ -77,6 +79,17 @@ export const sourceHealths = [
   'disabled',
 ] as const
 export type SourceHealth = (typeof sourceHealths)[number]
+// M8.1: freshness is derived on read from source evidence (never stored).
+export const freshnessStates = [
+  'direct_verified',
+  'program_listed',
+  'program_recheck',
+  'feed_current',
+  'source_warning',
+  'manual',
+  'closed',
+] as const
+export type FreshnessState = (typeof freshnessStates)[number]
 export const remotePreferences = [
   'no_preference',
   'remote_preferred',
@@ -241,6 +254,9 @@ export const opportunitySummarySchema = z.object({
   source_names: z.array(z.string()),
   pending_requirement_count: z.number().int(),
   requirements_stale: z.boolean(),
+  freshness: z.enum(freshnessStates),
+  freshness_checked_at: z.string().nullable(),
+  program_last_verified: nullableDate,
 })
 export type OpportunitySummary = z.infer<typeof opportunitySummarySchema>
 
@@ -263,6 +279,8 @@ export const sourceRecordSchema = z.object({
   source_url: z.string().nullable(),
   source_published_at: z.string().nullable(),
   source_updated_at: z.string().nullable(),
+  source_health: z.enum(sourceHealths).nullable(),
+  source_last_success_at: z.string().nullable(),
 })
 export type SourceRecord = z.infer<typeof sourceRecordSchema>
 
@@ -300,6 +318,9 @@ export const opportunityDetailSchema = z.object({
   sources: z.array(sourceRecordSchema),
   latest_evaluation: evaluationSchema.nullable(),
   profile_exists: z.boolean(),
+  freshness: z.enum(freshnessStates),
+  freshness_checked_at: z.string().nullable(),
+  program_last_verified: nullableDate,
 })
 export type OpportunityDetail = z.infer<typeof opportunityDetailSchema>
 
@@ -478,6 +499,8 @@ export const supportedSourceKinds = [
   'lever',
   'ashby',
   'smartrecruiters',
+  'workable',
+  'pinpoint',
 ] as const
 export type SupportedSourceKind = (typeof supportedSourceKinds)[number]
 
@@ -490,6 +513,13 @@ export const coverageMetricsSchema = z.object({
   feed_only: z.number().int(),
   enrichable: z.number().int(),
   unsupported: z.number().int(),
+  independent: z.number().int(),
+  independent_percent: z.number().nullable(),
+  direct_ats: z.number().int(),
+  first_party: z.number().int(),
+  curated_registry: z.number().int(),
+  manual_only: z.number().int(),
+  direct_fresh: z.number().int(),
 })
 export type CoverageMetrics = z.infer<typeof coverageMetricsSchema>
 
@@ -533,6 +563,22 @@ export const discoveryAddResponseSchema = z.object({
 })
 export type DiscoveryAddResponse = z.infer<typeof discoveryAddResponseSchema>
 
+export const catalogEntrySchema = z.object({
+  key: z.string(),
+  organization: z.string(),
+  kind: z.enum(supportedSourceKinds),
+  identifier: z.string(),
+  region: z.enum(regions).nullable(),
+  careers_url: z.string(),
+  evidence: z.string(),
+  verified_at: isoDate,
+  tags: z.array(z.string()),
+  already_configured: z.boolean(),
+})
+export type CatalogEntry = z.infer<typeof catalogEntrySchema>
+
+export const catalogResponseSchema = z.object({ entries: z.array(catalogEntrySchema) })
+
 /** What the server accepts back (ADR-013 §3): identity only, never a display name or URL. */
 export interface DiscoverySelectionInput {
   kind: SupportedSourceKind
@@ -562,7 +608,9 @@ export interface OpportunityQuery {
   application_status?: string
   remote_mode?: string
   opportunity_type?: string
-  sort?: 'recommended' | 'newest' | 'deadline'
+  sort?: 'recommended' | 'newest' | 'deadline' | 'discovered'
+  freshness?: 'direct_verified' | 'needs_review'
+  discovered_within?: '1' | '7'
   requirements_assessment_status?: string
   requirement_review?: 'pending' | 'stale' | 'needs_review'
   deadline_within?: '7' | '14' | '30'

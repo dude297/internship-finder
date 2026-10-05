@@ -6,6 +6,7 @@ import { ApplicationTracker } from '../components/ApplicationTracker'
 import { DeadlineText, NeedsDateBadge, TypicalWindow } from '../components/DateTrust'
 import { EligibilityPanel } from '../components/EligibilityPanel'
 import { RequirementReviewPanel } from '../components/RequirementReviewPanel'
+import { FreshnessBadge, FreshnessSection, NewBadge } from '../components/FreshnessBadge'
 import { SourceProvenance } from '../components/SourceProvenance'
 import { WhyThisMatch } from '../components/WhyThisMatch'
 import { ErrorMessage } from '../components/ui'
@@ -95,6 +96,10 @@ export function OpportunityDetailPage() {
         </Link>
         <h1 className="text-2xl font-semibold">{o.title}</h1>
         <p className="text-slate-600">{o.organization}</p>
+        <p className="flex flex-wrap items-center gap-2 text-xs">
+          <NewBadge firstSeenAt={o.first_seen_at} postedAt={o.posted_at} />
+          <FreshnessBadge o={o} />
+        </p>
         {o.availability === 'closed' && (
           <p className="inline-block rounded bg-slate-700 px-2 py-0.5 text-sm text-white">
             Closed: no source lists this posting anymore
@@ -216,6 +221,8 @@ export function OpportunityDetailPage() {
         opportunityId={o.id}
         onReviewed={() => api.getOpportunity(id).then(setOpportunity)}
       />
+
+      <FreshnessSection opportunity={o} />
 
       <SourceProvenance opportunity={o} />
 

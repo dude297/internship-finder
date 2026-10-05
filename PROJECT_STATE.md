@@ -2,10 +2,10 @@
 
 > `PROJECT_STATE.md` must be updated after every meaningful implementation milestone or architecture change.
 
-Last Updated: 2026-10-04
+Last Updated: 2026-10-05
 Current Milestone: **Milestone 8 — Structured Source Expansion + Curated Program Registry released 2026-10-05** ([ADR-014](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md)): registry live, 6 SmartRecruiters companies active, description coverage 38.7%. Milestone 7.1 (volunteer type) and Milestone 7 (provider enrichment, [ADR-013](docs/decisions/ADR-013-provider-enrichment-and-source-authority.md)) are released. Earlier milestones: see the sections below.
 Current Production Version: Milestone 8 — `main` `9263860` on https://internship-finder-pi.vercel.app (Neon `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`; Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`). 20 Greenhouse/Lever/Ashby boards, 6 SmartRecruiters companies, the Curated Program Registry, and the feed; scheduled sync active.
-Active Development Branch: none (Milestone 8 released). Remote: https://github.com/dude297/internship-finder.
+Active Development Branch: `feature/m8-1-freshness-requirements` (Milestone 8.1, [ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md); PR open for owner review, not merged or deployed). Remote: https://github.com/dude297/internship-finder.
 
 ## Repository Visibility
 
@@ -99,6 +99,21 @@ Not implemented (by design for this milestone):
 Validation (2026-09-28, local, after the PR #6 review fixes): backend 358 tests (167 unit + 191 PostgreSQL), frontend 46 Vitest tests, Playwright 2 scenarios, ruff/format/pyright/ESLint/Prettier/tsc/build clean, migration round trip and stale-`7d7f4f8b9a3c` repair, `alembic check`. Live smoke against the real discovery feed on a disposable database: first sync 1,034 created in ~22 s; second sync `no_change` (HTTP 304); forced re-process 1,034 unchanged. GitHub Actions status is recorded in the PR.
 
 ## In Progress
+
+### Milestone 8.1 (in review; not merged, not deployed)
+
+[ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md). Migration `b7e3d9f1a2c4` (CHECK only: `workable`, `pinpoint` source kinds).
+
+- **Freshness:** derived per opportunity from active source records + source health (`direct_verified`, `program_listed`, `program_recheck`, `feed_current`, `source_warning`, `manual`, `closed`); list/detail badges, per-source health on detail, `freshness=direct_verified|needs_review` filter; list stays set-based (9 statements regardless of page size).
+- **New:** first found < 7 days (client badge), `discovered_within=1|7`, `sort=discovered`.
+- **Extractor v2** (`requirements-rules` 2): enrollment/degree pursuit with timing, graduation windows, class standing, return-to-school, citizenship vs permanent residency vs U.S. person vs work authorization vs sponsorship; 258-sentence corpus + adversarial suite; v1→v2 rescan keeps every reviewed decision (tested). Read-only production measurement: 18 → 244 pending proposals over 194 opportunities. Not run in production.
+- **Independent Discovery Coverage** + breakdown on Source Coverage (production at audit: 629 / 1,626 = 38.7%).
+- **Direct Source Catalog**: 36 officially verified boards (Anthropic, OpenAI, Databricks, Stripe, SpaceX, Anduril, Palantir, Skydio, Impulse Space, …), Verified Direct Sources bulk add; nothing activated.
+- **Workable and Pinpoint adapters** (documented keyless APIs), hostile-reviewed.
+- **Feed-off resilience** test: feed disabled or failing → direct sources, registry, ranking, eligibility, fit, applications, scheduled sync all work.
+- **Research:** [freshness audit](docs/research/catalog-freshness-audit.md), [company source matrix](docs/research/direct-company-source-matrix.md) (87 companies), [tracker gap audit](docs/research/tracker-gap-audit.md) (live-link pings rejected).
+- **Production:** unchanged on Milestone 8.
+
 
 ### Milestone 8 (released 2026-10-05 via PR #23)
 
@@ -303,7 +318,9 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Milestone 8 is released. Watch Bosch's backlog finish (Source Health returns to healthy after its detail backlog is fetched) and the next scheduled runs' elapsed time; recheck registry programs on their `verify_by` dates. The next milestone is not started.
+Review the Milestone 8.1 PR. After approval: migrate Neon to `b7e3d9f1a2c4`, deploy Render then Vercel, smoke; then (owner-approved) run the v2 requirement scan and add catalog sources in batches, keeping enabled direct sources ≤ 50 until re-measured ([operations.md](docs/operations.md#milestone-81-activation-notes-prepared-not-executed)).
+
+Previously: Milestone 8 is released. Watch Bosch's backlog finish (Source Health returns to healthy after its detail backlog is fetched) and the next scheduled runs' elapsed time; recheck registry programs on their `verify_by` dates. The next milestone is not started.
 
 Previously: Review the Milestone 8 PR (`feature/m8-source-expansion` → `main`). After approval: follow the [Milestone 8 release notes](docs/operations.md#milestone-8-release-and-activation-executed-2026-10-05) (pause the schedule, migrate, deploy Render then Vercel, smoke, re-enable), then owner-approved activation: sync the registry once, add a bounded batch of SmartRecruiters suggestions, accept no suggestions automatically.
 

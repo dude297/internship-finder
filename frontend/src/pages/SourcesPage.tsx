@@ -5,6 +5,7 @@ import { AddSourceForm } from '../components/AddSourceForm'
 import { RunSummary } from '../components/RunSummary'
 import { SourceCoverage } from '../components/SourceCoverage'
 import { ErrorMessage, SuccessMessage } from '../components/ui'
+import { VerifiedDirectSources } from '../components/VerifiedDirectSources'
 import {
   formatDateTime,
   sourceHealthLabels,
@@ -47,6 +48,7 @@ export function SourcesPage() {
   // The source currently syncing or saving ('all' for Sync all); one action at a time.
   const [busy, setBusy] = useState<string | null>(null)
   const [syncCount, setSyncCount] = useState(0)
+  const [catalogKey, setCatalogKey] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -60,6 +62,7 @@ export function SourcesPage() {
   }, [])
 
   function refreshSources() {
+    setCatalogKey((n) => n + 1)
     api
       .listSources()
       .then(setSources)
@@ -168,6 +171,7 @@ export function SourcesPage() {
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {notice && <SuccessMessage>{notice}</SuccessMessage>}
       <SourceCoverage onSourcesChanged={refreshSources} syncCount={syncCount} />
+      <VerifiedDirectSources onSourcesChanged={refreshSources} reloadKey={catalogKey} />
       <ul className="space-y-3">
         {sources?.map((source) => (
           <li key={source.id} className="space-y-3 rounded border border-slate-200 p-4">

@@ -24,7 +24,12 @@ from app.enums import (
     SourceScope,
 )
 from app.ingestion.adapters.community_feed import BUILTIN_IDENTIFIER
-from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_source
+from app.ingestion.pipeline import (
+    EMPTY_SNAPSHOT_GUARD,
+    SyncInProgress,
+    sync_enabled_sources,
+    sync_source,
+)
 from app.models import (
     Application,
     IngestionRun,
@@ -306,6 +311,26 @@ def test_an_empty_complete_snapshot_closes_everything(
 
     assert run.status is IngestionRunStatus.SUCCESS
     assert run.closed_count == 2
+
+
+def test_an_empty_snapshot_cannot_mass_close_a_large_source(
+    db: Session, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    """ADR-015 §10: an empty answer while EMPTY_SNAPSHOT_GUARD or more postings are open fails
+    the run and closes nothing (a provider fault or renamed identifier, not a real wipe)."""
+    jobs = [greenhouse_job(n) for n in range(1, EMPTY_SNAPSHOT_GUARD + 1)]
+    web.json(GREENHOUSE_URL, greenhouse_board(*jobs))
+    sync(db, gh_source, web)
+    web.json(GREENHOUSE_URL, greenhouse_board())
+
+    run = sync(db, gh_source, web)
+
+    assert run.status is IngestionRunStatus.FAILED
+    assert run.closed_count == 0
+    assert [e.code for e in run.errors] == ["empty_snapshot"]
+    # One posting fewer still applies normally.
+    web.json(GREENHOUSE_URL, greenhouse_board(*jobs[1:]))
+    assert sync(db, gh_source, web).closed_count == 1
 
 
 # --- Failures never close unseen records ---------------------------------------------------------

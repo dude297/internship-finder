@@ -7,7 +7,7 @@ identity parser), so discovery can never disagree with deduplication (ADR-013 §
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from sqlalchemy import exists, func, or_, select
@@ -28,6 +28,7 @@ from app.schemas.source_discovery import (
     SourceSuggestion,
     SupportedKind,
 )
+from app.services.freshness import DIRECT_SOURCE_TYPES, healthy_source_ids, source_evidence
 from app.services.sources import to_response, utcnow
 
 # ADR-013 §2: the EU Greenhouse Job Board hosts aren't fetched (US API only), so a link naming
@@ -71,7 +72,7 @@ def _suggestion_identity(external_id: str, source_url: str | None) -> Suggestion
     return None
 
 
-def _key(kind: SupportedKind, identifier: str, region: SourceRegion | None) -> str:
+def suggestion_key(kind: SupportedKind, identifier: str, region: SourceRegion | None) -> str:
     """Same format as IngestionSource.key."""
     parts = [kind.value, *([region.value] if region else []), identifier]
     return ":".join(parts)
@@ -130,20 +131,51 @@ _active_ats = _active.where(_record.source_type == OpportunitySourceType.ATS)
 _active_non_feed = _active.where(_record.source_type != OpportunitySourceType.PUBLIC_FEED)
 
 
-def _coverage_row(db: Session) -> tuple[int, int, int, int]:
-    """active_opportunities, with_description, ats_backed, feed_only (one query)."""
+@dataclass(frozen=True)
+class _Coverage:
+    active: int
+    with_description: int
+    ats_backed: int
+    feed_only: int
+    independent: int
+    first_party: int
+    curated_registry: int
+    manual_only: int
+    direct_fresh: int
+
+
+def _coverage_row(db: Session, healthy: list[uuid.UUID]) -> _Coverage:
+    """Every coverage count in one query (ADR-013 §3, ADR-015 §5). Each opportunity is counted
+    once per metric however many source records it has."""
     has_text = func.length(func.btrim(Opportunity.description)) > 0
+
+    def active_of(source_type: OpportunitySourceType) -> Any:
+        return exists(_active.where(_record.source_type == source_type))
+
+    direct_fresh = exists(
+        _active.where(
+            _record.source_type.in_(list(DIRECT_SOURCE_TYPES)),
+            _record.ingestion_source_id.in_(healthy),
+        )
+    )
     row = db.execute(
         select(
             func.count(),
             func.count().filter(Opportunity.description.is_not(None), has_text),
             func.count().filter(exists(_active_ats)),
             func.count().filter(exists(_active), ~exists(_active_non_feed)),
+            # Independent of the community feed: an active non-feed automated record, or
+            # managed by hand (no automated record at all).
+            func.count().filter(or_(exists(_active_non_feed), ~exists(_automated))),
+            func.count().filter(active_of(OpportunitySourceType.CAREER_PAGE)),
+            func.count().filter(active_of(OpportunitySourceType.CURATED_REGISTRY)),
+            func.count().filter(~exists(_automated)),
+            func.count().filter(direct_fresh),
         )
         .select_from(Opportunity)
         .where(_open)
     ).one()
-    return row[0], row[1], row[2], row[3]
+    return _Coverage(*row)
 
 
 def _feed_rows(
@@ -174,7 +206,7 @@ def _feed_rows(
     return [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows]
 
 
-def _configured_keys(db: Session) -> set[SuggestionKey]:
+def configured_keys(db: Session) -> set[SuggestionKey]:
     rows = db.execute(
         select(IngestionSource.kind, IngestionSource.identifier, IngestionSource.region).where(
             IngestionSource.kind.not_in(
@@ -187,9 +219,11 @@ def _configured_keys(db: Session) -> set[SuggestionKey]:
 
 def discover(db: Session) -> SourceDiscoveryResponse:
     """Zero network calls. Three queries total, regardless of catalog size."""
-    active_opportunities, with_description, ats_backed, feed_only_sql = _coverage_row(db)
+    counts = _coverage_row(db, healthy_source_ids(source_evidence(db, utcnow())))
+    active_opportunities, with_description = counts.active, counts.with_description
+    feed_only_sql = counts.feed_only
     rows = _feed_rows(db)
-    configured = _configured_keys(db)
+    configured = configured_keys(db)
 
     suggestions: dict[SuggestionKey, _SuggestionAgg] = {}
     providers: dict[str, _ProviderAgg] = {}
@@ -224,7 +258,7 @@ def discover(db: Session) -> SourceDiscoveryResponse:
                 kind=kind,
                 identifier=identifier,
                 region=region,
-                key=_key(kind, identifier, region),
+                key=suggestion_key(kind, identifier, region),
                 suggested_display_name=name,
                 display_name_ambiguous=ambiguous,
                 matching_opportunities=len(agg.opportunity_ids),
@@ -255,10 +289,21 @@ def discover(db: Session) -> SourceDiscoveryResponse:
             if active_opportunities
             else None
         ),
-        ats_backed=ats_backed,
+        ats_backed=counts.ats_backed,
         feed_only=feed_only_sql,
         enrichable=enrichable_total,
         unsupported=feed_only_sql - enrichable_total,
+        independent=counts.independent,
+        independent_percent=(
+            round(counts.independent / active_opportunities * 100, 1)
+            if active_opportunities
+            else None
+        ),
+        direct_ats=counts.ats_backed,
+        first_party=counts.first_party,
+        curated_registry=counts.curated_registry,
+        manual_only=counts.manual_only,
+        direct_fresh=counts.direct_fresh,
     )
     return SourceDiscoveryResponse(
         coverage=coverage, providers=provider_list, suggestions=suggestion_list
@@ -275,7 +320,7 @@ def add_from_discovery(db: Session, request: DiscoveryAddRequest) -> DiscoveryAd
     for selection in request.sources:
         selection_key: SuggestionKey = (selection.kind, selection.identifier, selection.region)
         if selection_key in seen:
-            raise ValueError(f"Duplicate selection: {_key(*selection_key)}")
+            raise ValueError(f"Duplicate selection: {suggestion_key(*selection_key)}")
         seen.add(selection_key)
 
     current = discover(db)
@@ -289,7 +334,7 @@ def add_from_discovery(db: Session, request: DiscoveryAddRequest) -> DiscoveryAd
         selection_key = (selection.kind, selection.identifier, selection.region)
         suggestion = by_key.get(selection_key)
         if suggestion is None:
-            raise ValueError(f"{_key(*selection_key)} is not a current suggestion.")
+            raise ValueError(f"{suggestion_key(*selection_key)} is not a current suggestion.")
         if suggestion.already_configured:
             skipped.append(DiscoveryAddSkipped(key=suggestion.key, reason="already_configured"))
             continue

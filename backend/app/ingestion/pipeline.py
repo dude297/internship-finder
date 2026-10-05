@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx2
 from pydantic import ValidationError
-from sqlalchemy import case, or_, select, tuple_, update
+from sqlalchemy import case, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, defer
@@ -144,6 +144,10 @@ def _finish(db: Session, run: IngestionRun, status: IngestionRunStatus) -> Inges
         run.error_count,
     )
     return run
+
+
+# ADR-015 §10: an empty snapshot can't close this many open records of one source at once.
+EMPTY_SNAPSHOT_GUARD = 10
 
 
 def _fail(
@@ -639,6 +643,32 @@ def _sync(
     except SnapshotError as error:
         return _fail(db, run, IngestionStage.VALIDATE, error.code, error.message)
 
+    if (
+        not snapshot.items
+        and (
+            db.scalar(
+                select(func.count()).where(
+                    OpportunitySourceRecord.ingestion_source_id == source.id,
+                    OpportunitySourceRecord.is_active,
+                )
+            )
+            or 0
+        )
+        >= EMPTY_SNAPSHOT_GUARD
+    ):
+        # ADR-015 §10: an empty answer from a source that still lists many postings is far
+        # likelier a provider fault, a renamed identifier, or a placeholder than every posting
+        # vanishing at once. A false open beats a mass false close: fail (Source Health turns
+        # failing, so the owner sees it) and close nothing. Small boards can still empty out.
+        # ponytail: all-or-nothing count guard; add a "shrank by > X%" guard if partial wipes
+        # ever appear.
+        return _fail(
+            db,
+            run,
+            IngestionStage.VALIDATE,
+            "empty_snapshot",
+            "The source returned no postings while many are still open; nothing was closed.",
+        )
     run.fetched_count = len(snapshot.items)
     run.source_generated_at = snapshot.generated_at
     items = snapshot.items

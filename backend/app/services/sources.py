@@ -8,8 +8,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session, selectinload
 
-from app.enums import IngestionRunStatus, IngestionSourceKind, SourceScope
-from app.ingestion.adapters import ashby, greenhouse, lever, smartrecruiters
+from app.enums import IngestionRunStatus, IngestionSourceKind, SourceRegion, SourceScope
+from app.ingestion.adapters import ashby, greenhouse, lever, pinpoint, smartrecruiters, workable
 from app.models import IngestionRun, IngestionSource
 from app.schemas.sources import RunResponse, SourceCreate, SourceResponse, SourceUpdate
 from app.services.source_health import derive_health
@@ -116,23 +116,42 @@ def list_sources(db: Session) -> list[IngestionSource]:
     )
 
 
+def parse_reference(
+    kind: IngestionSourceKind, board: str, region: SourceRegion | None
+) -> tuple[str, SourceRegion | None]:
+    """A board/site/company reference (link or bare identifier) → its canonical identifier and
+    region. Raises ValueError for anything unusable. Shared by Add Source and the direct source
+    catalog (ADR-015 §6), so both accept exactly the same identifiers."""
+    if kind is IngestionSourceKind.GREENHOUSE:
+        if region is not None:
+            raise ValueError("Greenhouse boards don't have a region.")
+        identifier = greenhouse.parse_board_reference(board)
+    elif kind is IngestionSourceKind.ASHBY:
+        if region is not None:
+            raise ValueError("Ashby boards don't have a region.")
+        identifier = ashby.parse_board_reference(board)
+    elif kind is IngestionSourceKind.SMARTRECRUITERS:
+        if region is not None:
+            raise ValueError("SmartRecruiters companies don't have a region.")
+        identifier = smartrecruiters.parse_company_reference(board)
+    elif kind is IngestionSourceKind.WORKABLE:
+        if region is not None:
+            raise ValueError("Workable accounts don't have a region.")
+        identifier = workable.parse_account_reference(board)
+    elif kind is IngestionSourceKind.PINPOINT:
+        if region is not None:
+            raise ValueError("Pinpoint companies don't have a region.")
+        identifier = pinpoint.parse_company_reference(board)
+    elif kind is IngestionSourceKind.LEVER:
+        return lever.parse_site_reference(board, region)
+    else:
+        raise ValueError("This source type can't be added by link.")
+    return identifier, None
+
+
 def create_source(db: Session, body: SourceCreate) -> IngestionSource:
     """Raises ValueError for an unusable board reference, SourceConflict for a duplicate."""
-    region = None
-    if body.kind is IngestionSourceKind.GREENHOUSE:
-        if body.region is not None:
-            raise ValueError("Greenhouse boards don't have a region.")
-        identifier = greenhouse.parse_board_reference(body.board)
-    elif body.kind is IngestionSourceKind.ASHBY:
-        if body.region is not None:
-            raise ValueError("Ashby boards don't have a region.")
-        identifier = ashby.parse_board_reference(body.board)
-    elif body.kind is IngestionSourceKind.SMARTRECRUITERS:
-        if body.region is not None:
-            raise ValueError("SmartRecruiters companies don't have a region.")
-        identifier = smartrecruiters.parse_company_reference(body.board)
-    else:
-        identifier, region = lever.parse_site_reference(body.board, body.region)
+    identifier, region = parse_reference(body.kind, body.board, body.region)
     duplicate = db.scalars(
         select(IngestionSource).where(
             IngestionSource.kind == body.kind,

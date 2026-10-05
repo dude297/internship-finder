@@ -7,6 +7,7 @@ validated identifier; nothing user-supplied is ever requested.
 import ipaddress
 import json
 import logging
+import re
 import socket
 import time
 from collections.abc import Callable
@@ -30,8 +31,14 @@ ALLOWED_HOSTS = frozenset(
         "api.eu.lever.co",
         "api.ashbyhq.com",
         "api.smartrecruiters.com",
+        # Workable's documented widget API answers on www and redirects to apply (ADR-015 §7).
+        "www.workable.com",
+        "apply.workable.com",
     }
 )
+# Providers that serve each customer's public board from its own subdomain of a fixed provider
+# domain (ADR-015 §7). The label is validated by the adapter; this is the network boundary.
+ALLOWED_HOST_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.pinpointhq\.com\Z")
 USER_AGENT = (
     "PersonalInternshipFinder/0.1 (single-user; +https://github.com/dude297/internship-finder)"
 )
@@ -82,7 +89,7 @@ def check_url(url: str, resolve: Resolver | None = _resolve) -> None:
     if parts.username or parts.password or parts.port not in (None, 443):
         raise FetchError("blocked_url", "Source URLs can't carry credentials or custom ports.")
     host = (parts.hostname or "").lower()
-    if host not in ALLOWED_HOSTS:
+    if host not in ALLOWED_HOSTS and not ALLOWED_HOST_PATTERN.fullmatch(host):
         raise FetchError("blocked_url", "The source host isn't on the allowlist.")
     if resolve is None:
         return
@@ -126,9 +133,12 @@ def _parse_json(response: httpx2.Response, body: bytes) -> Any:
     if content_type != "application/json" and not content_type.endswith("+json"):
         raise FetchError("unexpected_content_type", "The source didn't return JSON.")
     try:
-        return json.loads(body)
+        parsed = json.loads(body)
     except ValueError as error:
         raise FetchError("invalid_json", "The source returned malformed JSON.") from error
+    if parsed is None:  # JSON null is not a snapshot (and None would read as 304 Not Modified)
+        raise FetchError("invalid_json", "The source returned an empty document.")
+    return parsed
 
 
 def fetch_json(
@@ -167,7 +177,13 @@ def fetch_json(
                     with client.stream("GET", target) as response:
                         location = response.headers.get("Location")
                         if response.status_code in REDIRECT_STATUSES and location:
+                            origin = (urlsplit(target).hostname or "").lower()
                             target = urljoin(target, location)
+                            # A redirect may only reach another fixed provider host or stay on
+                            # the same host: never hop to another tenant's subdomain.
+                            hop = (urlsplit(target).hostname or "").lower()
+                            if hop != origin and hop not in ALLOWED_HOSTS:
+                                raise FetchError("blocked_url", "The source redirected elsewhere.")
                             continue
                         if response.status_code in RETRY_STATUSES and not last:
                             break  # retried below

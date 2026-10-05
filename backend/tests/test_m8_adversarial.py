@@ -372,6 +372,9 @@ def test_allowlist_has_only_the_one_new_host() -> None:
         "api.eu.lever.co",
         "api.ashbyhq.com",
         "api.smartrecruiters.com",
+        # Milestone 8.1 (ADR-015 §7).
+        "www.workable.com",
+        "apply.workable.com",
     }
     for url in (
         "https://jobs.smartrecruiters.com/acme",

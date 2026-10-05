@@ -15,7 +15,7 @@ from app.schemas.source_discovery import (
     SourceDiscoveryResponse,
 )
 from app.schemas.sources import RunResponse, SourceCreate, SourceResponse, SourceUpdate
-from app.services import source_discovery
+from app.services import direct_catalog, source_discovery
 from app.services import sources as service
 
 router = APIRouter(prefix="/sources", tags=["sources"])
@@ -58,6 +58,32 @@ def add_discovery(body: DiscoveryAddRequest, db: DbSession) -> DiscoveryAddRespo
     request. 201 when anything was created, 200 when every selection was already configured."""
     try:
         result = source_discovery.add_from_discovery(db, body)
+    except ValueError as error:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={
+                "detail": [{"loc": ["body", "sources"], "msg": str(error), "type": "value_error"}]
+            },
+        )
+    except source_discovery.SourceDiscoveryConflict as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    db.commit()
+    status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
+    return JSONResponse(status_code=status_code, content=result.model_dump(mode="json"))
+
+
+@router.get("/catalog")
+def catalog(db: DbSession) -> direct_catalog.CatalogResponse:
+    """The Direct Source Catalog (ADR-015 §6): officially verified boards, never listing data.
+    Registered ahead of `/{source_id}`."""
+    return direct_catalog.list_catalog(db)
+
+
+@router.post("/catalog/add", response_model=DiscoveryAddResponse)
+def add_catalog(body: DiscoveryAddRequest, db: DbSession) -> DiscoveryAddResponse | JSONResponse:
+    """Create sources from catalog entries only; all-or-nothing, at most 25, never syncs."""
+    try:
+        result = direct_catalog.add_from_catalog(db, body)
     except ValueError as error:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

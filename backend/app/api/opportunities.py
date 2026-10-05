@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -22,6 +22,7 @@ from app.schemas.opportunity import (
     OpportunityPage,
 )
 from app.services import discovery
+from app.services import freshness as freshness_service
 from app.services import opportunities as service
 
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
@@ -50,6 +51,25 @@ def _detail(db: DbSession, opportunity: Opportunity) -> OpportunityDetail:
     detail = OpportunityDetail.model_validate(opportunity)
     detail.origin, detail.availability = discovery.provenance(opportunity.source_records)
     detail.sources = discovery.records_response(opportunity.source_records)
+    now = datetime.now(UTC)
+    evidence = freshness_service.source_evidence(db, now)
+    for record, response in zip(
+        sorted(opportunity.source_records, key=lambda r: (r.first_seen_at, r.id)),
+        detail.sources,
+        strict=True,
+    ):
+        source = evidence.get(record.ingestion_source_id) if record.ingestion_source_id else None
+        if source is not None:
+            response.source_health = source.health
+            response.source_last_success_at = source.last_success_at
+    fresh = freshness_service.derive_freshness(
+        opportunity.source_records, evidence, opportunity.verify_by, now.date()
+    )
+    detail.freshness = fresh.state
+    detail.freshness_checked_at = fresh.checked_at
+    detail.program_last_verified = discovery.program_last_verified(db, [opportunity.id]).get(
+        opportunity.id
+    )
     evaluation = service.current_evaluation(db, opportunity)
     detail.latest_evaluation = EvaluationResponse.model_validate(evaluation) if evaluation else None
     detail.profile_exists = get_profile(db) is not None
@@ -79,6 +99,8 @@ def list_opportunities(
     deadline_within: discovery.DeadlineWithin | None = None,
     has_deadline: bool | None = None,
     needs_date_verification: bool | None = None,
+    freshness: discovery.FreshnessFilter | None = None,
+    discovered_within: discovery.DiscoveredWithin | None = None,
     today: date | None = None,
     sort: discovery.Sort = "newest",
 ) -> OpportunityPage:
@@ -106,6 +128,8 @@ def list_opportunities(
         deadline_within=deadline_within,
         has_deadline=has_deadline,
         needs_date_verification=needs_date_verification,
+        freshness=freshness,
+        discovered_within=discovered_within,
         today=today,
     )
     items, total = discovery.list_page(db, filters, limit, offset, sort)

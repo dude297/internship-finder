@@ -82,6 +82,24 @@ Last reviewed: 2026-10-03 (Milestone 7 source authority and discovery; Ashby add
 - **Scope:** **Internships only** by default; **All postings** fetches every posting's detail (still capped at 100 per run)
 - **Unknown company:** the API answers 200 with zero postings, so a misspelled identifier imports nothing; a company that renames its identifier closes its postings on the next complete run (closed, never deleted)
 
+### Workable accounts (Milestone 8.1, ADR-015 §7)
+
+- **Key:** `workable:<account>`; added as an account name or an `https://apply.workable.com/<account>` (or `<account>.workable.com`) link, parsed and never requested
+- **Endpoint:** the documented jobs widget API `https://www.workable.com/api/accounts/<account>?details=true` (no key), which redirects to `apply.workable.com/api/v1/widget/accounts/<account>`; both hosts are allowlisted. One request per run; the response is the whole board
+- **Stable ID:** the job `shortcode` (uppercased); identity `workable:<account>:<SHORTCODE>` plus the posting page URL, accepted only when its path names this account's own shortcode. Posted date = `published_on`; no deadline; remote/hybrid only when stated; `employment_type` `intern` → internship
+- **Closure:** a 200 with a `jobs` list is a complete snapshot. Unknown account → 404 → failed run, nothing closes. A 200 with an empty list closes everything (same accepted limitation as other single-request providers)
+
+### Pinpoint companies (Milestone 8.1, ADR-015 §7)
+
+- **Key:** `pinpoint:<company>`; added as the company subdomain label or an `https://<company>.pinpointhq.com/...` link
+- **Endpoint:** the documented `https://<company>.pinpointhq.com/postings.json` (no key, no pagination). The network boundary allows exactly one DNS label under `pinpointhq.com` (`ALLOWED_HOST_PATTERN`); posting URLs are accepted only on the same company's subdomain
+- **Stable ID:** the posting `id`; identity `pinpoint:<company>:<id>` plus the posting URL. No posted date exists in the API, so none is set; `deadline_at` is parsed but, like every ATS deadline field today, not written to the canonical opportunity (only the registry writes deadlines, ADR-014 §6); `workplace_type` → remote mode; `employment_type` `internship` → internship
+- **Closure:** as Workable; unknown company → 404
+
+### Direct Source Catalog (Milestone 8.1, ADR-015 §6)
+
+`backend/data/direct_source_catalog.json`: officially verified board configurations (organization, provider, identifier, careers URL, evidence, verification date, tags). Configuration only, never listing data or another tracker's data. The Sources page's **Verified Direct Sources** adds selected entries (1–25 at a time, Internships only, never synced on add). 36 entries verified 2026-10-05; method and per-company status: [direct-company-source-matrix.md](research/direct-company-source-matrix.md). To add an entry: verify ownership from the company's careers page and/or the provider's documented API, record the evidence, keep the identifier in canonical (lowercase) form; the loader rejects anything else.
+
 ### Opportunity type (Milestone 6)
 
 One shared rule for every adapter ([ADR-012 §13](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md#13-opportunity-type)): a structured provider field that says intern wins (Lever `commitment`, Ashby `employmentType`, the feed's `program`); otherwise the internship title matcher below; otherwise `other`. Type is a display and discovery aid, never eligibility. Because this changes the normalized form of existing imported postings whose titles match, the first sync after the release reports them as `updated` once; nothing is closed or lost, and since title and description are unchanged it doesn't make any requirement review stale.
@@ -168,7 +186,7 @@ Implemented in `backend/app/ingestion/adapters/` ([ADR-008 §2](decisions/ADR-00
 |---|---|---|---|
 | University/research programs | 3 | Planned | Often seasonal and deadline-driven; start dates matter for time-aware eligibility |
 | Government / nonprofit STEM programs, fellowships | 3 | Planned | Often high-school or incoming-freshman eligible |
-| Selected company career pages | 4 | Planned | Stable IDs may be missing; would need an exact-URL identity |
+| Selected company career pages | 4 | Research (ADR-015 §8) | No first-party source passed the gate in M8.1; Netflix/Microsoft (Eightfold sitemap + JSON-LD) are the top YELLOW candidates; provenance would be `career_page` |
 
 ## Required Definition per Source
 

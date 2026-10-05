@@ -29,6 +29,7 @@ GREENHOUSE = "greenhouse"
 LEVER = "lever"
 ASHBY = "ashby"
 SMARTRECRUITERS = "smartrecruiters"
+PINPOINT = "pinpoint"
 CURATED = "curated"  # the program registry (ADR-014 §5): curated:<slug>:<cycle>
 URL = "url"
 

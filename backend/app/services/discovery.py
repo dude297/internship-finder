@@ -4,6 +4,7 @@ Everything is filtered and counted in SQL so a catalog of thousands never loads 
 """
 
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
@@ -37,6 +38,12 @@ from app.schemas.opportunity import (
     Origin,
     SourceRecordResponse,
 )
+from app.services.freshness import (
+    DIRECT_SOURCE_TYPES,
+    derive_freshness,
+    healthy_source_ids,
+    source_evidence,
+)
 
 AvailabilityFilter = Literal["open", "closed", "all"]
 EligibilityFilter = EligibilityStatus | Literal["not_evaluated"]
@@ -50,7 +57,14 @@ DeadlineWithin = Annotated[
 ]
 # recommended: eligibility bucket, then fit (ADR-001, ADR-010 §1). newest: posted date.
 # deadline: application_deadline ascending, nulls last (ADR-012 §14).
-Sort = Literal["recommended", "newest", "deadline"]
+# discovered: first found by Internship Finder, newest first (not the provider's posted date).
+Sort = Literal["recommended", "newest", "deadline", "discovered"]
+# ADR-015: direct_verified, or needs_review (source_warning / program_recheck).
+FreshnessFilter = Literal["direct_verified", "needs_review"]
+# ADR-015: first found within the last N days (first_seen_at, never posted_at).
+DiscoveredWithin = Annotated[
+    Literal[1, 7], BeforeValidator(lambda v: int(v) if isinstance(v, str) else v)
+]
 # Opportunity + the current evaluation's status, evaluated_at, fit_score, scoring_version,
 # breakdown, pending candidate count (subquery columns, so SQLAlchemy types them as Any).
 Listing = Select[Opportunity, Any, Any, Any, Any, Any, Any]
@@ -74,6 +88,8 @@ class Filters:
     has_deadline: bool | None = None
     # ADR-014 §6: verify_by reached (true) / not reached or unset (false).
     needs_date_verification: bool | None = None
+    freshness: FreshnessFilter | None = None
+    discovered_within: DiscoveredWithin | None = None
     # "Today" for deadline filters (ADR-012 §14): the client's local date, or the server's UTC
     # date when omitted. Never read by anything else, so tests can pass it explicitly.
     today: date | None = None
@@ -91,7 +107,8 @@ def _like(term: str) -> str:
     return f"%{escaped}%"
 
 
-def _filtered(db: Session, filters: Filters) -> Listing:
+def _filtered(db: Session, filters: Filters, healthy: Collection[uuid.UUID] = ()) -> Listing:
+    """`healthy`: the IDs of currently healthy sources (ADR-015), for the freshness filter."""
     profile = get_profile(db)
     # The current profile's latest evaluation per opportunity (same order as latest_evaluation).
     latest = (
@@ -207,6 +224,23 @@ def _filtered(db: Session, filters: Filters) -> Listing:
             if filters.needs_date_verification
             else or_(Opportunity.verify_by.is_(None), ~reached)
         )
+    if filters.freshness is not None:
+        healthy_active = _active.where(_record.ingestion_source_id.in_(list(healthy)))
+        if filters.freshness == "direct_verified":
+            stmt = stmt.where(
+                exists(healthy_active.where(_record.source_type.in_(list(DIRECT_SOURCE_TYPES))))
+            )
+        else:
+            today = filters.today or datetime.now(UTC).date()
+            stmt = stmt.where(
+                or_(
+                    and_(exists(_active), ~exists(healthy_active)),
+                    and_(exists(_active), Opportunity.verify_by <= today),
+                )
+            )
+    if filters.discovered_within is not None:
+        since = datetime.now(UTC) - timedelta(days=filters.discovered_within)
+        stmt = stmt.where(Opportunity.first_seen_at >= since)
     if filters.deadline_within is not None:
         today = filters.today or datetime.now(UTC).date()
         stmt = stmt.where(
@@ -220,6 +254,27 @@ def _filtered(db: Session, filters: Filters) -> Listing:
 def needs_date_verification(verify_by: date | None, today: date | None = None) -> bool:
     """ADR-014 §6: the registry's verify-by date has been reached."""
     return verify_by is not None and verify_by <= (today or datetime.now(UTC).date())
+
+
+def program_last_verified(db: Session, opportunity_ids: list[uuid.UUID]) -> dict[uuid.UUID, date]:
+    """The registry's hand-check date (`last_verified`) per program, one query for a whole page;
+    only that one JSON key is read, never the payload."""
+    if not opportunity_ids:
+        return {}
+    rows = db.execute(
+        select(_record.opportunity_id, _record.raw_payload.op("->>")("last_verified")).where(
+            _record.opportunity_id.in_(opportunity_ids),
+            _record.source_type == OpportunitySourceType.CURATED_REGISTRY,
+            _record.is_active,
+        )
+    ).all()
+    result: dict[uuid.UUID, date] = {}
+    for opportunity_id, value in rows:
+        try:
+            result[opportunity_id] = date.fromisoformat(value)
+        except (TypeError, ValueError):
+            continue
+    return result
 
 
 def provenance(records: list[OpportunitySourceRecord]) -> tuple[Origin, Availability]:
@@ -272,6 +327,8 @@ def _order(stmt: Listing, sort: Sort, today: date) -> Listing:
     )
     if sort == "newest":
         return stmt.order_by(*freshest)
+    if sort == "discovered":
+        return stmt.order_by(Opportunity.first_seen_at.desc(), Opportunity.id)
     if sort == "deadline":
         deadline = Opportunity.application_deadline
         group = case((deadline.is_(None), 1), (deadline < today, 2), else_=0)
@@ -296,10 +353,13 @@ def list_page(
     db: Session, filters: Filters, limit: int, offset: int, sort: Sort = "newest"
 ) -> tuple[list[OpportunitySummary], int]:
     """One page in the requested order (see _order)."""
-    stmt = _filtered(db, filters)
+    now = datetime.now(UTC)
+    today = filters.today or now.date()
+    evidence = source_evidence(db, now)
+    stmt = _filtered(db, filters, healthy_source_ids(evidence))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.execute(
-        _order(stmt, sort, filters.today or datetime.now(UTC).date())
+        _order(stmt, sort, today)
         .options(
             selectinload(Opportunity.application),
             selectinload(Opportunity.source_records)
@@ -309,6 +369,7 @@ def list_page(
         .limit(limit)
         .offset(offset)
     ).all()
+    last_verified = program_last_verified(db, [row[0].id for row in rows])
     items: list[OpportunitySummary] = []
     for (
         opportunity,
@@ -320,6 +381,7 @@ def list_page(
         pending_count,
     ) in rows:
         origin, availability = provenance(opportunity.source_records)
+        fresh = derive_freshness(opportunity.source_records, evidence, opportunity.verify_by, today)
         items.append(
             OpportunitySummary(
                 id=opportunity.id,
@@ -353,6 +415,9 @@ def list_page(
                 ),
                 origin=origin,
                 availability=availability,
+                freshness=fresh.state,
+                freshness_checked_at=fresh.checked_at,
+                program_last_verified=last_verified.get(opportunity.id),
                 source_names=sorted({record_name(r) for r in opportunity.source_records}),
             )
         )

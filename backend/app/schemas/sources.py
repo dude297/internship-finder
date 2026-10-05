@@ -26,6 +26,8 @@ class SourceCreate(BaseModel):
         IngestionSourceKind.LEVER,
         IngestionSourceKind.ASHBY,
         IngestionSourceKind.SMARTRECRUITERS,
+        IngestionSourceKind.WORKABLE,
+        IngestionSourceKind.PINPOINT,
     ]
     display_name: str = Field(min_length=1, max_length=200)
     board: str = Field(min_length=1, max_length=500)

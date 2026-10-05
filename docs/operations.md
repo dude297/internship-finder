@@ -56,6 +56,16 @@ Real network fetches add roughly 1–3 s per board, so a scheduled run with 50 b
 
 Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: **50** (the largest size measured). The extrapolated ceiling is around 200. Before going past 50, re-measure the elapsed time of a real scheduled run (runbook step 13). Real measurement, 2026-10-04: 20 ATS boards + the feed, a scheduled-style run of 24.6 s ([run 37234279820](https://github.com/dude297/internship-finder/actions/runs/37234279820)); first syncs of new boards took 7.6–53.6 s each (one-time creation and evaluation).
 
+### Milestone 8.1 measurements (2026-10-05)
+
+Same harness, on the M8.1 branch: 50 ATS boards + feed — first sync 122.2 s (21,366 SQL statements; slower than the 2026-10-04 run on a busier machine), unchanged re-sync 5.7 s (918), failure + close re-sync 9.0 s (920); `discover()` 5 statements; **opportunity list 9 statements at 1,456 and 1,931 opportunities** (freshness adds 3 set-based statements, independent of page size; `test_list_statement_count_is_constant`). Mixed fleet 20 ATS + 10 SmartRecruiters + feed: first sync 78.7 s (612 detail requests, ≤ 100 per source), unchanged re-sync 4.2 s with zero detail requests. Workable and Pinpoint cost one request per source per run, like Greenhouse. (The harness's last assertion, on SmartRecruiters retry sleep order, fails because the harness doesn't stub M8's rotating detail refresh; it's a harness issue, not a product one.)
+
+Activating the whole Direct Source Catalog would bring production to 26 + 33 = 59 direct sources, above the measured cap of 50. Activate in batches (largest-internship boards first), watch the scheduled run's elapsed time after each batch, and re-measure before passing 50.
+
+## Milestone 8.1 activation notes (prepared, not executed)
+
+Production stays on Milestone 8 until the owner approves. After merge: migrate Neon to `b7e3d9f1a2c4` (CHECK only; the M8 app is unaffected), deploy Render then Vercel, smoke (freshness badges, filters, Source Coverage independent metric, Verified Direct Sources list). Then, only with owner approval: `python -m app.cli scan-requirements` re-extracts every opportunity with `requirements-rules` v2 (read-only measurement on 2026-10-05: 18 → 244 pending suggestions over 194 opportunities; reviewed decisions are kept, nothing is auto-accepted); add catalog sources in bounded batches from **Verified Direct Sources**.
+
 ## Milestone 7 production activation runbook (executed 2026-10-04)
 
 Code release (merge, deploy) is separate from source activation (ADR-013 §9). Executed 2026-10-04 in two batches of 10 (20 ATS sources): description coverage 0.0% → 22.4%, ATS-backed 0 → 294, 88 feed postings deduplicated exactly as predicted, 4 pending suggestions, nothing closed, eligibility unchanged; the scheduled sync with 21 sources took 24.6 s. Full record: [deployment.md](deployment.md#milestone-7-release-2026-10-04). Use the same steps for any later batch.

@@ -29,6 +29,8 @@ export type FilterName =
   | 'requirement_review'
   | 'deadline_within'
   | 'needs_date_verification'
+  | 'freshness'
+  | 'discovered_within'
 
 interface Props {
   values: Record<FilterName, string>
@@ -109,6 +111,7 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
             ['recommended', 'Recommended'],
             ['newest', 'Newest'],
             ['deadline', 'Deadline (soonest first)'],
+            ['discovered', 'Recently discovered'],
           ]}
         />
         <Select
@@ -228,6 +231,28 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
           options={[
             ['', 'Any'],
             ['true', 'Needs date verification'],
+          ]}
+        />
+        <Select
+          id="filter-freshness"
+          label="Freshness"
+          value={values.freshness}
+          onChange={(v) => onChange('freshness', v)}
+          options={[
+            ['', 'Any'],
+            ['direct_verified', 'Direct ATS verified'],
+            ['needs_review', 'Needs freshness review'],
+          ]}
+        />
+        <Select
+          id="filter-discovered"
+          label="Discovered"
+          value={values.discovered_within}
+          onChange={(v) => onChange('discovered_within', v)}
+          options={[
+            ['', 'Any'],
+            ['1', 'New today'],
+            ['7', 'New this week'],
           ]}
         />
       </div>

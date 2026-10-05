@@ -155,6 +155,9 @@ class IngestionSourceKind(StrEnum):
     LEVER = "lever"
     ASHBY = "ashby"
     SMARTRECRUITERS = "smartrecruiters"
+    # Milestone 8.1 (ADR-015 §7): documented, keyless public job-board APIs.
+    WORKABLE = "workable"
+    PINPOINT = "pinpoint"
     # Built-in: the repository's program registry file (ADR-014 §5); no network.
     CURATED_REGISTRY = "curated_registry"
 
