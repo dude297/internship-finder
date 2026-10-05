@@ -51,7 +51,14 @@ export type ApplicationStatus = (typeof applicationStatuses)[number]
 
 export const origins = ['imported', 'manual'] as const
 export const availabilities = ['open', 'closed', 'manual'] as const
-export const sourceKinds = ['community_feed', 'greenhouse', 'lever', 'ashby'] as const
+export const sourceKinds = [
+  'community_feed',
+  'greenhouse',
+  'lever',
+  'ashby',
+  'smartrecruiters',
+  'curated_registry',
+] as const
 export const regions = ['global', 'eu'] as const
 export const runStatuses = [
   'running',
@@ -203,6 +210,12 @@ export const opportunitySummarySchema = z.object({
   location: z.string().nullable(),
   remote_mode: z.enum(remoteModes).nullable(),
   application_deadline: nullableDate,
+  // Date trust (ADR-014 §6): typical windows are hints, never deadlines.
+  program_cycle: z.string().nullable().default(null),
+  typical_open_window: z.string().nullable().default(null),
+  typical_close_window: z.string().nullable().default(null),
+  verify_by: nullableDate.default(null),
+  needs_date_verification: z.boolean().default(false),
   start_date: nullableDate,
   posted_at: z.string().nullable(),
   first_seen_at: z.string(),
@@ -263,6 +276,12 @@ export const opportunityDetailSchema = z.object({
   location: z.string().nullable(),
   remote_mode: z.enum(remoteModes).nullable(),
   application_deadline: nullableDate,
+  // Date trust (ADR-014 §6): typical windows are hints, never deadlines.
+  program_cycle: z.string().nullable().default(null),
+  typical_open_window: z.string().nullable().default(null),
+  typical_close_window: z.string().nullable().default(null),
+  verify_by: nullableDate.default(null),
+  needs_date_verification: z.boolean().default(false),
   start_date: nullableDate,
   end_date: nullableDate,
   requirements_assessment_status: z.enum(assessmentStatuses),
@@ -357,7 +376,7 @@ export const sourceSchema = z.object({
 export type Source = z.infer<typeof sourceSchema>
 
 export interface SourceInput {
-  kind: 'greenhouse' | 'lever' | 'ashby'
+  kind: SupportedSourceKind
   display_name: string
   board: string
   region: Region | null
@@ -454,7 +473,12 @@ export type ProfileSourceDeleteResult = z.infer<typeof profileSourceDeleteResult
 
 // Source discovery / coverage (ADR-013 §2, §3): derived on read, never stored.
 
-export const supportedSourceKinds = ['greenhouse', 'lever', 'ashby'] as const
+export const supportedSourceKinds = [
+  'greenhouse',
+  'lever',
+  'ashby',
+  'smartrecruiters',
+] as const
 export type SupportedSourceKind = (typeof supportedSourceKinds)[number]
 
 export const coverageMetricsSchema = z.object({
@@ -543,6 +567,7 @@ export interface OpportunityQuery {
   requirement_review?: 'pending' | 'stale' | 'needs_review'
   deadline_within?: '7' | '14' | '30'
   has_deadline?: 'true'
+  needs_date_verification?: 'true'
   // The browser's local date (YYYY-MM-DD); sent whenever a deadline filter is used (ADR-012 §14).
   today?: string
 }

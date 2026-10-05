@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../api/client'
 import type { OpportunityDetail } from '../api/schemas'
 import { ApplicationTracker } from '../components/ApplicationTracker'
+import { DeadlineText, NeedsDateBadge, TypicalWindow } from '../components/DateTrust'
 import { EligibilityPanel } from '../components/EligibilityPanel'
 import { RequirementReviewPanel } from '../components/RequirementReviewPanel'
 import { SourceProvenance } from '../components/SourceProvenance'
@@ -82,7 +83,6 @@ export function OpportunityDetailPage() {
     ['Posted', formatDay(o.posted_at)],
     ['Location', o.location ?? '—'],
     ['Remote mode', o.remote_mode ? remoteModeLabels[o.remote_mode] : '—'],
-    ['Application deadline', formatDate(o.application_deadline)],
     ['Start date', formatDate(o.start_date)],
     ['End date', formatDate(o.end_date)],
   ]
@@ -137,6 +137,12 @@ export function OpportunityDetailPage() {
           Details
         </h2>
         <dl className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+          <div>
+            <dt className="inline text-slate-500">Application deadline: </dt>
+            <dd className="inline">
+              <DeadlineText deadline={o.application_deadline} />
+            </dd>
+          </div>
           {facts.map(([label, value]) => (
             <div key={label}>
               <dt className="inline text-slate-500">{label}: </dt>
@@ -144,6 +150,12 @@ export function OpportunityDetailPage() {
             </div>
           ))}
         </dl>
+        {o.needs_date_verification && (
+          <p>
+            <NeedsDateBadge verifyBy={o.verify_by} />
+          </p>
+        )}
+        <TypicalWindow o={o} />
         {o.application_url && (
           <p>
             <a
