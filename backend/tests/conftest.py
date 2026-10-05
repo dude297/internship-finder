@@ -70,7 +70,7 @@ def db(pg_engine: Engine, request: pytest.FixtureRequest) -> Iterator[Session]:
     feed) keep their world; registry tests opt in."""
     with pg_engine.connect() as connection, connection.begin() as transaction:
         session = Session(bind=connection, join_transaction_mode="create_savepoint")
-        if request.node.get_closest_marker("registry") is None:
+        if "registry" not in request.keywords:
             session.execute(text("DELETE FROM ingestion_sources WHERE kind = 'curated_registry'"))
         yield session
         session.close()
