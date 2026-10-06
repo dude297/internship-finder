@@ -82,7 +82,7 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-None in progress. The documentation governance change (`chore/docs-governance`) is tooling, not a milestone.
+Milestone 9 owner decisions (`feature/m9-owner-decisions`, unreleased, not merged, not deployed): durable **Hide / Unhide** for opportunities (`dismissed_at`, migration `d4f8a1c6e2b9`, not applied to production), a **Hidden** list filter (hidden excluded by default, including from the recommended sort), and **Revert to source** for curated imported opportunities ([ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md)). Production is still Milestone 8.1.
 
 ## Known Operational Issues
 
@@ -108,7 +108,6 @@ None open. Fixed during hosted validation (2026-09-29):
 - No database backups beyond Neon Free's short restore window.
 - Board scope is title-based: internships titled without intern/co-op/apprentice words are filtered, and titles such as "Internship Program Manager" are kept. Greenhouse postings are typed by title from Milestone 6 (still `other` in production until released). Boards added before Milestone 4 were migrated to **All postings**.
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
-- Deleting an imported opportunity deletes its source records, so the next sync re-imports it (no "hide" yet). There's no "revert to source" for curated opportunities.
 - Title/organization search uses `ILIKE '%term%'` without a trigram index; fine at thousands of rows.
 - Every opportunity update replaces every requirement row (new IDs; old rule results keep their text with `requirement_id` NULL).
 - Expired sessions are deleted only when that user logs in again; there's no periodic cleanup.
@@ -176,6 +175,7 @@ Also watch Bosch's backlog (98 deferred at 2026-10-05 21:07 UTC) clear and its S
 ## Recent Important Decisions
 
 - 2026-10-05: Milestone 8.1 released. PR #25 merged (merge commit) as `main` `203a562`; Neon migrated to `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`, Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`; hosted smoke 14/14. v2 scan and catalog activation deferred to the owner.
+- 2026-10-06: ADR-017 accepted on `feature/m9-owner-decisions` (unreleased): hiding is two nullable columns that sync never touches (hidden excluded by default); Revert to source reuses the ADR-013 owner-record and fallback code and the fingerprinted evaluation. Migration `d4f8a1c6e2b9`.
 - 2026-10-05: ADR-015 accepted: derived listing freshness (never stored), first-seen "New", live-link pings rejected, `requirements-rules` v2, Independent Discovery Coverage, the Direct Source Catalog, Workable and Pinpoint adapters, an empty-snapshot closure guard; no first-party company adapter yet. Migration `b7e3d9f1a2c4`.
 - 2026-10-05: Milestone 8 released. PR #23 → `main` `9263860`; Neon migrated to `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`, Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13); 6 SmartRecruiters companies activated; coverage 22.4% → 38.7%. Runbook rule added: sync the feed on new code before adding sources whose feed identity that release introduces.
 - 2026-10-04: ADR-014 accepted (on the Milestone 8 branch): SmartRecruiters public Posting API as an ATS source with bounded detail fetching and partial-run semantics; a multi-request `collect` adapter hook; the curated program registry as a built-in automated source (own `curated_registry` provenance, so it can update its own entries while owner edits still win); verified vs typical dates and `verify_by`. Migration `a8c3e5f7b9d1`. Oracle, Workday, USAJOBS excluded from M8.

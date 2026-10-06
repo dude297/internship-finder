@@ -146,7 +146,7 @@ Ties within a rank: earliest `first_seen_at`, then record ID — so two boards n
 
 The owner's fields are rewritten from its normalized output when its own item changes, it reactivates, it first attaches through deduplication and outranks the current owner (**takeover**: a board added after the feed), or the previous owner closes and it's the next owner (**fallback**: re-derived from the new owner's own *stored* raw item through its adapter's per-item normalizer, no fetch, in the same run as the closure, [ADR-013 §5](decisions/ADR-013-provider-enrichment-and-source-authority.md#5-fallback-when-a-direct-ats-source-closes)). The discovery feed never supplies a description, so a feed owner taking over keeps the last known posting text instead of erasing it; every other field is restored from the feed. Non-owners only update their own source record; unchanged items skip canonical work entirely.
 
-A curated opportunity (`manually_curated_at`) is never rewritten by any sync, owner or not (ADR-008 §8) — above all of the above.
+A curated opportunity (`manually_curated_at`) is never rewritten by any sync, owner or not (ADR-008 §8) — above all of the above. The owner can discard their edits with **Revert to source**, which re-derives the content from the authoritative active record the same way ([ADR-017 §4](decisions/ADR-017-owner-opportunity-decisions.md)). A hidden opportunity (`dismissed_at`) is not curated: syncs keep updating it and never un-hide it or re-import it as new.
 
 ## Source coverage and discovery (Milestone 7)
 

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Milestone 9 (in development): owner decisions on opportunities ([ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md)). Migration `d4f8a1c6e2b9` (two nullable columns).
+  - **Hide / Unhide** an opportunity (`PUT`/`DELETE /api/opportunities/{id}/dismissal`): durable across syncs (source records keep updating; never re-imported as new), excluded from the default list and the recommended sort; a **Hidden** filter (`hidden=include|only`) shows them.
+  - **Revert to source** (`POST /api/opportunities/{id}/revert-to-source`) for curated imported opportunities: after confirmation, discards edits and recorded requirements and restores the authoritative active source's content, then re-evaluates; refused for manual-only opportunities.
+
 ### Changed
 
 - Documentation governance: [document authority map](docs/README.md), immutable [release records](docs/releases/) (history moved out of PROJECT_STATE.md, deployment.md, and operations.md), `docs/status.json` with generated status blocks, a Documentation Synchronization Contract (CLAUDE.md, ENGINEERING_GUIDELINES.md §14–§15), and `scripts/check_docs.py` enforced by a new CI `docs` job (links, anchors, status, research headers, changed-path guards). Docs and tooling only; no product change.
