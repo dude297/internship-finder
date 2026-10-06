@@ -170,6 +170,8 @@ Discovery only suggests. `POST /api/sources/discovery/add` (CSRF-protected) crea
 
 Which boards are enabled in production, and when each batch was added: [deployment.md](deployment.md), [operations.md](operations.md), [CHANGELOG.md](../CHANGELOG.md), and `GET /api/sources` (the live source list).
 
+The Action Inbox ([ADR-020](decisions/ADR-020-action-inbox.md)) reads sources only to list unhealthy ones (derived health, as on the Sources page) and reuses the list's "open" rule (`discovery.is_open`, an export of the existing availability filter). Ingestion behavior is unchanged.
+
 ## Common Behavior
 
 - **Network safety:** HTTPS to the allowlisted provider hosts only (`ALLOWED_HOSTS` in `ingestion/http.py`: the feed host, Greenhouse, Lever global/EU, Ashby, SmartRecruiters, `www.`/`apply.workable.com`, plus exactly one label under `pinpointhq.com`), public addresses only, 5 s connect / 20 s read timeouts, ≤ 3 redirects (each re-checked), ≤ 20 MB responses, ≤ 3 attempts (429/5xx/timeouts; `Retry-After` honored up to 30 s), a descriptive `User-Agent`. User-entered links are parsed into identifiers and never requested.
