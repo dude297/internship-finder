@@ -51,7 +51,7 @@ describe('program registry', () => {
     })
     renderAt('/sources')
     expect(await screen.findByText('Curated program registry')).toBeInTheDocument()
-    expect(screen.getByText(/SmartRecruiters · examplecompany/)).toBeInTheDocument()
+    expect(screen.getByText('examplecompany')).toBeInTheDocument()
     expect(screen.getAllByLabelText('Import')).toHaveLength(2) // smart's picker + add form
   })
 

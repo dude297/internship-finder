@@ -81,7 +81,7 @@ describe('source coverage', () => {
     renderAt('/sources')
 
     expect(
-      await screen.findByText('No supported sources found in the discovery feed.'),
+      await screen.findByText(/No supported sources found in the discovery feed/),
     ).toBeInTheDocument()
   })
 
@@ -183,5 +183,122 @@ describe('source coverage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'One or more sources is no longer a valid suggestion.',
     )
+  })
+
+  it('summarises coverage and counts enabled direct sources against the cap', async () => {
+    const board = (id: string, changes: Record<string, unknown> = {}) =>
+      source({
+        id,
+        kind: 'greenhouse',
+        builtin: false,
+        identifier: id,
+        display_name: id,
+        ...changes,
+      })
+    mockApi({
+      ...loggedIn,
+      'GET /api/sources': () => [
+        source(),
+        board('alpha'),
+        board('beta'),
+        board('gamma', { enabled: false }),
+      ],
+      'GET /api/sources/discovery': () => discoveryResponse(),
+    })
+    renderAt('/sources')
+
+    const summary = await screen.findByText('Independent discovery')
+    expect(summary.closest('div')).toHaveTextContent('30%')
+    expect(screen.getByText('Description coverage').closest('div')).toHaveTextContent(
+      '40%',
+    )
+    expect(screen.getByText('Feed-only postings').closest('div')).toHaveTextContent('90')
+    // The built-in feed and the disabled board don't count.
+    expect(screen.getByText('Direct sources enabled').closest('div')).toHaveTextContent(
+      '2 / 50',
+    )
+  })
+
+  it('orders suggestions by feed-only postings and puts configured ones last', async () => {
+    mockApi({
+      ...loggedIn,
+      'GET /api/sources': () => [source()],
+      'GET /api/sources/discovery': () =>
+        discoveryResponse({
+          suggestions: [
+            suggestion({
+              key: 'greenhouse:small',
+              suggested_display_name: 'Small Co',
+              feed_only_opportunities: 1,
+            }),
+            suggestion({
+              key: 'greenhouse:done',
+              suggested_display_name: 'Done Co',
+              feed_only_opportunities: 99,
+              already_configured: true,
+            }),
+            suggestion({
+              key: 'greenhouse:big',
+              suggested_display_name: 'Big Co',
+              feed_only_opportunities: 9,
+            }),
+          ],
+        }),
+    })
+    renderAt('/sources')
+
+    await screen.findByText('Big Co')
+    const names = screen
+      .getAllByRole('row')
+      .map((row) => row.textContent ?? '')
+      .filter((text) => /Co/.test(text))
+      .map((text) => /(Big|Small|Done) Co/.exec(text)![1])
+    expect(names).toEqual(['Big', 'Small', 'Done'])
+  })
+
+  it('groups sources by health, failing first, with the last error', async () => {
+    mockApi({
+      ...loggedIn,
+      'GET /api/sources': () => [
+        source({ id: 'ok', display_name: 'Healthy Board', health: 'healthy' }),
+        source({
+          id: 'bad',
+          display_name: 'Broken Board',
+          health: 'failing',
+          consecutive_failures: 2,
+          latest_run: run({
+            id: 'run-bad',
+            source_id: 'bad',
+            status: 'failed',
+            error_summary: 'The source timed out.',
+          }),
+        }),
+      ],
+      'GET /api/sources/discovery': () => discoveryResponse(),
+    })
+    renderAt('/sources')
+
+    const failing = await screen.findByRole('heading', { name: /^Failing \(1\)/ })
+    const healthy = screen.getByRole('heading', { name: /^Healthy \(1\)/ })
+    expect(
+      failing.compareDocumentPosition(healthy) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.getByText('Last error:')).toBeInTheDocument()
+    // Shown once: the run summary doesn't repeat it.
+    expect(screen.getAllByText('The source timed out.')).toHaveLength(1)
+    expect(screen.getByText('1 failing, 0 warning, 1 healthy.')).toBeInTheDocument()
+  })
+
+  it('says nothing needs attention when no source is failing', async () => {
+    mockApi({
+      ...loggedIn,
+      'GET /api/sources': () => [source({ health: 'healthy' })],
+      'GET /api/sources/discovery': () => discoveryResponse(),
+    })
+    renderAt('/sources')
+
+    expect(
+      await screen.findByText('Nothing is failing. No source needs attention.'),
+    ).toBeInTheDocument()
   })
 })

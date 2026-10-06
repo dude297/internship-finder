@@ -16,7 +16,14 @@ function seconds(run: Run): string | null {
 }
 
 /** One ingestion run: status, counts, and a few safe error lines (never payloads). */
-export function RunSummary({ run }: { run: Run }) {
+export function RunSummary({
+  run,
+  hideError = false,
+}: {
+  run: Run
+  // The caller already shows error_summary (the source card's Last error line).
+  hideError?: boolean
+}) {
   const counts: [string, number][] = [
     ['Fetched', run.fetched_count],
     ['Filtered', run.filtered_count],
@@ -41,7 +48,9 @@ export function RunSummary({ run }: { run: Run }) {
           {duration && ` · ${duration}`}
         </span>
       </p>
-      {run.error_summary && <p className="text-red-800">{run.error_summary}</p>}
+      {run.error_summary && !hideError && (
+        <p className="text-red-800">{run.error_summary}</p>
+      )}
       {run.status !== 'failed' && run.status !== 'no_change' && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-3">
           {counts.map(([label, value]) => (

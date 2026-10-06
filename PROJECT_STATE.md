@@ -91,6 +91,8 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 Live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
+Milestone 19, Sources page UX, on branch `feature/m19-sources-ux` (unreleased; frontend only, no migration): coverage summary, health-grouped sources with last error and last success, value-ordered suggestions, clearer empty states. See [CHANGELOG.md](CHANGELOG.md).
+
 Milestone 15, work-authorization eligibility, on branch `feature/m15-work-authorization` (unreleased; [ADR-026](docs/decisions/ADR-026-work-authorization-eligibility.md), migration `c8d2f4a6b0e3`, eligibility rules `v2`). Release step after deploy: `reevaluate`.
 
 **Milestone 12, large-response source architecture** (merged to `main`, [PR #52](https://github.com/dude297/internship-finder/pull/52), not deployed; [ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md), Proposed): Greenhouse boards over 500 jobs (Anduril, SpaceX) are read from the content-free list plus per-job detail for internship titles, under fixed bounds; the 20 MiB per-request cap is unchanged. Not released: production still has Anduril disabled and SpaceX unactivated until a release and an owner-approved activation. No migration.
