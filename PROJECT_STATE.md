@@ -8,10 +8,10 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | Milestone 11 on `feature/m11-fit-scoring-v2` |
+| **Current Development** | Milestone 12 on `feature/m12-encrypted-backup` |
 <!-- END GENERATED STATUS -->
 
-Last Updated: 2026-10-05
+Last Updated: 2026-10-06
 
 Production: https://internship-finder-pi.vercel.app (Vercel → Render → Neon). Deploy IDs, smoke results, and counts for the running release: its [release record](docs/releases/2026-10-05-m8-1.md). Remote: https://github.com/dude297/internship-finder.
 
@@ -116,7 +116,7 @@ None open. Fixed during hosted validation (2026-09-29):
 
 - The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. All logins through the site share one bucket, so anyone's 10 failed attempts block new logins for up to 15 minutes (accepted; no trustworthy per-browser address exists behind Vercel's rewrite).
 - Catalog re-evaluation (profile or Match Profile save) is synchronous in the request. Milestone 4 batches it and skips unchanged pairs (~2 s for 1,100 opportunities locally when everything changes; hosted, measured 2026-09-29 against 1,055 real opportunities: 6.36 s scoring everything, 2.0 s when nothing changed — see [operations.md](docs/operations.md#evaluation-history-and-re-evaluation-implemented-not-scheduled)). A much larger catalog would need background re-evaluation: the 2026-10-06 scale audit measured 42 s locally for a whole-catalog change at 10,000 opportunities, so the hosted proxy limit is reached around 3,000–5,000 ([scale audit](docs/operations.md#scale-audit-2026-10-06)).
-- Fit v1 is lexical: synonyms outside the alias table don't match, and a skill that's also a common word (e.g. `Go`) can match unrelated text. Location matching is plain text. Activities and experience don't score ([scoring.md](docs/scoring.md#known-limitations-v1)).
+- Fit is lexical: synonyms outside the alias and related tables don't match. Development adds scoring v2 ([ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), unreleased), whose guard rejects ordinary-word uses of `Go`/`C`/`R`/`Rust` at some recall cost; production still runs v1, where they can match unrelated text. Location matching is plain text plus a Bay Area region table (v2). Activities and experience don't score ([scoring.md](docs/scoring.md#known-limitations)).
 - Every current evaluation is `needs_verification`: no imported requirement has been accepted yet, so eligibility can't be decided. Cross-bucket dominance is covered by deterministic tests, not production data.
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
 - Render Free cold starts take about 1–3 minutes (measured 73 s and ~3 min); Vercel either holds the request or returns `502`, which the UI shows as the waking state. Sessions survive the restart.
@@ -151,7 +151,7 @@ Current (2026-10-05, at the Milestone 8.1 release): migration `b7e3d9f1a2c4`; 1,
 
 ## Current Scoring Version
 
-`v1`, in production since the Milestone 4 release (2026-09-29): [docs/scoring.md](docs/scoring.md), [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md).
+`v1`, in production since the Milestone 4 release (2026-09-29): [docs/scoring.md](docs/scoring.md), [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md). Current Development (`feature/m11-fit-scoring-v2`) implements `v2` ([ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), unreleased, same weights); releasing it requires `python -m app.cli reevaluate --dry-run`, then `reevaluate` ([deployment.md](docs/deployment.md#release-procedure)).
 
 ## Current Eligibility Rules Version
 
