@@ -34,6 +34,7 @@ from app.repositories import (
 )
 from app.schemas.application import ApplicationBody
 from app.schemas.opportunity import OpportunityBody, RequirementBody
+from app.services import applications
 from app.services.requirement_candidates import refresh_candidates
 
 MANUAL_SOURCE_NAME = "manual"
@@ -154,16 +155,9 @@ def current_evaluation(db: Session, opportunity: Opportunity) -> OpportunityEval
 
 
 def save_application(db: Session, opportunity: Opportunity, body: ApplicationBody) -> Application:
-    """Start or update tracking. Any status may follow any other; eligibility is untouched."""
-    if opportunity.application is None:
-        opportunity.application = Application(**body.model_dump())
-    else:
-        # Only fields the client sent: an older client that omits the follow-up fields keeps
-        # them; an explicit null clears (ADR-020 §1).
-        for name, value in body.model_dump(exclude_unset=True).items():
-            setattr(opportunity.application, name, value)
-    db.flush()
-    return opportunity.application
+    """Start or update tracking (ADR-025: history and `applied_at` live in the applications
+    service). Any status may follow any other; eligibility is untouched."""
+    return applications.save_application(db, opportunity, body)
 
 
 def dismiss(opportunity: Opportunity, reason: DismissReason | None) -> None:
