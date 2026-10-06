@@ -60,6 +60,8 @@ DeadlineWithin = Annotated[
 # discovered: first found by Internship Finder, newest first (not the provider's posted date).
 Sort = Literal["recommended", "newest", "deadline", "discovered"]
 # ADR-015: direct_verified, or needs_review (source_warning / program_recheck).
+# ADR-017: hidden opportunities are excluded by default; "hidden" shows only them.
+HiddenFilter = Literal["exclude", "include", "only"]
 FreshnessFilter = Literal["direct_verified", "needs_review"]
 # ADR-015: first found within the last N days (first_seen_at, never posted_at).
 DiscoveredWithin = Annotated[
@@ -90,6 +92,7 @@ class Filters:
     needs_date_verification: bool | None = None
     freshness: FreshnessFilter | None = None
     discovered_within: DiscoveredWithin | None = None
+    hidden: HiddenFilter = "exclude"
     # "Today" for deadline filters (ADR-012 §14): the client's local date, or the server's UTC
     # date when omitted. Never read by anything else, so tests can pass it explicitly.
     today: date | None = None
@@ -158,6 +161,10 @@ def _filtered(db: Session, filters: Filters, healthy: Collection[uuid.UUID] = ()
         stmt = stmt.where(or_(exists(_active), ~exists(_automated)))
     elif filters.availability == "closed":
         stmt = stmt.where(and_(exists(_automated), ~exists(_active)))
+    if filters.hidden == "exclude":
+        stmt = stmt.where(Opportunity.dismissed_at.is_(None))
+    elif filters.hidden == "only":
+        stmt = stmt.where(Opportunity.dismissed_at.is_not(None))
     if filters.q:
         pattern = _like(filters.q.strip())
         stmt = stmt.where(
@@ -401,6 +408,7 @@ def list_page(
                 scoring_version=scoring_version,
                 pending_requirement_count=pending_count or 0,
                 requirements_stale=opportunity.requirements_stale_since is not None,
+                dismissed_at=opportunity.dismissed_at,
                 program_cycle=opportunity.program_cycle,
                 typical_open_window=opportunity.typical_open_window,
                 typical_close_window=opportunity.typical_close_window,

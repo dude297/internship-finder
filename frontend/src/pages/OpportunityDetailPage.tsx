@@ -63,9 +63,36 @@ export function OpportunityDetailPage() {
     }
   }
 
-  async function remove() {
+  async function decide(action: () => Promise<OpportunityDetail>, failure: string) {
+    setBusy(true)
+    try {
+      setOpportunity(await action())
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : failure)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function revert() {
     if (
-      !window.confirm(`Delete "${o.title}"? This also deletes its tracking and history.`)
+      !window.confirm(
+        `Revert "${o.title}" to its source? This discards your edits and recorded requirements and restores the source's content. Your application tracking is kept.`,
+      )
+    )
+      return
+    await decide(() => api.revertOpportunityToSource(id), 'Could not revert it.')
+  }
+
+  async function remove() {
+    const reimport =
+      o.origin === 'imported'
+        ? ' The next sync will import it again; use Hide to keep it out of your list.'
+        : ''
+    if (
+      !window.confirm(
+        `Delete "${o.title}"? This also deletes its tracking and history.${reimport}`,
+      )
     )
       return
     setBusy(true)
@@ -100,6 +127,11 @@ export function OpportunityDetailPage() {
           <NewBadge firstSeenAt={o.first_seen_at} postedAt={o.posted_at} />
           <FreshnessBadge o={o} />
         </p>
+        {o.dismissed_at && (
+          <p className="inline-block rounded bg-slate-200 px-2 py-0.5 text-sm text-slate-800">
+            Hidden: not shown in your list unless you filter for hidden
+          </p>
+        )}
         {o.availability === 'closed' && (
           <p className="inline-block rounded bg-slate-700 px-2 py-0.5 text-sm text-white">
             Closed: no source lists this posting anymore
@@ -122,6 +154,32 @@ export function OpportunityDetailPage() {
           >
             Re-evaluate
           </button>
+          <button
+            type="button"
+            onClick={() =>
+              decide(
+                () =>
+                  o.dismissed_at
+                    ? api.restoreOpportunity(id)
+                    : api.dismissOpportunity(id, 'not_interested'),
+                'Could not update it.',
+              )
+            }
+            disabled={busy}
+            className={secondaryButtonClass}
+          >
+            {o.dismissed_at ? 'Unhide' : 'Hide'}
+          </button>
+          {o.origin === 'imported' && o.manually_curated_at && (
+            <button
+              type="button"
+              onClick={revert}
+              disabled={busy}
+              className={secondaryButtonClass}
+            >
+              Revert to source
+            </button>
+          )}
           <button
             type="button"
             onClick={remove}

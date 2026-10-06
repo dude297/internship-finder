@@ -190,3 +190,12 @@ class IngestionStage(StrEnum):
     NORMALIZE = "normalize"
     IDENTIFY = "identify"
     PERSIST = "persist"
+
+
+class DismissReason(StrEnum):
+    """Why the owner hid an opportunity (ADR-017). Optional and informational only."""
+
+    NOT_INTERESTED = "not_interested"
+    NOT_ELIGIBLE = "not_eligible"
+    ALREADY_APPLIED = "already_applied"
+    OTHER = "other"

@@ -41,6 +41,7 @@ TABLES = MILESTONE_5_TABLES | {"opportunity_requirement_candidates"}
 MILESTONE_5_REVISION = "c5a1e0f3d7b2"
 MILESTONE_6_REVISION = "e6d1a4b8c2f9"
 MILESTONE_7_1_REVISION = "f2a7c9d4e1b3"
+MILESTONE_8_1_REVISION = "b7e3d9f1a2c4"
 GRADUATION_CHECK = "ck_profiles_graduation_after_status_as_of"
 MILESTONE_3_REVISION = "726372d627b8"
 RUNNING_INDEX = "uq_ingestion_runs_one_running_per_source"
@@ -817,3 +818,22 @@ def test_milestone_8_round_trip_and_downgrade_guards(pg_engine: Engine, pg_url: 
                 text("SELECT enabled, scope FROM ingestion_sources WHERE kind = 'curated_registry'")
             ).one()
         assert tuple(seeded) == (True, "all")
+
+
+def test_milestone_9_owner_decision_columns_round_trip(pg_engine: Engine, pg_url: str) -> None:
+    """ADR-017: additive nullable hide columns; a reason needs a hidden time; downgrade drops."""
+    config = alembic_config(pg_url)
+    try:
+        assert {"dismissed_at", "dismissed_reason"} <= columns(pg_engine, "opportunities")
+        with pytest.raises(IntegrityError), pg_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO opportunities (id, title, organization, opportunity_type,"
+                    " dismissed_reason) VALUES (gen_random_uuid(), 't', 'o', 'internship',"
+                    " 'other')"
+                )
+            )
+        command.downgrade(config, MILESTONE_8_1_REVISION)
+        assert not {"dismissed_at", "dismissed_reason"} & columns(pg_engine, "opportunities")
+    finally:
+        command.upgrade(config, "head")
