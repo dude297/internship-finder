@@ -339,7 +339,7 @@ def _bootstrap_sources(tags: list[str], *, disable_feed: bool, dry_run: bool, sy
     return _sync_sources(scheduled=False) if sync and not dry_run else 0
 
 
-class _NoTracebackFormatter(logging.Formatter):
+class NoTracebackFormatter(logging.Formatter):
     """CLI output can land in public GitHub Actions logs: an exception is reduced to its class
     name, never its message or traceback (which can carry the database host or SQL)."""
 
@@ -353,7 +353,7 @@ class _NoTracebackFormatter(logging.Formatter):
 
 def _configure_logging() -> None:
     handler = logging.StreamHandler()
-    handler.setFormatter(_NoTracebackFormatter("%(levelname)s %(name)s: %(message)s"))
+    handler.setFormatter(NoTracebackFormatter("%(levelname)s %(name)s: %(message)s"))
     logging.basicConfig(level=logging.WARNING, handlers=[handler], force=True)
 
 

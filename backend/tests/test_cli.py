@@ -322,9 +322,9 @@ def test_schema_check_matches_the_migrated_test_database(db: Session) -> None:
 def test_cli_logging_never_prints_tracebacks() -> None:
     import logging
 
-    from app.cli import _NoTracebackFormatter
+    from app.cli import NoTracebackFormatter
 
-    formatter = _NoTracebackFormatter("%(message)s")
+    formatter = NoTracebackFormatter("%(message)s")
     try:
         raise RuntimeError("postgresql://user:secret@ep-host.neon.tech/db")
     except RuntimeError:
