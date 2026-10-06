@@ -1,4 +1,4 @@
-"""Fit scoring v1 (ADR-010 §7). Pure: no database, network, clock, or randomness."""
+"""Fit scoring (ADR-010 §7, v2 per ADR-019). Pure: no database, network, clock, or randomness."""
 
 from collections.abc import Iterable, Sequence
 from datetime import date
@@ -51,14 +51,24 @@ def _distinct_terms(terms: Iterable[str]) -> list[tuple[str, Phrase]]:
     return result
 
 
-def _term_match(key: str, noun: str, terms: Sequence[str], corpus: Corpus) -> ComponentResult:
+def _term_match(
+    key: str, noun: str, terms: Sequence[str], corpus: Corpus, *, skill: bool = False
+) -> ComponentResult:
     usable = _distinct_terms(terms)
     if not usable:
         return _missing(key, "profile", f"Add {noun} to your Match Profile to score this.")
-    matched = [term for term, phrase in usable if corpus.matches(phrase)]
-    unmatched = [term for term, phrase in usable if not corpus.matches(phrase)]
+    found = {term: corpus.match_via(phrase, skill=skill) for term, phrase in usable}
+    matched = [term for term, via in found.items() if via]
+    unmatched = [term for term, via in found.items() if not via]
+    # Evidence for matches that aren't the exact spelling: "alias <posting phrase>" / "related ...".
+    evidence = {
+        term: f"{via[0]} {' '.join(via[1])}"
+        for term, via in found.items()
+        if via and via[0] != "exact"
+    }
     if matched:
-        reason = f"Matched {len(matched)} of {len(usable)} {noun}: {_join(matched)}."
+        shown = [f"{t} ({evidence[t]})" if t in evidence else t for t in matched]
+        reason = f"Matched {len(matched)} of {len(usable)} {noun}: {_join(shown)}."
     else:
         reason = f"None of your {len(usable)} {noun} appear in this posting."
     return ComponentResult(
@@ -67,11 +77,12 @@ def _term_match(key: str, noun: str, terms: Sequence[str], corpus: Corpus) -> Co
         reason=reason,
         matched=matched,
         unmatched=unmatched,
+        details={"evidence": evidence} if evidence else None,
     )
 
 
 def technical(profile: FitProfileInput, corpus: Corpus) -> ComponentResult:
-    return _term_match("technical", "skills", profile.skills, corpus)
+    return _term_match("technical", "skills", profile.skills, corpus, skill=True)
 
 
 def interests(profile: FitProfileInput, corpus: Corpus) -> ComponentResult:
@@ -86,12 +97,24 @@ def _course_words(phrase: Phrase) -> list[str]:
     ]
 
 
+def _course_group_term(phrase: Phrase, corpus: Corpus) -> str | None:
+    """The posting term that connects a course to the posting through a subject group."""
+    name = " ".join(phrase)
+    for course_names, posting_terms in config.SUBJECT_GROUPS:
+        if name in course_names:
+            for term in sorted(posting_terms):
+                if corpus.has_phrase(tokens(term)):
+                    return term
+    return None
+
+
 def academic(profile: FitProfileInput, corpus: Corpus) -> ComponentResult:
     usable = _distinct_terms(profile.courses)
     if not usable:
         return _missing("academic", "profile", "Add courses to your Match Profile to score this.")
     exact: list[str] = []
     keywords: list[str] = []
+    groups: dict[str, str] = {}
     unmatched: list[str] = []
     for course, phrase in usable:
         words = _course_words(phrase)
@@ -99,12 +122,24 @@ def academic(profile: FitProfileInput, corpus: Corpus) -> ComponentResult:
             exact.append(course)
         elif words and all(corpus.matches((word,)) for word in words):
             keywords.append(course)
+        elif (group_term := _course_group_term(phrase, corpus)) is not None:
+            keywords.append(course)
+            groups[course] = group_term
         else:
             unmatched.append(course)
     points = config.COURSE_EXACT_POINTS * len(exact) + config.COURSE_KEYWORD_POINTS * len(keywords)
     parts = [
         *([f"named in the posting: {_join(exact)}"] if exact else []),
-        *([f"subject words in the posting: {_join(keywords)}"] if keywords else []),
+        *(
+            [f"subject words in the posting: {_join(k for k in keywords if k not in groups)}"]
+            if len(keywords) > len(groups)
+            else []
+        ),
+        *(
+            [f"course group: {_join(f'{c} (posting says {t})' for c, t in groups.items())}"]
+            if groups
+            else []
+        ),
     ]
     reason = (
         f"{len(exact) + len(keywords)} of {len(usable)} courses relate ({'; '.join(parts)})."
@@ -117,7 +152,7 @@ def academic(profile: FitProfileInput, corpus: Corpus) -> ComponentResult:
         reason=reason,
         matched=exact + keywords,
         unmatched=unmatched,
-        details={"exact": exact, "keywords": keywords},
+        details={"exact": exact, "keywords": keywords, **({"groups": groups} if groups else {})},
     )
 
 
@@ -173,12 +208,32 @@ _MODE_LABELS = {
 }
 
 
+def _region_match(place: str, where: Corpus) -> tuple[int, str] | None:
+    """(score, explanation) when the preferred place and the posting are in the same region."""
+    key = " ".join(tokens(place.split(",")[0]))
+    for region, cities in config.REGION_CITIES.items():
+        if key not in cities:
+            continue
+        city = next((c for c in sorted(cities) if where.has_phrase(tokens(c))), None)
+        if city:
+            score = (
+                config.LOCATION_MATCH_SCORE
+                if key in config.REGION_LABELS
+                else config.REGION_CITY_SCORE
+            )
+            return score, f"Region match: {city} is in the {region} region."
+    return None
+
+
 def _place(
     profile: FitProfileInput, opportunity: FitOpportunityInput
 ) -> tuple[int | None, list[str]]:
     reasons: list[str] = []
     mode_score: int | None = None
     mode = opportunity.remote_mode
+    if mode is None and tokens(opportunity.location)[:1] == ("remote",):
+        mode = RemoteMode.REMOTE
+        reasons.append("Location text says remote, so it is treated as remote work.")
     if profile.remote_preference is not None and mode is not None:
         mode_score = config.WORK_MODE_SCORES[profile.remote_preference][mode]
         preference = profile.remote_preference.value.replace("_", " ")
@@ -195,8 +250,17 @@ def _place(
             if where.matches(tokens(place.split(",")[0])) or where.matches(tokens(place))
         ]
         location_score = config.LOCATION_MATCH_SCORE if hits else 0
+        region_notes: list[str] = []
+        if not hits:
+            for place in profile.preferred_locations:
+                region = _region_match(place, where)
+                if region:
+                    hits.append(place)
+                    score, note = region
+                    location_score = max(location_score, score)
+                    region_notes.append(note)
         reasons.append(
-            f"Location matches {_join(hits)}."
+            (f"Location matches {_join(hits)}." + "".join(f" {n}" for n in region_notes))
             if hits
             else f"Location {opportunity.location} isn't one of your preferred locations."
         )

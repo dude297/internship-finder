@@ -1,6 +1,6 @@
 # Fit Scoring
 
-Scoring is **versioned behavior**. Status: **v1 implemented** (Milestone 4, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)).
+Scoring is **versioned behavior**. Status: **v1 in production** (Milestone 4, [ADR-010](decisions/ADR-010-fit-scoring-v1.md)); **v2 implemented on the development branch, not released** (Milestone 11, [ADR-019](decisions/ADR-019-fit-scoring-v2.md)). The component table and weights below apply to both; [v2 changes](#v2-changes-adr-019) lists what differs.
 
 ## Principles
 
@@ -59,6 +59,17 @@ Each component scores an integer 0–100. `fit = round_half_up(Σ score × weigh
 
 Unicode NFKC, case folding, and a tokenizer that keeps `c++`, `c#`, `.net`, and `node.js` while treating hyphens, slashes, and other punctuation as word breaks. Phrases match contiguously and never across fields. Aliases (one small table): `js`/`javascript`, `ts`/`typescript`, `ml`/`machine learning`, `ai`/`artificial intelligence`, `postgres`/`postgresql`, `k8s`/`kubernetes`, `nlp`/`natural language processing`, `aws`/`amazon web services`, `react`/`reactjs`/`react.js`, `node.js`/`nodejs`, `.net`/`dotnet`, `golang`/`go lang`. Informative words drop English stop words, generic job words (projects), and course filler such as `intro`, `advanced`, `ap`, and roman numerals (courses).
 
+## v2 Changes (ADR-019)
+
+`SCORING_VERSION = "v2"`. Weights and components are unchanged; four evidence rules change, each explained in the breakdown:
+
+- **Ambiguous skills (technical only).** `go`, `c`, `r`, `rust` match only with a programming-context word (`python`, `backend`, `proficiency`, `experience`, `grpc`, `libraries`, ...) within 6 words, and not when the next word is in the skill's denylist (`go to`, `go getter`, `go with`, `go on`, `c suite`, `c level`, `rust proof`, `rust resistant`, ...). `go-to-market`, `C-suite`, and `rust-proof` no longer count; `We use Go and gRPC` and `Proficiency in C` do.
+- **Reviewed aliases (two-way, all components):** `pcb` / `printed circuit board(s)` / `pcb design` / `pcb layout` / `printed circuit board layout|design`; `python` / `python3`; `c++` / `cpp`; `verilog` / `systemverilog` / `system verilog`. **Related (one-way, skills only):** Machine Learning is also credited by `deep learning` and `neural network(s)`. The reason reads `Verilog (alias systemverilog)` or `Machine Learning (related deep learning)`, and `details.evidence` maps skill to the evidence.
+- **Course subject groups (academic).** A course in a group (digital logic / computer architecture; circuits / electronics; signals / control; data structures and algorithms; linear algebra / machine learning / statistics) earns the keyword point (1) when a term of its group appears in the posting and it didn't match by name or words. The reason reads `course group: Digital Logic Design (posting says asic)`; `details.groups` maps course to term.
+- **Locations (place).** Region table (Bay Area cities in `config.REGION_CITIES`): a preference of `Bay Area` or `Silicon Valley` scores 100 against any listed city; a preferred city scores 75 against another city of its region; otherwise unchanged. If the posting's remote mode is unknown and its location text starts with "Remote", it is treated as remote (a known mode is never overridden).
+
+Benchmark (synthetic, author-labelled; [test](../backend/tests/test_fit_benchmark.py)): EE/CS profile NDCG@10 0.826 to 0.892, false Go/C/Rust evidence on trap postings 6 of 8 to 0; software-only profile NDCG@10 0.708 to 0.736. Release: `reevaluate` after deploy ([deployment.md](deployment.md#release-procedure)).
+
 ## Coverage and Breakdown
 
 `coverage` = the sum of the weights of evaluated components (at least 10, since quality needs no profile). A 30 with coverage 100 is a poor match; a 30 with coverage 25 mostly means the Match Profile is empty.
@@ -67,7 +78,7 @@ Each evaluation stores `score_breakdown` (JSON, validated by `ScoreBreakdown`):
 
 ```json
 {
-  "scoring_version": "v1",
+  "scoring_version": "v2",
   "score": 74,
   "coverage": 90,
   "components": {
@@ -93,10 +104,11 @@ Evaluations are history ([ADR-006](decisions/ADR-006-core-domain-persistence-mod
 
 Evaluations from before v1 have NULL fit fields; the first catalog pass after the upgrade (any Match Profile save) fills them in. Until then, the recommended order falls back to eligibility bucket, then newest.
 
-## Known Limitations (v1)
+## Known Limitations
 
-- Lexical only: synonyms outside the alias table don't match, and a skill that's also an ordinary word (for example `Go`) can match unrelated text. The breakdown shows the evidence, so such matches are visible.
-- Location matching is plain text: "Bay Area" doesn't match "San Jose".
+- Lexical only: synonyms outside the alias and related tables don't match. In v2 the guard (above) rejects ordinary-word uses of `Go`, `C`, `R`, and `Rust`, at the cost of recall: a bare mention with no programming-context word, or "Go with ..." / "Go on ...", is not credited. The tables need review as new traps and misses appear.
+- A lexically true but domain-wrong match survives (a marketing posting that mentions "machine learning"); only a role signal would fix it (deferred, ADR-019).
+- Location matching is plain text plus the Bay Area region table: other metros have no region, and there is no geocoding. Remote is inferred only from location text starting with "Remote".
 - Activities and experience don't score.
 - Scores reflect the posting text the sources provide; short or truncated descriptions match less.
 
@@ -104,8 +116,9 @@ Evaluations from before v1 have NULL fit fields; the first catalog pass after th
 
 | Version | Status | Date | Notes |
 |---|---|---|---|
-| v1 | Implemented | 2026-09-29 | Weights 35/20/15/10/10/10, rules above ([ADR-010](decisions/ADR-010-fit-scoring-v1.md)). |
+| v1 | Implemented, in production | 2026-09-29 | Weights 35/20/15/10/10/10, rules above ([ADR-010](decisions/ADR-010-fit-scoring-v1.md)). |
+| v2 | Implemented, unreleased | 2026-10-06 | Same weights; ambiguous-skill guard, reviewed aliases, course subject groups, location regions and remote-from-text ([ADR-019](decisions/ADR-019-fit-scoring-v2.md)). Release runs `reevaluate`. |
 
 ## Maintenance
 
-Any change to a weight, rule, threshold, alias, or stop word bumps `SCORING_VERSION` and updates this file and ADR-010 (or a successor ADR). Stored evaluations keep their version, so results stay comparable.
+Any change to a weight, rule, threshold, alias, or stop word bumps `SCORING_VERSION` and updates this file and an ADR (ADR-010 for v1, [ADR-019](decisions/ADR-019-fit-scoring-v2.md) for v2). Stored evaluations keep their version, so results stay comparable.

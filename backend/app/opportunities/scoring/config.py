@@ -8,7 +8,7 @@ from typing import Final
 
 from app.enums import RemoteMode, RemotePreference
 
-SCORING_VERSION: Final = "v1"
+SCORING_VERSION: Final = "v2"
 
 # Component key → weight. Weights sum to 100.
 WEIGHTS: Final[dict[str, int]] = {
@@ -37,6 +37,19 @@ ALIAS_GROUPS: Final[tuple[frozenset[str], ...]] = tuple(
         {"node.js", "nodejs"},
         {".net", "dotnet"},
         {"golang", "go lang"},
+        # v2 (ADR-019), reviewed groups. Kept small and explicit.
+        {
+            "pcb",
+            "printed circuit board",
+            "printed circuit boards",
+            "pcb design",
+            "pcb layout",
+            "printed circuit board layout",
+            "printed circuit board design",
+        },
+        {"python", "python3"},
+        {"c++", "cpp"},
+        {"verilog", "systemverilog", "system verilog"},
     )
 )
 
@@ -123,3 +136,136 @@ QUALITY_POINTS: Final[dict[str, int]] = {
     "requirements_reviewed": 10,
 }
 assert sum(QUALITY_POINTS.values()) == 100
+
+
+# --- v2 additions (ADR-019) ---------------------------------------------------------------------
+
+# One-way: a skill (key) is also credited when the posting uses one of these narrower phrases.
+# Skills only; the explanation says "related".
+RELATED_SKILL_TERMS: Final[dict[str, frozenset[str]]] = {
+    "machine learning": frozenset({"deep learning", "neural network", "neural networks"}),
+}
+
+# Skills short enough to collide with ordinary words (go-to-market, C-suite, rust-proof).
+# They match only with a programming-context word within CONTEXT_WINDOW words, and never when
+# the next word is in AMBIGUOUS_NEXT_BLOCK[skill].
+AMBIGUOUS_SKILLS: Final = frozenset({"go", "c", "r", "rust"})
+CONTEXT_WINDOW: Final = 6
+SKILL_CONTEXT_WORDS: Final = frozenset(
+    """
+    python java rust c++ c# golang programming language languages coding backend kubernetes
+    docker linux embedded firmware software microservices api apis sql javascript typescript
+    matlab verilog fpga git concurrency developer services systems compiler toolchain drivers
+    microcontrollers proficiency proficient familiarity experience knowledge grpc libraries
+    """.split()  # noqa: SIM905
+)
+AMBIGUOUS_NEXT_BLOCK: Final[dict[str, frozenset[str]]] = {
+    "go": frozenset(
+        "to getter getters with above beyond on live forward ahead through back".split()  # noqa: SIM905
+    ),
+    "c": frozenset("suite level section corporate".split()),  # noqa: SIM905
+    "rust": frozenset(
+        "proof resistant free belt inhibitor prevention removal".split()  # noqa: SIM905
+    ),
+    "r": frozenset(),
+}
+
+# Course subject groups: (course names, posting terms). A course whose name is in the first set
+# earns the keyword points when any posting term of the group appears in the posting.
+SUBJECT_GROUPS: Final[tuple[tuple[frozenset[str], frozenset[str]], ...]] = (
+    (
+        frozenset(
+            {
+                "digital logic design",
+                "digital logic",
+                "logic design",
+                "computer architecture",
+                "digital design",
+                "digital systems",
+                "computer organization",
+            }
+        ),
+        frozenset(
+            {
+                "rtl",
+                "fpga",
+                "asic",
+                "verilog",
+                "systemverilog",
+                "vhdl",
+                "digital design",
+                "logic design",
+                "microarchitecture",
+                "computer architecture",
+                "chip",
+                "silicon",
+                "soc",
+            }
+        ),
+    ),
+    (
+        frozenset(
+            {"circuits i", "circuits ii", "circuit analysis", "electronics", "analog circuits"}
+        ),
+        frozenset(
+            {
+                "circuit",
+                "circuits",
+                "analog",
+                "schematic",
+                "spice",
+                "pcb",
+                "printed",
+                "hardware",
+                "rf",
+            }
+        ),
+    ),
+    (
+        frozenset({"signals and systems", "digital signal processing", "dsp", "control systems"}),
+        frozenset({"signal", "dsp", "wireless", "control", "sensor", "pid", "filters"}),
+    ),
+    (
+        frozenset({"data structures and algorithms", "algorithms", "data structures"}),
+        frozenset({"algorithms", "data structures", "software", "backend", "systems"}),
+    ),
+    (
+        frozenset({"linear algebra", "machine learning", "statistics", "probability"}),
+        frozenset(
+            {
+                "machine learning",
+                "deep learning",
+                "neural",
+                "data science",
+                "computer vision",
+                "models",
+            }
+        ),
+    ),
+)
+
+# Location regions. A preferred location that is a region label (or a city inside it) matches a
+# posting in any listed city of the same region. Not geocoding; add metros here, deliberately.
+REGION_CITIES: Final[dict[str, frozenset[str]]] = {
+    "bay area": frozenset(
+        {
+            "san jose",
+            "santa clara",
+            "sunnyvale",
+            "mountain view",
+            "palo alto",
+            "san francisco",
+            "cupertino",
+            "milpitas",
+            "fremont",
+            "redwood city",
+            "menlo park",
+            "oakland",
+            "san mateo",
+            "bay area",
+            "silicon valley",
+        }
+    ),
+}
+REGION_LABELS: Final = frozenset({"bay area", "silicon valley"})
+REGION_CITY_SCORE: Final = 75  # same-region city; a region-label preference scores 100
