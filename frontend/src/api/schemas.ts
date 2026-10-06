@@ -215,6 +215,14 @@ export const evaluationSchema = z.object({
 })
 export type Evaluation = z.infer<typeof evaluationSchema>
 
+export const dismissReasons = [
+  'not_interested',
+  'not_eligible',
+  'already_applied',
+  'other',
+] as const
+export type DismissReason = (typeof dismissReasons)[number]
+
 export const opportunitySummarySchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -254,6 +262,7 @@ export const opportunitySummarySchema = z.object({
   source_names: z.array(z.string()),
   pending_requirement_count: z.number().int(),
   requirements_stale: z.boolean(),
+  dismissed_at: z.string().nullable().default(null),
   freshness: z.enum(freshnessStates),
   freshness_checked_at: z.string().nullable(),
   program_last_verified: nullableDate,
@@ -311,6 +320,9 @@ export const opportunityDetailSchema = z.object({
   first_seen_at: z.string(),
   last_seen_at: z.string(),
   manually_curated_at: z.string().nullable(),
+  // ADR-017: the owner's hidden decision.
+  dismissed_at: z.string().nullable().default(null),
+  dismissed_reason: z.enum(dismissReasons).nullable().default(null),
   requirements: z.array(requirementSchema),
   application: applicationSchema.nullable(),
   origin: z.enum(origins),
@@ -616,6 +628,8 @@ export interface OpportunityQuery {
   deadline_within?: '7' | '14' | '30'
   has_deadline?: 'true'
   needs_date_verification?: 'true'
+  // ADR-017: omitted = hidden ones excluded.
+  hidden?: 'include' | 'only'
   // The browser's local date (YYYY-MM-DD); sent whenever a deadline filter is used (ADR-012 §14).
   today?: string
 }

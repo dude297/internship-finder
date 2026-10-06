@@ -31,6 +31,7 @@ export type FilterName =
   | 'needs_date_verification'
   | 'freshness'
   | 'discovered_within'
+  | 'hidden'
 
 interface Props {
   values: Record<FilterName, string>
@@ -253,6 +254,17 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
             ['', 'Any'],
             ['1', 'New today'],
             ['7', 'New this week'],
+          ]}
+        />
+        <Select
+          id="filter-hidden"
+          label="Hidden"
+          value={values.hidden}
+          onChange={(v) => onChange('hidden', v)}
+          options={[
+            ['', 'Not hidden'],
+            ['include', 'Include hidden'],
+            ['only', 'Only hidden'],
           ]}
         />
       </div>
