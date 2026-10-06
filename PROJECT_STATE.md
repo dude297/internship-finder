@@ -87,28 +87,37 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-**Milestone 16, Home Dashboard and Application Engine v2** ([ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)), branch `feature/m15-dashboard-application-engine`, not merged and not in production. Migration `c9e2b7a4d1f8` (additive; production schema stays `a3c7e9b1d5f2` until it ships). Adds `application_events` and `applications.applied_at`, `GET /api/applications`, `GET /api/applications/{id}/events`, `GET /api/dashboard`, and the `/dashboard` and `/applications` pages. History and funnel medians start empty for existing applications.
+Merged to `main` (`919f2e8`), **not deployed**. Production still runs Milestone 11 (`cf1ad43`, schema `a3c7e9b1d5f2`).
 
-Live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+| Milestone | PR | Migration | Notes |
+|---|---|---|---|
+| 12 Large-board Greenhouse ingestion | [#52](https://github.com/dude297/internship-finder/pull/52) | none | [ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md); boards over 500 jobs list first, then fetch internship details within fixed budgets; Anduril and SpaceX can be activated after release |
+| 13 Source research | [#49](https://github.com/dude297/internship-finder/pull/49), [#50](https://github.com/dude297/internship-finder/pull/50) | none | Workday YELLOW, Oracle RED; feed Pareto; catalog 64 → 90 (none enabled) |
+| 14 Requirement Review Workbench | [#53](https://github.com/dude297/internship-finder/pull/53) | none | [ADR-024](docs/decisions/ADR-024-requirement-review-workbench.md); `/requirements` |
+| 15 Work-authorization eligibility | [#55](https://github.com/dude297/internship-finder/pull/55) | `c8d2f4a6b0e3` | [ADR-026](docs/decisions/ADR-026-work-authorization-eligibility.md); eligibility rules `v2` |
+| 16 Dashboard and Application Engine v2 | [#57](https://github.com/dude297/internship-finder/pull/57) | `c9e2b7a4d1f8` | [ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md); `/dashboard` default, `/applications`, event history |
+| 17 Operational finish | [#48](https://github.com/dude297/internship-finder/pull/48), [#54](https://github.com/dude297/internship-finder/pull/54) | none | CI token, backup argv; least-privilege `if_sync` role ([ADR-027](docs/decisions/ADR-027-least-privilege-sync-role.md), **not activated**) |
+| 19 UX | [#51](https://github.com/dude297/internship-finder/pull/51), [#56](https://github.com/dude297/internship-finder/pull/56) | none | landing, login states, design tokens; Sources page |
+| 19 UX (Inbox and Opportunities) | in review (`feature/m19-ux-inbox-opportunities`) | none | filter disclosure and Clear filters, tracker above the score breakdown; not merged |
 
 Milestone 18, source quality / supply intelligence, on branch `feature/m18-discovery-quality` (unreleased; no migration): new-supply metrics and an 8-week trend in the dashboard's Discovery section ([ADR-025 amendment](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)).
 
 Milestone 19, Sources page UX, on branch `feature/m19-sources-ux` (unreleased; frontend only, no migration): coverage summary, health-grouped sources with last error and last success, value-ordered suggestions, clearer empty states. See [CHANGELOG.md](CHANGELOG.md).
 
-Milestone 15, work-authorization eligibility, on branch `feature/m15-work-authorization` (unreleased; [ADR-026](docs/decisions/ADR-026-work-authorization-eligibility.md), migration `c8d2f4a6b0e3`, eligibility rules `v2`). Release step after deploy: `reevaluate`.
+Deferred: Milestone 16 in the original roadmap (Target Company Intelligence; the feed Pareto and catalog cover gap finding for now) and Milestone 18 beyond what the dashboard shows. Merged but **not activated**: the encrypted weekly backup ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
-**Milestone 12, large-response source architecture** (merged to `main`, [PR #52](https://github.com/dude297/internship-finder/pull/52), not deployed; [ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md), Proposed): Greenhouse boards over 500 jobs (Anduril, SpaceX) are read from the content-free list plus per-job detail for internship titles, under fixed bounds; the 20 MiB per-request cap is unchanged. Not released: production still has Anduril disabled and SpaceX unactivated until a release and an owner-approved activation. No migration.
+### Release plan (owner; the agent's auto mode cannot migrate or deploy)
 
-Milestone 14, Requirement Review Workbench, merged to `main` ([PR #53](https://github.com/dude297/internship-finder/pull/53); not deployed; no migration): a global **Review** queue (`/requirements`) over the pending suggestions, keyboard-driven accept/edit/reject/skip through the existing atomic review endpoint, and an all-or-nothing **Reject selected** (no accept-all). [ADR-024](docs/decisions/ADR-024-requirement-review-workbench.md). Production is unchanged until it is released.
-
-On `main`, merged but **not deployed**: security low debt ([PR #48](https://github.com/dude297/internship-finder/pull/48)), Workday/Oracle provider gate research ([PR #49](https://github.com/dude297/internship-finder/pull/49)), feed-dependence Pareto and 26 more catalog boards ([PR #50](https://github.com/dude297/internship-finder/pull/50), none enabled), and the landing page, login states, and design tokens ([PR #51](https://github.com/dude297/internship-finder/pull/51), Milestone 19). Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
-
-Merged to `main` ([PR #54](https://github.com/dude297/internship-finder/pull/54), **not activated**): a least-privilege `if_sync` database role for the scheduled sync ([ADR-027](docs/decisions/ADR-027-least-privilege-sync-role.md), Proposed; [`scripts/sql/sync_role_grants.sql`](scripts/sql/sync_role_grants.sql), grant-drift test, owner runbook in [operations.md](docs/operations.md#least-privilege-sync-role-owner-action-not-activated)). The workflow prefers `SYNC_DATABASE_URL` and falls back to `PRODUCTION_DATABASE_URL`, so production is unchanged until the owner acts.
-
-Open pull requests: see GitHub (Milestones 12, 14, 15, 17 in review).
+1. **Migrate Neon now** (both migrations are additive and the running `cf1ad43` backend tolerates them; this also unblocks the scheduled sync, see Known Operational Issues). In `backend/` with the venv: `$env:DATABASE_URL = (neonctl connection-string --project-id sweet-dew-33937746 --database-name internship_finder --role-name internship_finder)`, `alembic upgrade head`, `alembic current` (expect `c9e2b7a4d1f8`), `Remove-Item Env:DATABASE_URL`.
+2. Dispatch one sync (`gh workflow run sync-production.yml`) and confirm it succeeds.
+3. Deploy Render from `main` (`render deploys create`), then Vercel (`npx vercel deploy --prod` in `frontend/`), then smoke `/api/health`, login, `/dashboard`, `/requirements`, `/applications`.
+4. `python -m app.cli reevaluate --dry-run`, then `reevaluate` (eligibility rules `v2`).
+5. Activate `greenhouse:andurilindustries` (enable) and add `spacex` from the catalog; watch the next sync's elapsed time and the two sources' health.
+6. Release closeout PR: release record, `docs/status.json` + `--write-status`, this file, CHANGELOG.
 
 ## Known Operational Issues
 
+- **Scheduled sync halted since 2026-10-06 18:55 UTC** (fails safe: "the database schema isn't at this code's migration head"). `main` carries migrations `c8d2f4a6b0e3` and `c9e2b7a4d1f8` that Neon doesn't have yet. Nothing was written. Fix: release plan step 1. Until then the stale-sync banner appears after 36 h.
 - Direct sources: 45 enabled (cap 50). `greenhouse:andurilindustries` fails ("The source response is too large": 2,457 jobs exceed the 20 MiB `MAX_BYTES` cap) and is disabled; SpaceX fails the same way in a disposable-database test. A size-tolerant Greenhouse adapter is implemented on the Milestone 12 branch ([ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md)) but not released; both stay failing/unactivated in production until it ships.
 - 558 requirement suggestions are pending (all `requirements-rules` v3 after the 2026-10-06 rescan), none accepted. The deemed-export false positives (21) are gone; review the rest one by one.
 - Backup is not active: no backup beyond Neon Free's short restore window until the owner installs `age`, generates a key pair into private storage, sets `BACKUP_AGE_RECIPIENT`, dispatches once, and runs a restore drill.

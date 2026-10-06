@@ -25,19 +25,26 @@ class ApplicationBody(BaseModel):
     # application at all, is a 409, so a stale screen can't overwrite or recreate it.
     expected_updated_at: datetime | None = None
 
+    @field_validator("next_action_due")
+    @classmethod
+    def _plausible_day(cls, value: date | None) -> date | None:
+        if value is not None and not date(2000, 1, 1) <= value <= date(2999, 12, 31):
+            raise ValueError("Dates must be between 2000 and 2999.")
+        return value
+
     @model_validator(mode="after")
     def _status_not_null(self) -> "ApplicationBody":
         if "status" in self.model_fields_set and self.status is None:
             raise ValueError("status can't be null.")
         return self
 
-    @field_validator("applied_at")
+    @field_validator("applied_at", "interview_at")
     @classmethod
     def _plausible(cls, value: datetime | None) -> datetime | None:
         if value is not None and not datetime(2000, 1, 1, tzinfo=UTC) <= (
             value if value.tzinfo else value.replace(tzinfo=UTC)
         ) <= datetime(2999, 12, 31, tzinfo=UTC):
-            raise ValueError("applied_at must be between 2000 and 2999.")
+            raise ValueError("Dates must be between 2000 and 2999.")
         return value
 
 

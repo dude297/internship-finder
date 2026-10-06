@@ -226,15 +226,27 @@ export function OpportunityListPage() {
         values={values}
         sources={sources}
         onChange={(name, value) => update({ [name]: value, offset: '' })}
+        onClear={() => setParams(new URLSearchParams())}
       />
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {!error && !page && <p role="status">Loading opportunities…</p>}
       {items?.length === 0 && (
-        <p className="rounded border border-dashed border-slate-300 p-6 text-center text-slate-600">
-          {filtered || values.availability !== 'open'
-            ? 'No opportunities match these filters.'
-            : 'No opportunities yet. Sync a source or add one by hand.'}
-        </p>
+        <div className="space-y-3 rounded-card border border-dashed border-slate-300 p-6 text-center text-slate-600">
+          {filtered || values.availability !== 'open' ? (
+            <>
+              <p>No opportunities match these filters.</p>
+              <p className="text-sm">Use Clear filters above to start over.</p>
+            </>
+          ) : (
+            <p>
+              No opportunities yet.{' '}
+              <Link to="/sources" className="text-blue-800 underline">
+                Sync a source
+              </Link>{' '}
+              or add one by hand.
+            </p>
+          )}
+        </div>
       )}
       {page && items && items.length > 0 && (
         <>
@@ -243,7 +255,7 @@ export function OpportunityListPage() {
           </p>
           <ul className="space-y-3">
             {items.map((o) => (
-              <li key={o.id} className="rounded border border-slate-200 p-4">
+              <li key={o.id} className="rounded-card border border-slate-200 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="space-y-1">
                     <h2 className="font-medium">
@@ -265,7 +277,7 @@ export function OpportunityListPage() {
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-col items-end gap-1">
+                  <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-1">
                     <FitBadge score={o.fit_score} coverage={o.fit_coverage} />
                     <EligibilityBadge status={o.eligibility_status} />
                   </div>
