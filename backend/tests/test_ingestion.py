@@ -1022,36 +1022,36 @@ def test_builtin_feed_is_never_filtered(
 
 
 def test_scope_change_forces_a_full_sync_that_closes_and_reactivates(
-    db: Session, ashby_source: IngestionSource, web: FakeSource
+    db: Session, gh_source: IngestionSource, web: FakeSource
 ) -> None:
-    set_scope(db, ashby_source, SourceScope.ALL)
-    # Ashby, not Greenhouse: Greenhouse is read through `collect` (no validators, ADR-022).
-    full_time = ashby_job("staff", title="Synthetic Staff Engineer")
-    web.respond(ASHBY_URL, conditional(ashby_board(ashby_job("intern"), full_time), '"v1"'))
-    assert counts(sync(db, ashby_source, web)) == {"fetched": 2, "created": 2}
-    assert ashby_source.etag == '"v1"'
+    set_scope(db, gh_source, SourceScope.ALL)
+    web.respond(
+        GREENHOUSE_URL, conditional(greenhouse_board(greenhouse_job(), FULL_TIME_GH), '"v1"')
+    )
+    assert counts(sync(db, gh_source, web)) == {"fetched": 2, "created": 2}
+    assert gh_source.etag == '"v1"'
 
     # Unchanged scope: the validators stay, so the provider's 304 is honored.
-    set_scope(db, ashby_source, None)
-    assert sync(db, ashby_source, web).status is IngestionRunStatus.NO_CHANGE
+    set_scope(db, gh_source, None)
+    assert sync(db, gh_source, web).status is IngestionRunStatus.NO_CHANGE
 
     # all → internships_only: validators cleared, full snapshot, the full-time posting closes.
-    set_scope(db, ashby_source, SourceScope.INTERNSHIPS_ONLY)
-    assert (ashby_source.etag, ashby_source.last_modified) == (None, None)
-    run = sync(db, ashby_source, web)
+    set_scope(db, gh_source, SourceScope.INTERNSHIPS_ONLY)
+    assert (gh_source.etag, gh_source.last_modified) == (None, None)
+    run = sync(db, gh_source, web)
     assert "If-None-Match" not in web.requests[-1].headers
     assert run.status is IngestionRunStatus.SUCCESS
     assert counts(run) == {"fetched": 2, "filtered": 1, "unchanged": 1, "closed": 1}
-    staff = record(db, ashby_source, "staff")
+    staff = record(db, gh_source, "2002")
     assert not staff.is_active and staff.closed_at is not None
     assert count(db, Opportunity) == 2  # closed, never deleted
 
     # internships_only → all: full snapshot again, the posting comes back.
-    set_scope(db, ashby_source, SourceScope.ALL)
-    run = sync(db, ashby_source, web)
+    set_scope(db, gh_source, SourceScope.ALL)
+    run = sync(db, gh_source, web)
     assert counts(run) == {"fetched": 2, "unchanged": 2, "reactivated": 1}
     db.expire_all()
-    assert record(db, ashby_source, "staff").is_active
+    assert record(db, gh_source, "2002").is_active
 
 
 def test_filtered_items_do_not_evaluate(

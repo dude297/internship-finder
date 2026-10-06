@@ -3,6 +3,7 @@ the guarantee that no failed or partial run closes anything. Synthetic data only
 
 import gzip
 import json
+import time
 from functools import partial
 from typing import Any
 
@@ -15,7 +16,7 @@ from app.enums import IngestionRunStatus, IngestionSourceKind, SourceScope
 from app.ingestion import http
 from app.ingestion.adapters import CollectRequest, SourceConfig, greenhouse
 from app.ingestion.adapters.greenhouse import collect, parse
-from app.ingestion.http import FetchError, fetch_json
+from app.ingestion.http import Fetched, FetchError, fetch_json
 from app.ingestion.normalize import NormalizedOpportunity, SnapshotError
 from app.ingestion.pipeline import sync_source
 from app.models import IngestionSource, OpportunitySourceRecord
@@ -48,6 +49,8 @@ class Server:
         self.list_override: httpx2.Response | None = None
         self.detail_override: dict[str, Any] = {}
         self.total: int | None = None
+        self.content_override: httpx2.Response | None = None
+        self.etag: str | None = None  # when set, the content list is conditional
         self.transport = httpx2.MockTransport(self._handle)
 
     def _handle(self, request: httpx2.Request) -> httpx2.Response:
@@ -61,7 +64,13 @@ class Server:
                 body["meta"]["total"] = self.total
             return httpx2.Response(200, json=body)
         if url == f"{BASE}?content=true":
-            return httpx2.Response(200, json={"jobs": self.jobs, "meta": {"total": len(self.jobs)}})
+            if self.content_override is not None:
+                return self.content_override
+            if self.etag is not None and request.headers.get("If-None-Match") == self.etag:
+                return httpx2.Response(304)
+            headers = {"ETag": self.etag} if self.etag else {}
+            body = {"jobs": self.jobs, "meta": {"total": len(self.jobs)}}
+            return httpx2.Response(200, json=body, headers=headers)
         job_id = url.rsplit("/", 1)[1]
         if job_id in self.detail_override:
             action = self.detail_override[job_id]
@@ -93,8 +102,18 @@ def big(n: int = 8) -> Server:
     )
 
 
+def collect_payload(server: Server, **kw: Any) -> Any:
+    """What `parse` reads: unwraps the `Fetched` a small board returns."""
+    result = collect(server.request(**kw))
+    return result.data if isinstance(result, Fetched) else result
+
+
+def known_from(payload: dict[str, Any]) -> dict[str, Any]:
+    return {str(j["id"]): j for j in payload["jobs"]}
+
+
 def run(server: Server, **kw: Any) -> dict[str, NormalizedOpportunity]:
-    items = parse(collect(server.request(**kw)), SOURCE).items
+    items = parse(collect_payload(server, **kw), SOURCE).items
     assert all(isinstance(i, NormalizedOpportunity) for i in items), items
     return {i.external_id: i for i in items if isinstance(i, NormalizedOpportunity)}
 
@@ -106,20 +125,55 @@ def detail_ids(server: Server) -> list[str]:
 # --- selection -----------------------------------------------------------------------------------
 
 
-def test_small_board_reads_the_list_then_one_content_list() -> None:
+def test_small_board_is_exactly_one_conditional_content_request() -> None:
     server = Server(job(1), job(2))
     items = run(server)
-    assert server.urls == [BASE, f"{BASE}?content=true"]
+    assert server.urls == [f"{BASE}?content=true"]
     assert all(i.description for i in items.values())
 
 
-def test_board_at_the_threshold_is_small_and_one_over_is_large() -> None:
+def test_small_board_returns_validators_and_sends_them_back() -> None:
+    server = Server(job(1), job(2))
+    server.etag = '"v1"'
+    first = collect(server.request())
+    assert isinstance(first, Fetched) and first.etag == '"v1"'
+    request = CollectRequest(SOURCE, SourceScope.ALL, {}, server.transport, '"v1"', None)
+    second = collect(request)
+    assert isinstance(second, Fetched) and second.not_modified and second.etag == '"v1"'
+
+
+def test_threshold_is_by_stored_job_count() -> None:
     at = Server(*(job(n) for n in range(1, 6)))
-    run(at)
-    assert at.urls[-1].endswith("content=true")
+    run(at)  # 5 jobs, nothing stored: small
+    assert at.urls == [f"{BASE}?content=true"]
+    stored = {str(n): {"id": n} for n in range(1, 7)}  # 6 stored: large, list first
     over = Server(*(job(n) for n in range(1, 7)))
-    run(over)
-    assert not any("content=true" in u for u in over.urls)
+    run(over, known=stored)
+    assert over.urls[0] == BASE and not any("content=true" in u for u in over.urls)
+
+
+def test_newly_large_board_switches_after_one_oversized_download() -> None:
+    server = big()  # 8 jobs, nothing stored
+    items = run(server)
+    assert server.urls[:2] == [f"{BASE}?content=true", BASE]  # the content list is tried once
+    assert detail_ids(server) == ["2", "4", "6", "8"] and len(items) == 8
+
+
+def test_content_list_too_large_switches_to_list_and_detail() -> None:
+    server = big()
+    server.content_override = httpx2.Response(
+        200, content=b"{}", headers=JSON_HEADERS | {"Content-Length": str(10**9)}
+    )
+    assert len(run(server)) == 8
+    assert server.urls[:2] == [f"{BASE}?content=true", BASE] and len(server.details) == 4
+
+
+def test_other_content_failures_propagate() -> None:
+    server = Server(job(1))
+    server.content_override = httpx2.Response(500)
+    with pytest.raises(FetchError):
+        collect(server.request())
+    assert server.urls[0].endswith("content=true") and BASE not in server.urls
 
 
 def test_large_board_fetches_details_only_for_internship_titles() -> None:
@@ -140,23 +194,23 @@ def test_real_threshold_is_500(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.undo()
     monkeypatch.setattr(greenhouse, "fetch_json", partial(fetch_json, sleep=lambda _s: None))
     server = Server(*(job(n, title=f"Role {n}") for n in range(1, 502)))
-    run(server)
+    run(server, known={str(n): {"id": n} for n in range(1, 502)})
     assert server.urls == [BASE]  # 501 jobs, none an internship: list only, never content=true
 
 
 def test_stored_content_is_reused_when_updated_at_is_unchanged() -> None:
-    first = collect(big().request())
-    known = {str(j["id"]): j for j in first["jobs"]}
+    first = collect_payload(big())
+    known = known_from(first)
     again = big()
-    second = collect(again.request(known=known))
+    second = collect_payload(again, known=known)
     assert again.details == [] and second == first
 
 
 def test_changed_updated_at_refetches_only_that_job() -> None:
-    known = {str(j["id"]): j for j in collect(big().request())["jobs"]}
+    known = known_from(collect_payload(big()))
     changed = big()
     changed.jobs[3]["updated_at"] = "2040-10-01T10:00:00-04:00"
-    collect(changed.request(known=known))
+    collect_payload(changed, known=known)
     assert detail_ids(changed) == ["4"]
 
 
@@ -201,7 +255,38 @@ def test_consecutive_failures_stop_the_detail_phase() -> None:
     for n in range(2, 31, 2):
         server.detail_override[str(n)] = httpx2.Response(404)
     assert len(run(server)) == 30
-    assert len(server.details) == greenhouse.MAX_CONSECUTIVE_DETAIL_FAILURES
+    assert len(server.details) == greenhouse.MAX_DETAIL_FAILURES
+
+
+def test_failures_are_totalled_not_consecutive() -> None:
+    server = big(30)
+    for n in (2, 6, 10, 14, 18, 22):  # a failure, a success, a failure ...
+        server.detail_override[str(n)] = httpx2.Response(404)
+    assert len(run(server)) == 30
+    assert detail_ids(server) == ["2", "4", "6", "8", "10", "12", "14", "16", "18"]  # 5th failure
+
+
+def test_failed_attempts_count_toward_the_fetch_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(greenhouse, "MAX_DETAIL_FETCHES", 3)
+    server = big(30)
+    server.detail_override["2"] = httpx2.Response(404)
+    run(server)
+    assert len(server.details) == 3  # one failure plus two successes
+
+
+@pytest.mark.parametrize("wrong_id", [True, 1.0, "1"])
+def test_detail_id_must_be_the_exact_integer(wrong_id: Any) -> None:
+    server = Server(*(job(n) for n in range(1, 8)))  # all internships
+    server.detail_override["1"] = httpx2.Response(200, json=job(1) | {"id": wrong_id})
+    items = run(server, known={str(n): {"id": n} for n in range(1, 8)})
+    assert items["1"].description is None and items["2"].description
+
+
+def test_detail_deadline_stops_the_phase(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(greenhouse, "MAX_DETAIL_SECONDS", -1.0)
+    server = big()
+    assert len(run(server)) == 8
+    assert server.details == []
 
 
 def test_detail_for_another_job_is_ignored() -> None:
@@ -212,11 +297,46 @@ def test_detail_for_another_job_is_ignored() -> None:
 
 
 def test_failed_refetch_keeps_stored_text() -> None:
-    known = {str(j["id"]): j for j in collect(big().request())["jobs"]}
+    known = known_from(collect_payload(big()))
     changed = big()
     changed.jobs[1]["updated_at"] = "2040-10-01T10:00:00-04:00"
     changed.detail_override["2"] = httpx2.Response(500)
     assert run(changed, known=known)["2"].description
+
+
+def test_deferred_refetch_is_retried_next_run() -> None:
+    """Run 1 can't refetch an edited job; its output (new updated_at, old text) is run 2's
+    stored item and must still be seen as stale."""
+    first = known_from(collect_payload(big()))
+    edited = big()
+    edited.jobs[1]["updated_at"] = "2040-10-01T10:00:00-04:00"
+    edited.jobs[1]["content"] = "&lt;p&gt;Fresh text&lt;/p&gt;"
+    edited.detail_override["2"] = httpx2.Response(500)
+    run1 = collect_payload(edited, known=first)
+    assert set(detail_ids(edited)) == {"2"}  # retried inside fetch_json, then given up
+    old_text = first["2"]["content"]
+    assert next(j for j in run1["jobs"] if j["id"] == 2)["content"] == old_text
+
+    edited.detail_override.clear()
+    edited.urls.clear()
+    run2 = collect_payload(edited, known=known_from(run1))
+    assert detail_ids(edited) == ["2"]
+    assert (
+        next(j for j in run2["jobs"] if j["id"] == 2)["content"] == "&lt;p&gt;Fresh text&lt;/p&gt;"
+    )
+    # Now current: a third run reuses it.
+    edited.urls.clear()
+    collect_payload(edited, known=known_from(run2))
+    assert edited.details == []
+
+
+def test_stored_items_without_a_stamp_fall_back_to_updated_at() -> None:
+    known = known_from(collect_payload(big()))
+    for item in known.values():
+        item.pop("_content_updated_at", None)
+    again = big()
+    collect_payload(again, known=known)
+    assert again.details == []
 
 
 # --- list integrity ------------------------------------------------------------------------------
@@ -273,7 +393,7 @@ def test_list_failures_propagate(status: int) -> None:
 def test_idless_entries_pass_through_for_parse_to_report() -> None:
     server = big()
     server.jobs.append({"title": "Synthetic Intern Without Id"})
-    payload = collect(server.request())
+    payload = collect_payload(server)
     assert len(payload["jobs"]) == 9 and payload["meta"]["total"] == 9
 
 
@@ -310,6 +430,40 @@ def test_max_bytes_can_only_tighten_the_global_cap(monkeypatch: pytest.MonkeyPat
     body = json.dumps({"x": "y" * 200}).encode()
     with pytest.raises(FetchError):
         _fetch(httpx2.Response(200, content=iter([body]), headers=JSON_HEADERS), max_bytes=10**7)
+
+
+def test_deadline_in_the_past_makes_no_request() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        calls.append(str(request.url))
+        return httpx2.Response(200, json={"a": 1})
+
+    with pytest.raises(FetchError) as error:
+        fetch_json(BASE, transport=httpx2.MockTransport(handler), deadline=time.monotonic() - 1)
+    assert error.value.code == "timeout" and calls == []
+
+
+def test_retry_sleep_that_would_pass_the_deadline_is_refused() -> None:
+    slept: list[float] = []
+    transport = httpx2.MockTransport(lambda _r: httpx2.Response(503, headers={"Retry-After": "10"}))
+    with pytest.raises(FetchError) as error:
+        fetch_json(BASE, transport=transport, sleep=slept.append, deadline=time.monotonic() + 5)
+    assert error.value.code == "timeout" and slept == []
+
+
+def test_retry_within_the_deadline_still_happens() -> None:
+    slept: list[float] = []
+    answers = iter(
+        [httpx2.Response(503, headers={"Retry-After": "1"}), httpx2.Response(200, json={})]
+    )
+    fetched = fetch_json(
+        BASE,
+        transport=httpx2.MockTransport(lambda _r: next(answers)),
+        sleep=slept.append,
+        deadline=time.monotonic() + 60,
+    )
+    assert fetched.data == {} and slept == [1.0]
 
 
 def test_fetched_reports_the_decoded_size() -> None:
@@ -386,3 +540,38 @@ def test_pipeline_duplicate_ids_close_nothing(db: Session, gh: IngestionSource) 
     server.jobs.append(server.jobs[0])
     failed = sync_source(db, gh, transport=server.transport)
     assert failed.status is IngestionRunStatus.FAILED and _active(db, gh) == 8
+
+
+@pytest.mark.postgres
+def test_pipeline_small_board_uses_conditional_requests(db: Session, gh: IngestionSource) -> None:
+    server = Server(job(1), job(2))
+    server.etag = '"v1"'
+    first = sync_source(db, gh, transport=server.transport)
+    assert first.status is IngestionRunStatus.SUCCESS and gh.etag == '"v1"'
+    assert server.urls == [f"{BASE}?content=true"]
+
+    server.urls.clear()
+    second = sync_source(db, gh, transport=server.transport)
+    assert second.status is IngestionRunStatus.NO_CHANGE
+    assert server.urls == [f"{BASE}?content=true"]  # exactly one request
+    assert gh.etag == '"v1"' and _active(db, gh) == 2  # validators kept, nothing closed
+
+    server.etag = '"v2"'  # the board changed: a full body and the new validator
+    server.jobs.pop()
+    third = sync_source(db, gh, transport=server.transport)
+    assert third.status is IngestionRunStatus.SUCCESS and gh.etag == '"v2"'
+    assert third.closed_count == 1
+
+
+@pytest.mark.postgres
+def test_pipeline_large_board_drops_validators_and_lists_first(
+    db: Session, gh: IngestionSource
+) -> None:
+    gh.etag = '"stale"'
+    db.commit()
+    server = big()
+    assert sync_source(db, gh, transport=server.transport).status is IngestionRunStatus.SUCCESS
+    assert gh.etag is None
+    server.urls.clear()
+    sync_source(db, gh, transport=server.transport)  # 8 stored (> 5): list first
+    assert server.urls[0] == BASE and not any("content=true" in u for u in server.urls)

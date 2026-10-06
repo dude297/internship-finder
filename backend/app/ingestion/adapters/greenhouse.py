@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.enums import OpportunitySourceType
 from app.ingestion.adapters import Adapter, CollectRequest, SourceConfig, normalize_each, top_level
-from app.ingestion.http import FetchError, Fetched, fetch_json
+from app.ingestion.http import Fetched, FetchError, fetch_json
 from app.ingestion.normalize import (
     GREENHOUSE,
     SLUG,
@@ -178,7 +178,8 @@ def _small_board(request: CollectRequest) -> Fetched | None:
         if error.code == "response_too_large":
             return None
         raise
-    jobs = fetched.data.get("jobs") if isinstance(fetched.data, dict) else None
+    data: Any = fetched.data
+    jobs: Any = cast(dict[str, Any], data).get("jobs") if isinstance(data, dict) else None
     if isinstance(jobs, list) and len(cast(list[Any], jobs)) > LARGE_BOARD_JOBS:
         return None
     return fetched  # includes 304 (data None) and malformed bodies, which parse reports

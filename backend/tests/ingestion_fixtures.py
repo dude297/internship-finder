@@ -4,7 +4,7 @@ Never paste real postings here."""
 
 import json
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote
 
 import httpx2
@@ -156,25 +156,6 @@ class FakeSource:
             content=json.dumps(body).encode(),
             headers={"Content-Type": "application/json", **(headers or {})},
         )
-        if url.endswith("/jobs?content=true"):
-            # A Greenhouse board is read content-free first (ADR-022): serve that list too.
-            data = cast(dict[str, Any], body)
-            jobs = data.get("jobs") if isinstance(body, dict) else None
-            stripped = cast(Any, body)
-            if isinstance(jobs, list):
-                stripped = cast(
-                    Any,
-                    data
-                    | {
-                        "jobs": [
-                            {k: v for k, v in cast(dict[str, Any], j).items() if k != "content"}
-                            if isinstance(j, dict)
-                            else j
-                            for j in cast(list[Any], jobs)
-                        ]
-                    },
-                )
-            self.json(url.removesuffix("?content=true"), stripped, status=status, headers=headers)
 
     def respond(self, url: str, handler: Callable[[httpx2.Request], httpx2.Response]) -> None:
         self.routes[url] = handler

@@ -50,10 +50,6 @@ function publishGreenhouse(description: string) {
     ingestionFixtureFile,
     JSON.stringify({
       [boardUrl]: { jobs: [greenhouseJob(1, description)], meta: { total: 1 } },
-      [boardUrl.replace('?content=true', '')]: {
-        jobs: [greenhouseJob(1, description)],
-        meta: { total: 1 },
-      },
       [ashbyUrl]: {
         jobs: [
           {
