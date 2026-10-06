@@ -79,7 +79,7 @@ The backend's example file is [`backend/.env.example`](backend/.env.example) (it
 | [docs/deployment.md](docs/deployment.md) | Deployment process |
 | [docs/data-model.md](docs/data-model.md) | Database entities |
 | [docs/eligibility.md](docs/eligibility.md) | Eligibility rules |
-| [docs/scoring.md](docs/scoring.md) | Fit scoring v1: components, weights, coverage, ranking |
+| [docs/scoring.md](docs/scoring.md) | Fit scoring v2: components, weights, coverage, ranking |
 | [docs/sources.md](docs/sources.md) | Opportunity source registry |
 | [docs/operations.md](docs/operations.md) | Runtime operations and monitoring |
 | [docs/decisions/](docs/decisions/) | Architecture decision records |

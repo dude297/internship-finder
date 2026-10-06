@@ -53,6 +53,10 @@ class Opportunity(IdMixin, TimestampMixin, Base):
             " OR length(requirement_extraction_fingerprint) = 64",
             name="requirement_extraction_fingerprint_length",
         ),
+        CheckConstraint(
+            "dismissed_reason IS NULL OR dismissed_at IS NOT NULL",
+            name="dismissed_reason_needs_dismissed_at",
+        ),
     )
 
     title: Mapped[str] = mapped_column(String(300))
@@ -81,6 +85,10 @@ class Opportunity(IdMixin, TimestampMixin, Base):
     # Set when the owner creates or edits it through the API. Sync never overwrites the canonical
     # fields or requirements of a curated opportunity (ADR-008 §8).
     manually_curated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # ADR-017: the owner's durable "hidden / not interested" decision. Sync never reads or writes
+    # these, so a hidden opportunity keeps updating its source records and stays hidden.
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dismissed_reason: Mapped[str | None] = mapped_column(String(30))
     # ADR-012 §6: set when a source update materially changed the posting text after the owner
     # had reviewed its requirements; cleared by the owner's next review. Display + filter only.
     requirements_stale_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from app.enums import (
     ApplicationStatus,
+    DismissReason,
     EligibilityStatus,
     ExtractionMethod,
     OpportunitySourceType,
@@ -191,6 +192,7 @@ class OpportunitySummary(BaseModel):
     # ADR-012 §8: one aggregate subquery, never per-row.
     pending_requirement_count: int = 0
     requirements_stale: bool = False
+    dismissed_at: datetime | None = None
     # ADR-014 §6: the program registry's date trust. A typical window is text, never a date;
     # needs_date_verification = verify_by has been reached (display only, never closes).
     program_cycle: str | None = None
@@ -251,6 +253,9 @@ class OpportunityDetail(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     manually_curated_at: datetime | None
+    # ADR-017: the owner's hidden decision (null = visible).
+    dismissed_at: datetime | None = None
+    dismissed_reason: DismissReason | None = None
     # ADR-012 §6: set when a source update changed the posting text after review; cleared by the
     # owner's next review batch.
     requirements_stale_since: datetime | None = None
@@ -276,3 +281,9 @@ class OpportunityDetail(BaseModel):
     # Null when there is no profile yet: eligibility is never faked.
     latest_evaluation: EvaluationResponse | None = None
     profile_exists: bool = False
+
+
+class DismissBody(BaseModel):
+    """ADR-017: hide an opportunity, optionally saying why."""
+
+    reason: DismissReason | None = None

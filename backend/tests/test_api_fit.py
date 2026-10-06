@@ -206,7 +206,7 @@ def test_detail_and_list_expose_the_current_fit(client: TestClient) -> None:
     )
     evaluation = created["latest_evaluation"]
     breakdown = evaluation["score_breakdown"]
-    assert evaluation["scoring_version"] == "v1"
+    assert evaluation["scoring_version"] == "v2"
     assert evaluation["fit_score"] == breakdown["score"]
     assert set(breakdown["components"]) == {
         "technical",
