@@ -67,6 +67,7 @@ class Fetched:
     data: Any
     etag: str | None
     last_modified: str | None
+    size: int = 0  # decoded body bytes (0 for 304); lets a multi-request adapter keep a budget
 
     @property
     def not_modified(self) -> bool:
@@ -116,14 +117,15 @@ def _retry_delay(response: httpx2.Response | None, attempt: int) -> float:
     return float(2**attempt)  # 1 s, then 2 s
 
 
-def _read_body(response: httpx2.Response) -> bytes:
+def _read_body(response: httpx2.Response, max_bytes: int = MAX_BYTES) -> bytes:
+    # iter_bytes() yields *decoded* chunks, so the cap also bounds a compression bomb.
     declared = response.headers.get("Content-Length")
-    if declared and declared.isdigit() and int(declared) > MAX_BYTES:
+    if declared and declared.isdigit() and int(declared) > max_bytes:
         raise FetchError("response_too_large", "The source response is too large.")
     body = bytearray()
     for chunk in response.iter_bytes():
         body.extend(chunk)
-        if len(body) > MAX_BYTES:
+        if len(body) > max_bytes:
             raise FetchError("response_too_large", "The source response is too large.")
     return bytes(body)
 
@@ -148,11 +150,18 @@ def fetch_json(
     last_modified: str | None = None,
     transport: httpx2.BaseTransport | None = None,
     sleep: Callable[[float], None] = time.sleep,
+    max_bytes: int = MAX_BYTES,
+    deadline: float | None = None,
 ) -> Fetched:
     """GET a JSON document with conditional headers, bounded redirects/retries/size.
+    `max_bytes` may only tighten the global MAX_BYTES cap (e.g. small per-job detail bodies).
+    `deadline` (a time.monotonic() value) is checked before every attempt, and a retry sleep that
+    would pass it is refused (FetchError "timeout"). It is not a hard wall: a server dripping
+    bytes can hold one attempt open while each read stays inside the 20 s read timeout.
 
     `transport` replaces the network (tests and the E2E fixture); DNS checks are skipped then,
     since nothing is resolved."""
+    max_bytes = min(max_bytes, MAX_BYTES)
     resolve = None if transport is not None else _resolve
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     if etag:
@@ -168,6 +177,8 @@ def fetch_json(
         headers=headers,
     ) as client:
         for attempt in range(MAX_ATTEMPTS):
+            if deadline is not None and time.monotonic() >= deadline:
+                raise FetchError("timeout", "The time budget for this source ran out.")
             last = attempt == MAX_ATTEMPTS - 1
             response: httpx2.Response | None = None
             try:
@@ -197,11 +208,12 @@ def fetch_json(
                             raise FetchError(
                                 "http_error", f"The source answered HTTP {response.status_code}."
                             )
-                        body = _read_body(response)
+                        body = _read_body(response, max_bytes)
                         return Fetched(
                             _parse_json(response, body),
                             response.headers.get("ETag"),
                             response.headers.get("Last-Modified"),
+                            len(body),
                         )
                 else:
                     raise FetchError("too_many_redirects", "The source redirected too many times.")
@@ -218,6 +230,8 @@ def fetch_json(
             delay = _retry_delay(response, attempt)
             if delay > MAX_RETRY_AFTER_SECONDS:
                 raise FetchError("rate_limited", "The source asked us to wait too long; try later.")
+            if deadline is not None and time.monotonic() + delay >= deadline:
+                raise FetchError("timeout", "The time budget for this source ran out.")
             sleep(delay)
     raise AssertionError("unreachable")  # every attempt returns or raises
 
