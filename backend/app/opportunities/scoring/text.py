@@ -12,7 +12,7 @@ from functools import cache
 from app.opportunities.scoring import config
 from app.opportunities.scoring.config import ALIAS_GROUPS
 
-_LIST_ITEM_SPLIT = re.compile(r"[,;/|\u2022\u00b7*\n]|\s[-\u2013\u2014]\s|\s(?:or|and)\s", re.I)
+_LIST_ITEM_SPLIT = re.compile(r"[,;:/|\u2022\u00b7*\n]|\s[-\u2013\u2014]\s|\s(?:or|and)\s", re.I)
 _WORD = r"[^\W_]"
 # `.net`-style tokens (a leading dot not preceded by a word character), or a word optionally
 # followed by `++`, `#`, or dotted parts (`node.js`, `asp.net`; a trailing period is dropped).
@@ -76,7 +76,12 @@ class Corpus:
             if found:
                 return ("exact" if variant == phrase else "alias", variant)
         if skill:
-            for term in sorted(config.RELATED_SKILL_TERMS.get(" ".join(phrase), ())):
+            terms = {
+                t
+                for variant in variants(phrase)
+                for t in config.RELATED_SKILL_TERMS.get(" ".join(variant), ())
+            }
+            for term in sorted(terms):
                 if self.has_phrase(tokens(term)):
                     return "related", tokens(term)
         return None
@@ -99,7 +104,11 @@ class Corpus:
         for text in self._texts:
             items = [tokens(item) for item in _LIST_ITEM_SPLIT.split(text)]
             for i, item in enumerate(items):
-                if item != (word,):
+                # The word ends the item ("Data analysis in R or SAS"), unless a blocked
+                # neighbour precedes it ("Series C").
+                if item[-1:] != (word,) or (
+                    len(item) > 1 and item[-2] in config.AMBIGUOUS_PREV_BLOCK[word]
+                ):
                     continue
                 before = items[i - 1][-1:] if i > 0 else ()
                 after = items[i + 1][:1] if i + 1 < len(items) else ()
@@ -110,6 +119,9 @@ class Corpus:
     def _has_programming_context(self, word: str, position: int) -> bool:
         following = self.words[position + 1 : position + 2]
         if following and following[0] in config.AMBIGUOUS_NEXT_BLOCK[word]:
+            return False
+        previous = self.words[max(0, position - 1) : position]
+        if previous and previous[0] in config.AMBIGUOUS_PREV_BLOCK[word]:
             return False
         before = self.words[max(0, position - config.CONTEXT_WINDOW) : position]
         if len(before) >= 2 and (before[-2], before[-1]) in config.SKILL_LEAD_IN:

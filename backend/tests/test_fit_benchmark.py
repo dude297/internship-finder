@@ -142,7 +142,32 @@ FALSE_MENTIONS = [
     ("Go", "We go build software systems as a team."),
     ("Go", "Let's go! Software intern."),
     ("Go", "Hiring now: Go, getter, and fast learner."),
+    ("C", "Series C funded startup with strong analysis skills."),
+    ("C", "Vitamin C and statistics research."),
+    ("C", "Objective-C developer."),
+    ("Go", "We go build the backend team."),
+    ("R", "Strong tools and statistics language stack."),
 ]
+
+
+TRUE_MENTIONS_TIGHTENED = [
+    ("C", "Embedded C/C++ firmware."),
+    ("R", "Tools: R, Tableau."),
+    ("Go", "Golang services."),
+    ("C", "Proficient in C and Python."),
+]
+
+
+@pytest.mark.parametrize(("skill", "text"), TRUE_MENTIONS_TIGHTENED)
+def test_tightened_guard_keeps_true_mentions(skill: str, text: str) -> None:
+    assert Corpus(text).match_via(tokens(skill), skill=True) is not None
+
+
+@pytest.mark.parametrize("skill", ["ML", "AI", "Machine Learning"])
+def test_related_terms_apply_to_any_alias(skill: str) -> None:
+    found = Corpus("Build deep learning models.").match_via(tokens(skill), skill=True)
+    assert found is not None
+    assert found[0] == "related"
 
 
 @pytest.mark.parametrize(("skill", "text"), TRUE_MENTIONS)
@@ -308,6 +333,10 @@ def test_same_region_city_scores_less_than_exact_city() -> None:
         ("South San Francisco, CA", 100),
         ("Berkeley, California", 100),
         ("San Francisco Bay Area", 100),
+        ("SF Bay Area", 100),
+        ("Greater Bay Area", 100),
+        ("Sunnyvale, CA 94085", 100),
+        ("Oakland, NY 10001", 0),
     ],
 )
 def test_region_rejects_other_states_and_countries(location: str, expected: int) -> None:

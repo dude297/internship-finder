@@ -144,7 +144,9 @@ assert sum(QUALITY_POINTS.values()) == 100
 # Skills only; the explanation says "related".
 RELATED_SKILL_TERMS: Final[dict[str, frozenset[str]]] = {
     "machine learning": frozenset({"deep learning", "neural network", "neural networks"}),
+    "artificial intelligence": frozenset({"deep learning", "neural network", "neural networks"}),
 }
+# Looked up for every alias of the profile skill ("ml", "ai", ...), not just its literal phrase.
 
 # Skills short enough to collide with ordinary words (go-to-market, C-suite, rust-proof).
 # They match only with a programming-context word within CONTEXT_WINDOW words, and never when
@@ -156,9 +158,11 @@ SKILL_CONTEXT_WORDS: Final = frozenset(
     python java rust c++ c# golang programming language languages coding backend kubernetes
     docker linux embedded firmware microservices api apis sql javascript typescript matlab
     verilog fpga git concurrency developer compiler toolchain drivers microcontrollers
-    proficiency proficient familiarity grpc libraries skills tools stack tech analysis statistics
+    proficiency proficient familiarity grpc libraries
     """.split()  # noqa: SIM905
 )
+# Broad words (skills, tools, analysis, statistics, language, stack, tech) are deliberately absent:
+# they made "Series C ... analysis skills" or "vitamin C and statistics" match.
 # "experience with Go", "knowledge of R": the two words just before the skill.
 SKILL_LEAD_IN: Final = frozenset(
     (noun, link)
@@ -174,9 +178,17 @@ TECH_TOKENS: Final = frozenset(
     matlab scala julia c++ c# golang git react node.js hadoop airflow
     """.split()  # noqa: SIM905
 )
+# The word just before the skill that makes it something else ("Series C", "Objective-C",
+# "vitamin C", "we go build").
+AMBIGUOUS_PREV_BLOCK: Final[dict[str, frozenset[str]]] = {
+    "go": frozenset("we you they i let to will can should would could who please".split()),  # noqa: SIM905
+    "c": frozenset("series objective vitamin hepatitis class grade type plan".split()),  # noqa: SIM905
+    "rust": frozenset(),
+    "r": frozenset(),
+}
 AMBIGUOUS_NEXT_BLOCK: Final[dict[str, frozenset[str]]] = {
     "go": frozenset(
-        "to getter getters with above beyond on live forward ahead through back".split()  # noqa: SIM905
+        "to getter getters with above beyond on live forward ahead through back build get make do".split()  # noqa: SIM905, E501
     ),
     "c": frozenset("suite level section corporate".split()),  # noqa: SIM905
     "rust": frozenset(
@@ -288,6 +300,7 @@ REGION_CITY_SCORE: Final = 75  # same-region city; a region-label preference sco
 REGION_ALLOWED_WORDS: Final = frozenset(
     """
     ca california united states usa us america south east north west downtown hybrid onsite
+    sf greater
     """.split()  # noqa: SIM905
 )
 

@@ -15,6 +15,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- Fit scoring v2 review fixes (unreleased, same `v2`): related skill terms are looked up through any alias (`ML`/`AI` get deep-learning credit like `Machine Learning`); ambiguous-skill context words no longer include `skills`/`tools`/`analysis`/`statistics`/`language`/`stack`/`tech`, and `Series C`, `Objective-C`, `vitamin C`, `we go build` are rejected; Bay Area region accepts `SF Bay Area`, `Greater Bay Area`, and ZIP codes. README now says fit scoring v2.
 - Frontend responses send a strict Content-Security-Policy and a Permissions-Policy (security review L3); verified against the production build with zero violations. Takes effect on the next Vercel deploy.
 - Security hardening from the 2026-10-06 review: the requirement extractor collapses horizontal whitespace runs before sentence splitting (a 50,000-space description took ~140 s, now milliseconds); CLI logs never print tracebacks or exception messages, and the database engine hides bound parameters, so public Actions logs can't carry the database host or profile-derived values; CI actions pinned to commit SHAs.
 - Backend dependency lock: `backend/requirements.lock` and `backend/requirements-dev.lock` (transitive, SHA-256 hashed, universal for Python 3.12, generated with `uv pip compile`). CI, the E2E job, and the scheduled production sync install from them; Render's build command switch is an owner action ([development.md](docs/development.md#dependency-lock)). No product change.

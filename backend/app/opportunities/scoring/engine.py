@@ -232,7 +232,13 @@ def _region_match(place: str, location: str) -> tuple[int, str] | None:
         found = [c for c in sorted(cities) if where.has_phrase(tokens(c))]
         covered = {word for city in found for word in tokens(city)}
         # Anything else in the location (another state, a country) means a different place.
-        extra = [w for w in tokens(location) if w not in covered | config.REGION_ALLOWED_WORDS]
+        # A 5-digit ZIP (or its +4 part) is not another place.
+        extra = [
+            w
+            for w in tokens(location)
+            if w not in covered | config.REGION_ALLOWED_WORDS
+            and not (w.isdigit() and len(w) in (4, 5))
+        ]
         if found and not extra:
             score = (
                 config.LOCATION_MATCH_SCORE
