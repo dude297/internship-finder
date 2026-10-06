@@ -270,10 +270,11 @@ describe('independent coverage', () => {
     })
     renderAt('/sources')
     expect(
-      await screen.findByText(
-        'Independent discovery coverage: 629 of 1,626 (38.7%) — survives without the community feed',
-      ),
+      await screen.findByText('629 of 1,626 survive without the community feed'),
     ).toBeInTheDocument()
+    expect(screen.getByText('Independent discovery').closest('div')).toHaveTextContent(
+      '38.7%',
+    )
     expect(screen.getByText('Direct ATS, verified fresh')).toBeInTheDocument()
     expect(screen.getByText('321')).toBeInTheDocument()
   })
