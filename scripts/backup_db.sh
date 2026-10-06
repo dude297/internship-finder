@@ -42,6 +42,18 @@ if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
   done
 fi
 
+# Keep the password out of argv (visible to other processes on the runner): libpq reads
+# PGPASSWORD when the URL carries none. Percent-decoded, since the URL form is encoded.
+rest="${url#*://}"
+userinfo="${rest%%@*}"
+if [[ "$rest" == *@* && "$userinfo" == *:* ]]; then
+  pw="${userinfo#*:}"
+  hex='\x' # a literal: a backslash typed inside "${...}" would be dropped
+  PGPASSWORD="$(printf '%b' "${pw//%/$hex}")"
+  export PGPASSWORD
+  url="${url%%://*}://${userinfo%%:*}@${rest#*@}"
+fi
+
 errfile="${RUNNER_TEMP:-/tmp}/backup-tools.$$.err"
 trap 'rm -f "$errfile"' EXIT
 : > "$errfile"
