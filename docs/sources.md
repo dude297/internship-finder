@@ -130,6 +130,7 @@ A built-in source (`curated_registry`, identifier `program-registry`) imports `b
 - **`verify_by`:** from that date the opportunity shows "Needs date verification" (also the `needs_date_verification` list filter). It never closes or hides anything.
 - **Updating:** a reviewed pull request to the file, then a sync (manual or scheduled; the registry syncs with the ATS tier, before the discovery feed). An unchanged entry is a no-op, an edited entry updates the same opportunity, a new cycle is a new opportunity, and a removed entry is closed (not deleted).
 - **Identity:** `curated:<slug>:<cycle>` only. There is deliberately no URL identifier, so a feed posting with the same link never merges with a program.
+- **Contents:** 24 programs (13 from Milestone 8; 11 for the 2027 cycle added 2026-10-06, [research](research/curated-program-expansion-2027.md)). Programs open only to enrolled undergraduates are left out until the owner can use them.
 - **Owner edits win:** editing a registry opportunity in the app marks it curated; later registry changes update its source record but never its fields. Requirement candidates from the description and eligibility summary stay pending.
 
 ### Manual entry

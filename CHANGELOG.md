@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 ### Added
 
 - Milestone 8.2 (true feed independence, [ADR-016](docs/decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)): `python -m app.cli retire-source SOURCE [--apply]` closes a source's records through the pipeline's normal closure and fallback path, then disables it (dry run by default, atomic, idempotent); `bootstrap-sources` sets up a new installation from the Direct Source Catalog without the community feed (cap 50, never syncs unless `--sync`). The pipeline's closure is extracted into `close_records`, unchanged. No migration.
+- Curated Program Registry: 11 programs for the 2027 cycle usable by a high-school senior or incoming first-year (NIH SIP, Navy SEAP, NIST SHIP, Microsoft Discovery, Jane Street WiSE, CRA-WP DREU, Google Summer of Code, NASA Space Apps, BNL User Facility Summer School, NSF REU sites directory, FIRST volunteering); verified dates only where the official page prints them, otherwise typical windows with `verify_by` ([research](docs/research/curated-program-expansion-2027.md)).
 
 ### Changed
 
