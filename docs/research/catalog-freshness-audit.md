@@ -1,5 +1,8 @@
 # Catalog freshness audit (production, read-only)
 
+> **Research only (non-normative).** Date: 2026-10-05. Last verified: 2026-10-05.
+> Used by / superseded by: [ADR-015](../decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md) (derived freshness, Independent Discovery Coverage, empty-snapshot guard), implemented in Milestone 8.1.
+
 Date: 2026-10-05, ~09:00–09:20 UTC. Neon production (`a8c3e5f7b9d1`, Milestone 8), queried in `READ ONLY` transactions; aggregates only, no titles or payloads. The last sync before the audit was the Milestone 8 activation dispatch at 06:14 UTC ([run 37271407847](https://github.com/dude297/internship-finder/actions/runs/37271407847)); no scheduled run happened between it and the audit. Freshness states were computed with the Milestone 8.1 code (`derive_freshness`, [ADR-015 §1](../decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)) against production rows, read-only.
 
 ## Production health snapshot (Phase 0)

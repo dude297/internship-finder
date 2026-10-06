@@ -2,15 +2,16 @@
 
 Hosted architecture: [ADR-009](decisions/ADR-009-hosted-deployment-architecture.md). This file is the runbook. It never contains secrets: no `DATABASE_URL`, proxy secret, password, hash, session or CSRF token.
 
-## Status (2026-10-05)
+## Status
 
 | Part | State |
 |---|---|
-| Neon | **Provisioned.** Migrated to `a8c3e5f7b9d1` on 2026-10-05 (Milestone 8, `alembic check` clean). Owner created (CLI, `getpass`). 1,724 opportunities (1,626 open) after the Milestone 8 activation. |
-| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`): deploy `dep-db1j19hsrm7s73bu01dg` of `9263860` (Milestone 8) live (2026-10-05 05:08 UTC). Auto-deploy off, branch `main`. The only Render service. |
-| Vercel | **Deployed** (production `dpl_CNabjmvDw2fyAus25jqVa781D1a3`, `Ready`, aliased to `internship-finder-pi.vercel.app`; 2026-10-05 from a clean checkout of `9263860` via CLI). |
-| Hosted acceptance | Verified with the owner's login on 2026-09-29 ([Production verification](#production-verification)); Milestone 4 hosted smoke on 2026-09-29 ([below](#milestone-4-hosted-smoke-2026-09-29)); Milestone 5 hosted smoke on 2026-10-01 ([below](#milestone-5-hosted-smoke-2026-10-01)); Milestone 6 release and smoke on 2026-10-02 ([below](#milestone-6-release-2026-10-02)); Milestone 7 release and ATS activation on 2026-10-04 ([below](#milestone-7-release-2026-10-04)); Milestone 8 release and activation on 2026-10-05 ([below](#milestone-8-release-2026-10-05)). |
-| Scheduled sync | **Active.** GitHub environment `production` (deployment branches: `main` only) with secret `PRODUCTION_DATABASE_URL` (Neon pooled URL); first dispatch green 2026-10-02. |
+| Neon | **Provisioned.** Project `sweet-dew-33937746`, PostgreSQL 18, `aws-us-west-2`, database `internship_finder`. Owner created once (CLI, `getpass`). |
+| Render | **Deployed.** `internship-finder-api` (`srv-dastve60tbcc7392dfgg`), the only Render service. Auto-deploy off, branch `main`. |
+| Vercel | **Deployed.** Project `internship-finder`, production alias `internship-finder-pi.vercel.app`; Git deployments off (CLI deploys only). |
+| Scheduled sync | **Active.** GitHub environment `production` (deployment branches: `main` only) with secret `PRODUCTION_DATABASE_URL` (Neon pooled URL). |
+
+The released milestone, production `main` SHA, and schema revision are in the generated status block of [PROJECT_STATE.md](../PROJECT_STATE.md) (source: [`docs/status.json`](status.json)). Each release's deploy IDs, smoke results, and counts are in its immutable record under [`docs/releases/`](releases/).
 
 ## Topology
 
@@ -92,146 +93,45 @@ Always **migrate → Render → Vercel**, from a trusted local shell.
 2. **Render:** push the reviewed commit to `main`, then **Manual Deploy → Deploy latest commit** (or `POST /v1/services/<id>/deploys`). Wait for `live`, then check `/api/health`.
 3. **Vercel:** from a clean checkout of the same commit (`git worktree add --detach <dir> <sha>`), in the repository root: `npx vercel link --yes --project internship-finder --scope dude297s-projects`, then `npx vercel deploy --prod --yes`. Delete any `.env.local` the CLI creates. Verify the new deployment is aliased to `internship-finder-pi.vercel.app`.
 
+Notes: `vercel link` appends `.vercel` and `.env*` to the checkout's `.gitignore` and writes an `.env.local` (a short-lived OIDC token), so the deployment reports `gitDirty`; delete `.env.local` and the checkout afterwards. A merge that rewrites SHAs (rebase merge) must cite the merged SHA, not the branch head, in the release record.
+
 ### Owner bootstrap (done once)
 
 With `DATABASE_URL` set as in step 1: `python -m app.cli create-owner --username <name>`. The password goes into `getpass` only. Password rotation: `set-password` (revokes all sessions).
 
-### Unmerged branch validation
+## Release Procedure
 
-Milestone 3.5 was validated before merge by switching the Render service's branch to `feature/hosted-deployment-foundation` (auto-deploy stayed off) and deploying manually; Vercel production was deployed from a clean checkout of that branch. After the PR is merged: switch Render's branch back to `main`, deploy `main` on Render, and redeploy Vercel production from `main`. Done on 2026-09-29 for `d78b93d` (PR #7). The rebase merge rewrote the branch SHAs cited on this page: `36b9896` → `03e86c7`, `65964c6` → `17e5877`, `3563021` → `680c2b7`, `3ab655f` → `6eaaed6`.
+The order every release follows ([docs/README.md](README.md#release-closeout-contract) defines the closeout):
 
-Milestone 4 was released without the branch-swap step: PR #9 merged into `main` on 2026-09-29 (production `main` is `ca9b91b`). Release closeout: Neon migrated to `b41e7c9d2f60` (additive; existing boards backfilled scope `all`, pre-Milestone-4 evaluations kept NULL fit until the first Match Profile save), Render and Vercel production redeployed from `main`, then the hosted smoke below. The first Match Profile save on 2026-09-29 gave every pre-existing opportunity a fit score (1,055 evaluated in 6,359 ms).
+1. Confirm the feature PR's CI is green at the approved head and no scheduled sync is running (`gh run list --workflow sync-production.yml`).
+2. Pause the scheduled sync for the window: `gh workflow disable sync-production.yml`. (Required when the migration adds rows or enum values the running code can't read; harmless otherwise.)
+3. Record a read-only baseline (aggregate counts only, `READ ONLY` transaction).
+4. Merge at the approved head (`gh pr merge --match-head-commit <sha>`); confirm the merged tree equals the head and post-merge CI is green.
+5. [Deploy Order](#deploy-order): migrate (if any) → Render → Vercel.
+6. [Production verification](#production-verification).
+7. Re-enable the scheduled sync (`gh workflow enable sync-production.yml`) and dispatch it once; record its result and elapsed time.
+8. Owner-approved activation steps, if any ([operations.md](operations.md#source-activation-procedure)).
+9. **Closeout PR (docs only):** new `docs/releases/<date>-<milestone>.md`, `docs/status.json` (then `python scripts/check_docs.py --write-status`), PROJECT_STATE.md, CHANGELOG.md. The milestone is "released — docs closeout pending" until that PR merges.
 
-The Vercel CLI's `vercel link` appends `.vercel` and `.env*` to the checkout's `.gitignore` and writes an `.env.local` (a short-lived OIDC token), so the deployment reports `gitDirty`. Both stay out of the build; delete `.env.local` and the checkout afterwards.
+## Production Verification
 
-### Milestone 5 release (2026-10-01)
+Run after every deploy; record the results in the release record.
 
-**Executed 2026-10-01** following the procedure below: [PR #11](https://github.com/dude297/internship-finder/pull/11) ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)) rebase-merged at the approved head `12bb4cc`; resulting `main` `639e447`, post-merge CI green; Neon migrated `b41e7c9d2f60` → `c5a1e0f3d7b2`; Render deploy `dep-dautc2gjo6nc73ehekag`; Vercel production `dpl_8jfYs2Ychc77wiH7JbWCMjroEwUF`. Results: [Milestone 5 hosted smoke](#milestone-5-hosted-smoke-2026-10-01). The procedure is kept as the runbook for the next migrating release.
+| Check | How | Expect |
+|---|---|---|
+| Health through Vercel | `GET https://internship-finder-pi.vercel.app/api/health` | `200 {"status":"ok"}` |
+| Health on Render | `GET https://internship-finder-api-eld4.onrender.com/api/health` | `200` |
+| API docs hidden | `/docs`, `/redoc`, `/openapi.json` on Render | `404` |
+| Private API needs a session | `GET /api/sources`, `/api/opportunities` unauthenticated | `401` |
+| Unknown API path | `GET /api/nope` | JSON `404`, not `index.html` |
+| SPA deep links | `/login`, `/sources`, `/opportunities` | `200` |
+| Headers | `/api/*` | `Cache-Control: no-store`, `X-Frame-Options: DENY` |
+| Bundle | Current `index-*.js` | Contains the release's new UI strings; no Render hostname |
+| Schema | `alembic current`, `alembic check` | At head, clean |
+| Service layer (no owner password in the release shell) | The release's read-only smoke script against Neon in a `READ ONLY` transaction | All checks pass |
+| Scheduled sync | One manual dispatch | Green; elapsed time well under the 20-minute limit |
 
-`c5a1e0f3d7b2` gives `profile_facts.review_state` a database default of `'accepted'` (kept after the migration, not dropped once applied). Milestone 4's Match Profile save creates `profile_facts` without naming `review_state`; manual facts are semantically accepted, and the default gives them exactly that value, so Milestone 4 code keeps working unmodified on the migrated schema. The CHECK `ck_profile_facts_review_state_matches_verified` (`extraction_method = 'manual' OR (review_state = 'accepted') = verified_by_user`) still rejects an unverified non-manual fact that omits `review_state` — only manual inserts benefit from the default. Consequence: there is no ordering hazard between the migration and the Render deploy, and a Render code rollback to the Milestone 4 release after the migration remains possible for existing Milestone 4 functionality (see [Rollback](#rollback)). Neon itself is still never downgraded. The Milestone 4 app simply ignores the new table and columns it doesn't know about; Milestone-5-only data (uploaded sources, imported facts) is invisible to it but untouched. Pending or rejected imported facts are unverified, so Milestone 4's fit filter (`verified_by_user OR manual`) ignores them as before; accepted imported facts are verified, so Milestone 4 would score them too, consistent with Milestone 5's behavior.
-
-1. **Merge PR #11** (owner). Record the merged commit SHA.
-2. **Verify post-merge CI** is green on `main` at that SHA.
-3. **Migrate Neon** (same shell pattern as [Deploy Order](#deploy-order) step 1, existing `DATABASE_URL` pattern; never downgrade). Read-only baseline first, expected per the Milestone 4 smoke unless the owner used the app since:
-   ```sql
-   SELECT count(*) FROM opportunities;                                         -- 1,055
-   SELECT count(*) FROM opportunity_source_records;                            -- 1,055
-   SELECT count(*), count(fit_score) FROM opportunity_evaluations;             -- 4,220, 2,110
-   SELECT count(*) FROM profile_facts;                                         -- 10
-   SELECT count(*) FROM profile_sources;                                       -- 0
-   SELECT pg_size_pretty(pg_database_size(current_database()));                -- ~18 MB
-   SELECT version_num FROM alembic_version;                                    -- b41e7c9d2f60
-   ```
-   Stop if these drift without an explanation. Then `alembic upgrade head`, `alembic current` → `c5a1e0f3d7b2`, `alembic check`, remove `DATABASE_URL`.
-4. **Verify the migration**, read-only:
-   ```sql
-   SELECT review_state, count(*) FROM profile_facts GROUP BY 1;                -- accepted: 10
-   SELECT count(*) FROM profile_facts
-    WHERE extraction_method <> 'manual' AND (review_state = 'accepted') <> verified_by_user;  -- 0
-   SELECT count(*) FROM opportunity_evaluations;                               -- unchanged (4,220)
-   SELECT count(*) FROM profile_source_artifacts;                              -- 0
-   SELECT column_default FROM information_schema.columns
-    WHERE table_name = 'profile_facts' AND column_name = 'review_state';       -- 'accepted'::text (or equivalent)
-   ```
-   Stop (and don't deploy) if `alembic current` or `alembic check` disagree. The Milestone 4 app keeps running correctly against the migrated schema in the meantime, so there's no rush to deploy Render.
-5. **Render:** deploy the merged SHA on `internship-finder-api` (`srv-dastve60tbcc7392dfgg`, never the stray `internship-finder`) — Manual Deploy, or the deploys API with the key from the local Render CLI config, never printed.
-6. **Verify:** wait for `live`; `/api/health` `200`; confirm the deploy's commit SHA; a synthetic wrong login → `401` (database reachable).
-7. **Vercel:** clean detached worktree at the merged SHA, `vercel link`, `vercel deploy --prod`, delete `.env.local` and the worktree, verify the alias (as for Milestone 4).
-8. **Hosted smoke** through the Vercel URL, logged in as the owner (browser, or a script whose session cookie is supplied locally and never logged). Synthetic, fabricated documents only:
-   - upload a synthetic text résumé with a unique marker line → pending facts; evaluation count unchanged (no pass on upload)
-   - accept one skill → `catalog_pass: true`; record the time and `evaluated_opportunities`
-   - reject one fact; re-parse → no duplicates, decided facts unchanged
-   - download → identical bytes; `attachment`, `nosniff`, `no-store`
-   - upload a synthetic text PDF (`tests/resume_fixtures.make_text_pdf`) → `201`; record latency (child-process start on Render)
-   - same file again → `409`; a > 2 MB file → `413`
-   - optional, owner's call: while the flate-bomb fixture parses (up to 15 s), `/api/health` answers and a second PDF gets `503` with `Retry-After`
-   - delete both synthetic sources → `catalog_pass: true` (an accepted fit fact existed)
-9. **Final counts and reconciliation:** `profile_sources` 0, `profile_source_artifacts` 0, `profile_facts` 10 (all accepted), migration `c5a1e0f3d7b2`, database size. Evaluations: 4,220 + the accept pass + the delete pass, each at most 1,055 (only opportunities whose fit input changed get a row), so at most 6,330; record the actual `evaluated_opportunities` of both passes and reconcile exactly. Record everything in [PROJECT_STATE.md](../PROJECT_STATE.md) and the Production Verification table.
-10. **Release-state docs PR**, if needed, to record the above once production reflects it.
-
-### Milestone 6 release (2026-10-02)
-
-[PR #13](https://github.com/dude297/internship-finder/pull/13) ([ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) rebase-merged at the approved head `ff47970` (CI `37064233989`); resulting `main` `80257c5`, post-merge CI `37066645594` green (backend, frontend, e2e). All counts below are aggregates from read-only queries.
-
-| Step | Result |
-|---|---|
-| Pre-migration baseline | `c5a1e0f3d7b2`; 1,055 opportunities and source records (all active); 0 canonical requirements; 6,330 evaluations (4,220 with fit, 1,055 latest, all `needs_verification`); 6,330 rule results; 1,055 `unassessed`; 1 profile, 10 facts, 0 profile sources/artifacts; 1 ingestion source, 2 runs; 1 owner; 23 MB |
-| Migration | `e6d1a4b8c2f9`, `alembic check` clean. `opportunity_requirement_candidates` exists; `opportunities.requirements_stale_since` and `requirement_extraction_fingerprint` exist; the kind CHECK accepts `ashby`. Every count identical to the baseline (0 candidates, 0 fingerprints, no evaluation, no status change) |
-| Milestone 5 code on the new schema | `/api/health` `200`; dummy-cookie session lookup `200` unauthenticated; private APIs `401` |
-| Render | `dep-db03iknavr4c73e10b8g` of `80257c5`, `live`; Free, Oregon, 1 instance, one worker, auto-deploy off, branch `main`, env var names unchanged. `/api/health` `200`; `/docs`, `/openapi.json` `404`; requirement-review and needs-review routes `401` (unknown routes `404`); synthetic wrong login `401`; clean startup log |
-| Vercel | `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`, `Ready`, aliased. `/api/health` `200` JSON; `/login`, `/opportunities`, `/sources`, unknown SPA path → `index.html`; `/api/nope`, `/api/health/` → JSON `404`. Bundle contains the Requirement Review panel, the `needs_review` filter, deadline filters and badges, Source Health labels, and the Ashby option; no Render hostname. Temporary checkout and `.env.local` deleted |
-| Hosted smoke (owner login via `getpass`, session in memory, logged out) | Authenticated session, list (1,055), Match Profile, sources: `200`. One fabricated opportunity (`ZZZ M6 RELEASE SMOKE — Synthetic Robotics Internship`, `Synthetic Example Org`): 3 pending `requirements-rules` suggestions with excerpts (minimum age, education, citizenship); pending changed nothing (`unassessed`, no requirements, same evaluation). One batch (accept age, edit + accept education, reject citizenship): 2 canonical `deterministic_parser` requirements, edit applied, `partial`, one evaluation. Editing the accepted age suggestion: relinked to a new row, no duplicate, old row removed. Explicit `complete` applied. 26/26 PASS |
-| Smoke cleanup | Guards verified (exact UUID, title prefix, organization, manually curated, manual source), then the app's `DELETE /api/opportunities/{id}` (`204`, then `404`). Read-only check: 0 rows left for that UUID or title in opportunities, candidates, requirements, evaluations, source records, identifiers, applications; 0 orphaned rule results; every production count identical to before the smoke |
-| Read-only discovery checks | `requirement_review` `needs_review`/`pending`/`stale`, `deadline_within` 7/14/30, `has_deadline`, `sort=deadline`: all `200`. The feed has no deadlines, so the deadline filters matched only the smoke opportunity while it existed |
-| GitHub environment | `production` (created earlier by the Vercel GitHub integration as `Production`; names are case-insensitive) restricted to branch `main` (custom policy, verified) before adding `PRODUCTION_DATABASE_URL` (Neon pooled URL, checked read-only with the app engine first). Secret name verified via metadata only; no repository secrets |
-| First sync ([run 37077086322](https://github.com/dude297/internship-finder/actions/runs/37077086322), manual dispatch on `main`) | Green in 3 m 17 s; schema check passed; log shows counts only (`DATABASE_URL: ***`). Feed: 1,117 fetched, 138 created, 102 updated (includes the one-time type reclassification: `other` 93 → 2), 877 unchanged, 76 closed, 0 invalid, 0 errors. All 76 closed postings verified absent from the live feed; active records equal the feed's 1,117 IDs exactly. Source Health `stale` → `healthy` |
-| Requirement scan (`python -m app.cli scan-requirements`, once) | 1,193 scanned, 1,050 refreshed, 143 unchanged, 0 failed, **0 suggestions**, 92.9 s. Cause: no production opportunity has a description (the feed has no description field). Unchanged by the scan, verified with per-opportunity digests: latest eligibility, assessment status and staleness, canonical requirement IDs, newest evaluation. Fingerprints 143 → 1,193 (all valid) |
-| Final counts | `e6d1a4b8c2f9`; 1,193 opportunities and source records (1,117 active); 0 canonical requirements; 0 candidates; 6,492 evaluations (4,382 with fit, 1,193 latest, all `needs_verification`); 1,193 `unassessed`; 1 ingestion source (`healthy`), 3 runs; 1 profile, 10 facts, 0 profile sources/artifacts; 1 owner; 26 MB. The 162 evaluations since the baseline come from the sync (138 new postings + 24 updated ones whose eligibility inputs changed) |
-| Security | Actions sync log, Render logs since the deploy (522 lines), and command output: no database URL, password, cookie, CSRF or session token, or profile data. These docs contain no secret values |
-
-Not done by design: no Ashby source in production (sources can't be deleted; Ashby is covered by CI and integration tests); no real opportunity's suggestions accepted or rejected. Rollback: as for Milestone 5, a Render/Vercel code rollback to `639e447` stays possible while no Ashby source exists ([data-model.md](data-model.md)); Neon is never downgraded.
-
-### Milestone 7 release (2026-10-04)
-
-| Step | Result |
-|---|---|
-| Merge | [PR #17](https://github.com/dude297/internship-finder/pull/17) rebase-merged at the approved head `64ce84d` (CI `37188071021`); `main` `bc23629`; post-merge CI `37191644826` green (backend, frontend, e2e). No migration (Neon stays `e6d1a4b8c2f9`) |
-| Scheduled sync on Milestone 7 code (before deploy) | [Run 37221123774](https://github.com/dude297/internship-finder/actions/runs/37221123774): feed 1,107 fetched, 59 updated (the expected one-time Ashby cross-source identifier), 7 closed, 0 invalid, 0 errors |
-| Render | `dep-db1bksjncjis73c2apr0` of `bc23629`, `live` 2026-10-04 20:45 UTC; Free, Oregon, 1 instance, one worker, auto-deploy off, branch `main`, env var names unchanged. `/api/health` `200`; `/docs`, `/openapi.json` `404`; `/api/sources/discovery` `401` (route present); synthetic wrong login `401` |
-| Vercel | `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`, `Ready`, aliased to `internship-finder-pi.vercel.app`, from a clean detached checkout of `bc23629` (`.env.local` deleted). `/api/health` `200`, `/api/nope` `404`, `/login` and `/sources` `200`; `/api/*` `Cache-Control: no-store`, `X-Frame-Options: DENY`; bundle contains Source Coverage / Suggested Sources / Add selected, no Render hostname |
-| Coverage baseline (`source-coverage`, read-only) | 1,107 open; 0 with a description (**0.0%**); 0 ATS-backed; 1,107 feed-only; 288 enrichable; 819 unsupported (Workday 595, Oracle 147, SmartRecruiters 40, other 13, Rippling 11, Workable 8). 163 suggestions (Greenhouse 106, Lever 16, Ashby 41). 1,202 opportunities, 0 curated, 0 canonical requirements, 0 candidates, 6,501 evaluations, all latest `needs_verification`, all `unassessed`; 26 MB |
-| Activation | 20 boards added through the trusted discovery service (`add_from_discovery`, the code path behind `POST /api/sources/discovery/add`; never raw inserts), all **Internships only**, ranked by feed-only coverage with exact identities; `testnisc` skipped (looks like a test board). Each synced manually with `python -m app.cli sync-source` |
-| Batch 1 (10) | Greenhouse `morsecorpcoop`, `akunacapital`, `hpiq`, `coinbase`, `robinhood`, `verkada`, `waymo`; Lever `hermeus` (global); Ashby `bedrock-robotics`, `ramp`. All `success`: 1,447 fetched, 128 created, **53 deduplicated** (exactly the 53 predicted), 0 updated/closed/invalid/errors; 9.0–53.6 s each |
-| Batch 2 (10) | Greenhouse `devtechnology`, `dvtrading`, `lyft`, `singlestore`, `thenuclearcompany`, `advancedspace`; Ashby `allen-control-systems`, `base-power`, `reflect-orbital`; Lever `kitware` (global). All `success`: 706 fetched, 78 created, **35 deduplicated** (exactly as predicted), 0 updated/closed/invalid/errors |
-| Integrity (read-only) | 88 opportunities now hold a feed record and an ATS record, all 88 with the ATS description; 0 opportunities with two active ATS records; 0 run errors / identity conflicts; all 206 new opportunities typed `internship` with intern/co-op titles; curated digest unchanged (0 curated). Same-title-and-organization groups: 71 (66 pre-existing in the feed; the 5 new ones are distinct ATS postings with different job IDs, never a feed-only row beside a matching ATS row) |
-| Requirements | 4 `pending` candidates (all `education`) on 4 opportunities; **0 accepted, 0 rejected, 0 canonical requirements**; every latest evaluation still `needs_verification`, every opportunity `unassessed`, 0 stale. Nothing was reviewed |
-| Coverage after | 1,313 open; **294 with a description (22.4%)**; 294 ATS-backed; 1,019 feed-only; 200 enrichable; 819 unsupported. 1,408 opportunities, 1,496 source records, 6,795 evaluations (+294: 206 new + 88 updated); 29 MB |
-| Scheduled sync check ([run 37234279820](https://github.com/dude297/internship-finder/actions/runs/37234279820), manual dispatch) | Green; 20 ATS sources first, the feed last; 21 run, 0 failed, 0 skipped; sync **24.6 s**, workflow 50 s (limit 20 min). Most boards answered `no_change`/unchanged |
-| Security | Command output and logs show counts only; no database URL, key, cookie, or token printed. These docs contain no secret values |
-
-Stopped at 20 sources: the next suggestions cover about 3 feed postings each. Rollback: disable a source (see [operations.md](operations.md#milestone-7-production-activation-runbook-executed-2026-10-04)); a code rollback to `80257c5` is possible (no migration), but Milestone 6 code doesn't apply ATS authority, so disable the ATS sources first.
-
-### Milestone 7.1 release (2026-10-04)
-
-| Step | Result |
-|---|---|
-| Merge | [PR #19](https://github.com/dude297/internship-finder/pull/19) rebase-merged at head `d24b836` (rebased onto the Milestone 7 docs; code identical to the reviewed `52c9e55`); `main` `0a636e2`; post-merge CI `37234964868` green |
-| Migration | Neon `e6d1a4b8c2f9` → `f2a7c9d4e1b3`, `alembic current` at head, `alembic check` clean. Every other baseline value identical before/after (1,409 opportunities, 6,796 evaluations, 4 pending candidates, 0 canonical requirements, 29 MB) |
-| Render | `dep-db1c2oc9v7es73eshpd0` of `0a636e2`, `live` 2026-10-04 21:14 UTC; settings unchanged. `/api/health` `200`, `/docs` `404`, `/api/opportunities?opportunity_type=…` `401` unauthenticated, synthetic wrong login `401` |
-| Vercel | `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`, `Ready`, aliased, from a clean checkout of `0a636e2` (`.env.local` deleted). `/api/health`, `/opportunities`, `/login` `200`; bundle contains the Volunteer label and the Type filter, no Render hostname |
-| Synthetic smoke (app service layer against Neon: the functions the API routes call, no raw SQL writes) | `ZZZ M7.1 RELEASE SMOKE — Synthetic STEM Tutor Volunteer …`, `Synthetic Example Org`, minimum age 16, deadline 2999-01-01: created as `volunteer` and manually curated; Type filter `volunteer` finds it, `internship` excludes it; `has_deadline` finds it; evaluated on create (`needs_verification`, `ELIG-AGE-001` ran); application tracked as `saved`; edited to `other` and back. 13/13 PASS |
-| Cleanup | Exact UUID + title + organization + curated guards, then the same delete as `DELETE /api/opportunities/{id}`. 0 rows left in opportunities, evaluations, requirements, source records, applications; 0 volunteer opportunities; opportunity and evaluation counts identical to before the smoke |
-| Not done by design | No automated volunteer source (research only: [volunteer-sources-2027.md](research/volunteer-sources-2027.md)) |
-
-### Milestone 8 release (2026-10-05)
-
-All counts are aggregates from read-only queries; no row contents or connection details were printed.
-
-| Step | Result |
-|---|---|
-| Merge | [PR #23](https://github.com/dude297/internship-finder/pull/23) rebase-merged at the approved head `cb4f018` (CI `37262733050`); `main` `9263860` (tree identical to the approved head); post-merge CI `37266217728` green (backend, frontend, e2e) |
-| Scheduler pause | `sync-production.yml` disabled (`disabled_manually`) before the merge; environment, secret, branch policy, and workflow file untouched; no run in progress |
-| Baseline | `f2a7c9d4e1b3`; 1,409 opportunities (1,314 open); 1,497 source records (1,402 active); 21 sources (13 Greenhouse, 2 Lever, 5 Ashby, feed), 0 SmartRecruiters, 0 registry; coverage 294 / 1,314 (22.4%), 294 ATS-backed, 1,020 feed-only; 0 canonical requirements; 4 pending candidates (0 accepted/rejected); 6,796 evaluations, latest all `needs_verification`; all `unassessed`; 29 MB |
-| Migration | `f2a7c9d4e1b3` → `a8c3e5f7b9d1` at 05:07:34 UTC; `alembic current` at head, `alembic check` clean. Kind CHECK accepts `smartrecruiters`/`curated_registry`, source-type CHECK accepts `curated_registry`, the four `opportunities` columns exist, exactly one seeded source (`curated_registry` / `program-registry`, enabled, scope `all`). Every data count identical to the baseline |
-| Render | `dep-db1j19hsrm7s73bu01dg` of `9263860`, triggered right after the migration, `live` 05:08:58 UTC (68 s after migrating); Free, Oregon, 1 instance, one worker, auto-deploy off, branch `main`, env vars untouched. `/api/health` `200`; `/docs`, `/openapi.json` `404`; `/api/sources` `401` unauthenticated; clean startup log |
-| Vercel | `dpl_CNabjmvDw2fyAus25jqVa781D1a3`, `Ready`, aliased, from a clean detached checkout of `9263860` (`.env.local` and checkout deleted). `/api/health`, `/login`, `/sources`, `/opportunities` `200`; `/api/nope` `404`; `/api/sources` `401`; `/api/*` `Cache-Control: no-store`, `X-Frame-Options: DENY`; bundle contains SmartRecruiters, `curated_registry`, "No confirmed deadline", "Needs date verification", "Upcoming programs", no Render hostname. Vercel went live at 05:54:59 UTC, so the Milestone 7.1 bundle (which rejects a source list containing the registry) was served for ~46 min after the migration (scheduler paused, owner-only app) |
-| Hosted smoke (service/schema layer against Neon, read-only, rolled back) | 22 sources serialize, the registry source is visible, built in, scope `all`; `smartrecruiters` accepted by `SourceCreate`, links parsed and lowercased; lookalike host, API host, and userinfo links refused; `curated_registry` creation refused; discovery serializes (17 SmartRecruiters suggestions, zero network); list with `needs_date_verification` unset/true/false serializes the date-trust fields and no typical window equals a canonical deadline. 16/16 PASS. No owner login (the password isn't available to the release shell) |
-| Registry | `sync-source curated_registry:program-registry`: `success`, 13 fetched, 13 created, 0 invalid, 0 errors, 16.6 s. Each opportunity has one record and only `curated:<slug>:<cycle>` identity (no URL identity, no merge). Canonical dates equal the file's `verified` dates exactly (deadlines: MIT RSI 2026-12-11, MIT PRIMES 2026-11-02, UC COSMOS 2027-02-05, NASA OSTEM 2027-03-01; Tech Interactive start/end); tentative dates (SIMR, BU RISE, DOE SULI) are text only; `verify_by` set on all 13. 4 new candidates, all `pending`; 13 new evaluations only (6,796 → 6,809); 0 requirements. Coverage 307 / 1,327 (23.1%) |
-| SmartRecruiters batch | Ranked by unique feed-only coverage: AbbVie 7, Bosch 5, Eurofins 4, Wellmark 4, Keenfinity 3, LLNL 3 (26 of 40 feed postings). Added with `add_from_discovery` (the code behind `POST /api/sources/discovery/add`), all **Internships only** |
-| Incident: missing feed identity | The first AbbVie sync deduplicated 0 of 7: production feed records were imported by Milestone 7.1 code, so they lacked the `smartrecruiters:` identifier that Milestone 8 adds on the next feed sync (the scheduler was paused). Expansion stopped. The 7 SmartRecruiters-only duplicates (created minutes earlier; one record each, not curated, no application, no reviewed candidate, no requirement) were removed with guards through the same delete as `DELETE /api/opportunities/{id}`; a manual feed sync on Milestone 8 code then ran `success` (1,105 fetched, **40 updated** = the one-time identifier, 3 closed by normal feed churn, 0 errors); AbbVie re-synced with **7 deduplicated, 0 created**. Runbook corrected in [operations.md](operations.md#milestone-8-release-and-activation-executed-2026-10-05) |
-| AbbVie | `success`: 1,854 fetched, 1,835 filtered, 19 admitted; after the fix 7 deduplicated, 12 unchanged; 19 list + 8 detail requests; 35.3 s |
-| Bosch | `partial` (budget): 4,832 fetched (49 list pages), 391 internship titles, 100 details fetched, 98 created, 2 deduplicated, 291 `detail_deferred`, 0 closed, 0 other errors; 227.9 s. The remaining feed matches are among the deferred postings |
-| Eurofins | `success`: 2,584 fetched, 36 created, 0 deduplicated: the 4 feed postings are `active: false` at SmartRecruiters (closed upstream; the feed is stale), so no duplicate; 26 list + 36 detail; 87.9 s |
-| Wellmark | `success`: 46 fetched, 22 admitted, 18 created, **4 deduplicated** (as predicted); 1 list + 22 detail; 56.2 s |
-| Keenfinity | `success`: 97 fetched, 15 admitted, 12 created, **3 deduplicated** (as predicted); 1 list + 15 detail; 31.3 s |
-| LLNL | `success`: 166 fetched, 30 admitted, 27 created, **3 deduplicated** (as predicted); 2 list + 30 detail; 48.1 s |
-| Integrity (read-only) | Every request went to `api.smartrecruiters.com`; 0 feed postings whose SmartRecruiters posting sits on another opportunity; 0 opportunities with two active SmartRecruiters records; 0 identity conflicts; all 19 deduplicated postings carry the ATS description; all 222 new SmartRecruiters opportunities typed `internship`; 0 curated opportunities touched |
-| Scheduled sync ([run 37271407847](https://github.com/dude297/internship-finder/actions/runs/37271407847), re-enabled, manual dispatch) | Green; schema guard passed (`--scheduled` refuses unless Neon is at the code's head); 20 Greenhouse/Lever/Ashby, the registry, and 6 SmartRecruiters sources first, the feed last; 28 run, 0 failed, 0 skipped; sync **223.7 s** (workflow ~4 min, limit 20 min). Bosch `partial` again (99 created, 1 more deduplicated, 191 deferred, 0 closed); every other SmartRecruiters source `success`, all unchanged; registry 13 unchanged |
-| Requirements | 4 → 18 candidates, **all pending**; 0 accepted, 0 rejected, **0 canonical requirements**; every latest evaluation `needs_verification`, every opportunity `unassessed`, 0 stale. Evaluation growth matches creations plus deduplicated postings whose text changed |
-| Final counts | `a8c3e5f7b9d1`; 1,724 opportunities (1,626 open); 1,832 source records (1,734 active; 616 ATS, 13 registry, 1,203 feed); 28 sources, all enabled (13 Greenhouse, 2 Lever, 5 Ashby, 6 SmartRecruiters, registry, feed); coverage **629 / 1,626 (38.7%)**, 616 ATS-backed, 997 feed-only; 13 registry opportunities; 0 requirements; 18 pending candidates; 7,131 evaluations; 33 MB. Source Health: 27 healthy, Bosch `failing` (consecutive budget-deferred partials; recovers once its backlog is fetched) |
-| Security | Actions sync log (343 lines; `DATABASE_URL: ***`) and Render logs since the deploy (607 lines): no database URL, password, cookie, CSRF or session token, proxy secret, or profile data; no errors. SmartRecruiters needs no secret. These docs contain no secret values |
-
-Rollback: disable a SmartRecruiters source or the registry (records stay). A code rollback to Milestone 7.1 needs the schema downgraded first, which refuses while SmartRecruiters sources or registry records exist ([data-model.md](data-model.md#milestone-8-migration-a8c3e5f7b9d1)); Neon is never downgraded in place.
+The first hosted verification (2026-09-28/29: cookie attributes, CSRF, throttle buckets, cold start) is recorded in [the Milestone 3.5 release record](releases/2026-09-29-m3-5.md).
 
 ## Rollback
 
@@ -241,95 +141,6 @@ Rollback: disable a SmartRecruiters source or the registry (records stay). A cod
 - **Data:** Neon Free keeps a short restore history (point-in-time restore / branch from a past point within the free window). For anything older there's no backup yet (see [operations.md](operations.md#database-backup-considerations-planned)).
 - **Secrets:** rotate `PROXY_SHARED_SECRET` as above; rotate the Neon role password in Neon, then update Render's `DATABASE_URL` and redeploy.
 - **Milestone 5 specifically:** if Render/Vercel are rolled back to the Milestone 4 release after the `c5a1e0f3d7b2` migration, Milestone 5 data (`profile_sources`, `profile_source_artifacts`, non-manual `profile_facts`) stays in the database, unused and untouched by the Milestone 4 app, until a forward roll re-deploys Milestone 5 code.
-
-## Production Verification
-
-Run after every deploy. Results of the first hosted validation (2026-09-28) are recorded.
-
-| Check | How | Result 2026-09-28 |
-|---|---|---|
-| Health through Vercel | `GET https://internship-finder-pi.vercel.app/api/health` | `200 {"status":"ok"}` |
-| Database reachable from Render | A synthetic wrong login → `401` (not `500`) | `401` |
-| Unknown API path | `GET /api/nope`, `GET /api` | FastAPI JSON `404`, not `index.html` |
-| No slash redirect | `GET /api/health/` | `404`, no `Location` header |
-| SPA deep links | `GET /login`, `/sources`, `/opportunities/123` | `200` `index.html` |
-| API docs hidden | `/docs`, `/redoc`, `/openapi.json` on Render; `/api/docs` via Vercel | `404` on Render; via Vercel `/docs` etc. are the SPA shell, not API docs |
-| API caching | `Cache-Control` on `/api/*` | `no-store` (also on `401`/`404`) |
-| Static assets | `Cache-Control` on `/assets/*.js` | Vercel default (`public, max-age=0, must-revalidate`, edge-cached, revalidated by ETag) |
-| Security headers | All responses | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` |
-| Direct Render throttle | 11 wrong logins to the Render URL, each with a different forged `X-Forwarded-For` and a wrong `X-IF-Proxy-Secret` | `401` ×10, then `429`: one shared `direct` bucket |
-| Proxy secret matches | While the direct bucket is full, one wrong login through Vercel | `401` (not `429`): proxied requests use their own bucket, so Render accepted the secret |
-| Non-production URLs | Deployment URLs and `internship-finder-dude297s-projects.vercel.app` | `302` to Vercel SSO |
-| Git pushes don't deploy | Push of the feature branch | No Vercel deployment created |
-| Cold start | First request after idle | See [Cold starts](#cold-starts) |
-| Session cookie (login through Vercel) | `Set-Cookie` attributes | `if_session`: `HttpOnly; Secure; SameSite=lax; Path=/; Max-Age=86400`, no `Domain` (host-only on the Vercel host) |
-| CSRF | Unsafe private request without / with a wrong / with the valid `X-CSRF-Token` | `403` / `403` / `200` |
-| First discovery sync (through Vercel) | Sources → Sync now | `success` in 30.8 s: 1,055 fetched, 1,055 created; 0 updated, deduplicated, unchanged, closed, invalid, errors. Finished inside the proxy window |
-| Second sync | Same | `no_change` (HTTP 304) in 0.8 s |
-| Profile re-evaluation (synthetic profile, 1,055 opportunities) | Save profile / change date of birth / save unchanged | 9.7 s / 9.0 s / 0.35 s (1,055 / 1,055 / 0 re-evaluated) |
-| Invalid source links | `localhost`, `127.0.0.1`, `169.254.169.254`, `file://`, unknown host | `422` before any fetch |
-| Credential-bearing / custom-port board links | `https://user:pw@boards.greenhouse.io/x`, `https://jobs.lever.co:8443/x` | Accepted (`201`) by `3ab655f`; only the board name was kept and nothing was fetched from them. Fixed in `65964c6` (now `422`, deployed). The two probe sources were deleted |
-| Proxied throttle through Vercel | 11 wrong logins, each with different forged `X-Forwarded-For` and `X-Vercel-Forwarded-For` | Before `36b9896`: all `401` (forgeable key, see below). After: `401` ×10, then `429`; the direct bucket stays separate; existing sessions unaffected |
-| Database after the first sync | Aggregate queries only | 13 MB; 1,055 opportunities, 1,055 source records, 2,110 evaluations, 2 runs |
-| Session after a cold start | Idle > 15 min, then a session check through Vercel | Render restarted; `200` after 73 s; still authenticated as the owner |
-| Session survives a Render redeploy | Session check after deploying `3563021` and `36b9896` | Still authenticated as the owner; catalog intact (1,055) |
-| Board-link fix live | The credential and port links above, after deploying `3563021` | `422` |
-| **Not run:** one Greenhouse/Lever board | | Optional; no board chosen (adding one imports all its postings, and sources can't be deleted) |
-
-**Fixed: forgeable per-client throttle key.** On 2026-09-29, 11 wrong logins through Vercel with different forged `X-Forwarded-For` values all got `401`. A temporary diagnostic build (logging only, from a throwaway branch, removed right after) showed what Render receives: `X-Forwarded-For` is `<client>, <Vercel egress>, <Cloudflare>, <Render internal>`, and `X-Vercel-Forwarded-For` is `<client>`, but in some requests the `<client>` value in either header was the one the caller sent. No forwarded header is trustworthy, so all proxied logins now share one `proxy` bucket (`36b9896`, [ADR-009 §6 amendment](decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)). Trade-off: 10 failed attempts by anyone through the site block new logins for 15 minutes; existing sessions keep working.
-
-Global failed-login cap (50 per 15 minutes) is covered by unit tests only: a hosted test needs five distinct client addresses, since a blocked key stops adding failures.
-
-### Milestone 4 hosted smoke (2026-09-29)
-
-Run by the owner against production after the release (Neon migrated to `b41e7c9d2f60`, Render and Vercel redeployed from `main` at `ca9b91b`). All PASS.
-
-| Check | Result |
-|---|---|
-| Match Profile `GET` | PASS |
-| First Match Profile save | evaluated 1,055 / unchanged 0 in 6,359 ms |
-| Identical save (no changes) | evaluated 0 / unchanged 1,055 in 1,995 ms |
-| Changed save | evaluated 1,055 / unchanged 0 in 6,391 ms |
-| Recommended list page (100) | 306 ms |
-| Recommended list page (50) | 216 ms |
-| Full catalog load | all 1,055 opportunities loaded |
-| Eligibility-first / fit ordering | PASS |
-| Scoring coverage | all 1,055 scored with scoring version `v1`; coverage present (values `[100]`) |
-| "Why This Match" breakdown | full breakdown PASS |
-| Board scope | built-in source remains scope `all` |
-| Run counts | latest ingestion run exposes `filtered_count` |
-
-Final Neon counts (read-only, 2026-09-30): 1,055 opportunities; 1,055 source records; 4,220 evaluations (2,110 with fit); 1,055 current evaluations, all with fit score and scoring version `v1`; 1 ingestion source; 2 ingestion runs (both 2026-09-29 00:37 UTC, before the smoke); 1 profile; 0 profile sources; 10 profile facts; 1 owner account; 18 MB database size. All 1,055 current evaluations are `needs_verification` (imported requirements are unassessed), fit range 2–22; cross-bucket dominance is covered by deterministic backend/E2E tests, not by this production data. The hosted Match Profile used for the smoke is still the synthetic one; it is left in place deliberately (clearing it would add another 1,055 evaluation rows) until the owner replaces it with the real Match Profile through the app.
-
-Cleanup (done 2026-10-01): the stray Render web service `internship-finder` (`srv-dasrvgt9fdbs73eqlmi0`, Free) was deleted after verifying it wasn't `internship-finder-api`, every deploy had `build_failed` (never live), auto-deploy was off, and its URL served nothing. `internship-finder-api` stayed healthy afterwards.
-
-### Milestone 5 hosted smoke (2026-10-01)
-
-Run through the Vercel URL as the owner (password via `getpass`; the session held in memory only and logged out at the end) with **fabricated** files only: a 237-byte text résumé and small text PDFs. No real résumé, and no hostile PDF against production (the flate bomb is covered by Linux CI/container tests). All PASS.
-
-| Check | Result |
-|---|---|
-| Pre-migration baseline (read-only) | `b41e7c9d2f60`; 1,055 opportunities and source records; 4,220 evaluations (2,110 with fit); 0 profile sources; 10 facts; 1 profile; 1 owner; 18 MB |
-| Migration | `c5a1e0f3d7b2`, `alembic check` clean; `profile_source_artifacts` exists; `profile_sources` has `content_type`, `byte_size`, `parser_name`, `parser_version`; `review_state` NOT NULL, default `'accepted'`; `ck_profile_facts_fact_review_state` and `ck_profile_facts_review_state_matches_verified` present; 10/10 facts `accepted`; 0 sources/artifacts; 4,220 evaluations (no rescore) |
-| Milestone 4 app on migrated schema | `/api/health` `200`, dummy-cookie session lookup `200` unauthenticated, profile API `401` |
-| Render direct after deploy | `/api/health` `200`; `/docs`, `/openapi.json` `404`; dummy-cookie session `200` unauthenticated; `/api/profile/sources` `401` (was `404` on Milestone 4); clean startup log |
-| Vercel routing | `/api/health` `200` JSON; `/login`, `/profile/sources`, `/opportunities`, unknown SPA path → `index.html`; `/api/nope` and `/api/health/` → JSON `404`, no `Location`; no Render hostname in responses or bundle; bundle contains the Imported Profile UI |
-| Source list before smoke | empty |
-| Text upload | `201`; parser `resume-sections` v1; 4 pending facts (skill, course, project, activity; candidates already accepted in the Match Profile were skipped by design); duplicate → `409` |
-| Download | byte-identical; `attachment`, `nosniff`, `no-store` |
-| Review batch (accept 1 skill with an edited name, 1 course, 1 project; reject 1 activity) | `200`; exactly one catalog pass, 1,055 evaluated; accepted 3, rejected 1; edit applied |
-| Persistence | Separate second login: same review state |
-| Re-parse | `200`; no duplicates; decided facts kept; rejected fact not resurrected; the edited skill's original name returned as one new pending fact (see [PROJECT_STATE.md](../PROJECT_STATE.md) limitations) |
-| PDF upload | `201`; 3 pending facts; `/api/health` `200` right after |
-| > 2 MB upload | `413` |
-| Two different benign PDFs at once | `201` + `503` with `Retry-After: 5` (one extraction child per process) |
-| Delete text source | `200`; one catalog pass, 1,055 evaluated (accepted fit facts removed) |
-| Delete PDF sources | `200`; no catalog pass (pending facts only) |
-| After deletes | source and download `404`; source list empty; Match Profile identical to before (response digest) |
-
-Evaluation arithmetic: 4,220 before the smoke + 1,055 (accept) + 1,055 (delete) = **6,330** after; history is append-only by design. Final counts (read-only): 0 profile sources, 0 artifacts, 10 profile facts (all manual, `accepted`), 1,055 latest evaluations all with fit and scoring version `v1`, 4,220 evaluations with fit, 23 MB. The hosted Match Profile is still the synthetic one, left in place for the owner to replace through the app.
-
-PDF safety in production: Render runs 1 instance and 1 uvicorn worker; extraction runs in a spawned child with a 15 s time limit and a 256 MB address-space limit (Linux), and at most one child per process (a second concurrent PDF gets `503`, `Retry-After: 5`).
 
 ## Cold Starts
 

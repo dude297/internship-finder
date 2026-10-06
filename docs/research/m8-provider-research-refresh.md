@@ -1,6 +1,9 @@
 # M8 provider research refresh
 
-Research only. Nothing here is implemented; no endpoint other than public documentation pages and the public discovery feed JSON was requested. Date: 2026-10-04. Claims are labelled **[official]** (vendor docs read for this document), **[3rd-party]** (secondary source), **[unverified]** (not confirmed).
+> **Research only (non-normative).** Date: 2026-10-04. Last verified: 2026-10-04.
+> Used by / superseded by: informed the SmartRecruiters adapter ([ADR-014](../decisions/ADR-014-structured-source-expansion-and-program-registry.md)) and the Workable/Pinpoint adapters ([ADR-015 §7](../decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)); no ADR cites it; the USAJOBS section is not yet acted on.
+
+Research only. No code was written for this document; no endpoint other than public documentation pages and the public discovery feed JSON was requested. Date: 2026-10-04. Claims are labelled **[official]** (vendor docs read for this document), **[3rd-party]** (secondary source), **[unverified]** (not confirmed).
 
 ## a) Unsupported providers in the discovery feed
 

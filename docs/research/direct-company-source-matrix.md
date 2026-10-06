@@ -1,5 +1,8 @@
 # Direct Company Source Matrix
 
+> **Research only (non-normative).** Date: 2026-10-05. Last verified: 2026-10-05.
+> Used by / superseded by: [ADR-015 §6-§8](../decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md) (Direct Source Catalog, Workable/Pinpoint, no first-party adapter yet); [sources.md](../sources.md#direct-source-catalog-milestone-81-adr-015-6).
+
 Date: 2026-10-05. Public repo: counts only, no listing data.
 
 ## Method and evidence rules

@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Changed
+
+- Documentation governance: [document authority map](docs/README.md), immutable [release records](docs/releases/) (history moved out of PROJECT_STATE.md, deployment.md, and operations.md), `docs/status.json` with generated status blocks, a Documentation Synchronization Contract (CLAUDE.md, ENGINEERING_GUIDELINES.md §14–§15), and `scripts/check_docs.py` enforced by a new CI `docs` job (links, anchors, status, research headers, changed-path guards). Docs and tooling only; no product change.
+
+## Milestone 8.1 (released 2026-10-05)
+
+Released 2026-10-05: [PR #25](https://github.com/dude297/internship-finder/pull/25) merged at the approved head `178fb47`; `main` `203a562` (post-merge CI `37386512685` green); Neon migrated `a8c3e5f7b9d1` → `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`; Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`; hosted smoke 14/14. The v2 requirement scan and catalog activation are owner-gated and not yet run. Record: [deployment.md](docs/releases/2026-10-05-m8-1.md).
+
 ### Added
 
 - Milestone 8.1: listing freshness, requirement extraction v2, and independent discovery ([ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)). Migration `b7e3d9f1a2c4` (CHECK only).
@@ -13,11 +21,12 @@ All notable changes to this project are documented here.
   - Independent Discovery Coverage on Source Coverage (opportunities that survive without the community feed) with a direct/registry/manual/feed-only breakdown.
   - Direct Source Catalog (`backend/data/direct_source_catalog.json`, 36 officially verified boards) with **Verified Direct Sources** bulk add on the Sources page.
   - Workable and Pinpoint adapters (documented, keyless public job-board APIs).
+  - An empty snapshot from a source with 10+ open postings fails instead of closing them all.
   - Research: [catalog freshness audit](docs/research/catalog-freshness-audit.md), [direct company source matrix](docs/research/direct-company-source-matrix.md), [tracker gap audit](docs/research/tracker-gap-audit.md), [extractor v2](docs/research/requirement-extractor-v2.md).
 
 ## Milestone 8 (released 2026-10-05)
 
-Released 2026-10-05: [PR #23](https://github.com/dude297/internship-finder/pull/23) rebase-merged at the approved head `cb4f018`; `main` `9263860` (post-merge CI `37266217728` green); Neon migrated `f2a7c9d4e1b3` → `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`; Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13 programs); 6 SmartRecruiters companies activated; description coverage 22.4% → 38.7%; 18 pending suggestions, none accepted. Record: [deployment.md](docs/deployment.md#milestone-8-release-2026-10-05).
+Released 2026-10-05: [PR #23](https://github.com/dude297/internship-finder/pull/23) rebase-merged at the approved head `cb4f018`; `main` `9263860` (post-merge CI `37266217728` green); Neon migrated `f2a7c9d4e1b3` → `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`; Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13 programs); 6 SmartRecruiters companies activated; description coverage 22.4% → 38.7%; 18 pending suggestions, none accepted. Record: [deployment.md](docs/releases/2026-10-05-m8.md).
 
 ### Added
 
@@ -29,7 +38,7 @@ Released 2026-10-05: [PR #23](https://github.com/dude297/internship-finder/pull/
 
 ## Milestone 7.1 (released 2026-10-04)
 
-Released 2026-10-04: [PR #19](https://github.com/dude297/internship-finder/pull/19) rebase-merged; `main` `0a636e2` (post-merge CI `37234964868` green); Neon migrated `e6d1a4b8c2f9` → `f2a7c9d4e1b3`; Render `dep-db1c2oc9v7es73eshpd0`; Vercel `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`; synthetic volunteer smoke 13/13, cleaned. Record: [deployment.md](docs/deployment.md#milestone-71-release-2026-10-04).
+Released 2026-10-04: [PR #19](https://github.com/dude297/internship-finder/pull/19) rebase-merged; `main` `0a636e2` (post-merge CI `37234964868` green); Neon migrated `e6d1a4b8c2f9` → `f2a7c9d4e1b3`; Render `dep-db1c2oc9v7es73eshpd0`; Vercel `dpl_AZuVPW533BkqzuzRwozvx12J5PEG`; synthetic volunteer smoke 13/13, cleaned. Record: [deployment.md](docs/releases/2026-10-04-m7-1.md).
 
 ### Added
 
@@ -37,7 +46,7 @@ Released 2026-10-04: [PR #19](https://github.com/dude297/internship-finder/pull/
 
 ## Milestone 7 (released 2026-10-04)
 
-Released 2026-10-04: [PR #17](https://github.com/dude297/internship-finder/pull/17) rebase-merged at the approved head `64ce84d`; `main` `bc23629` (post-merge CI `37191644826` green); no migration; Render deploy `dep-db1bksjncjis73c2apr0`; Vercel production `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`; 20 ATS boards activated (description coverage 0.0% → 22.4%). Record: [deployment.md](docs/deployment.md#milestone-7-release-2026-10-04).
+Released 2026-10-04: [PR #17](https://github.com/dude297/internship-finder/pull/17) rebase-merged at the approved head `64ce84d`; `main` `bc23629` (post-merge CI `37191644826` green); no migration; Render deploy `dep-db1bksjncjis73c2apr0`; Vercel production `dpl_Gj9D5tdBYQENGrMavySfoa3xFS57`; 20 ATS boards activated (description coverage 0.0% → 22.4%). Record: [deployment.md](docs/releases/2026-10-04-m7.md).
 
 ### Added
 
@@ -59,7 +68,7 @@ Released 2026-10-04: [PR #17](https://github.com/dude297/internship-finder/pull/
 
 ## Milestone 6 (released 2026-10-02)
 
-Released 2026-10-02: [PR #13](https://github.com/dude297/internship-finder/pull/13) rebase-merged at the approved head `ff47970`; `main` `80257c5` (post-merge CI `37066645594` green); Neon migrated `c5a1e0f3d7b2` → `e6d1a4b8c2f9`; Render deploy `dep-db03iknavr4c73e10b8g`; Vercel production `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`; scheduled sync configured; production requirement scan run. Record: [deployment.md](docs/deployment.md#milestone-6-release-2026-10-02).
+Released 2026-10-02: [PR #13](https://github.com/dude297/internship-finder/pull/13) rebase-merged at the approved head `ff47970`; `main` `80257c5` (post-merge CI `37066645594` green); Neon migrated `c5a1e0f3d7b2` → `e6d1a4b8c2f9`; Render deploy `dep-db03iknavr4c73e10b8g`; Vercel production `dpl_8kqCpb15vP5q1rcJpsSB3Pvt6XJk`; scheduled sync configured; production requirement scan run. Record: [deployment.md](docs/releases/2026-10-02-m6.md).
 
 ### Added
 

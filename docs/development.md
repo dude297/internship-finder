@@ -65,18 +65,20 @@ These commands have all been run successfully in this repository.
 | End-to-end | — | `npm run test:e2e` (Playwright, needs `E2E_DATABASE_URL`, see below) |
 | Build | — | `npm run build` (output in `frontend/dist/`) |
 | Migrations | see [Migrations Workflow](#migrations-workflow) | — |
+| Docs check | `python scripts/check_docs.py` (repository root; add `--base origin/main` for the changed-path guards; `--write-status` regenerates the status blocks from `docs/status.json`); tests: `python -m unittest discover -s scripts/tests` | — |
 | Owner account | `python -m app.cli create-owner` / `set-password` | — |
 | Source sync | `python -m app.cli sync-sources` / `sync-source <id-or-key>` (live network) | — |
+| Requirement scan | `python -m app.cli scan-requirements` (refreshes requirement suggestions for stored opportunities; writes only suggestions, [ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) | — |
 | Source coverage | `python -m app.cli source-coverage` (read-only; counts only, no network) | — |
 | Performance smoke | `PERF_DATABASE_URL=<disposable db> python scripts/perf_smoke.py` (manual; replaces that database's opportunities, profile, and profile sources; also times a résumé review batch) | — |
 | Source sync performance | `PERF_DATABASE_URL=<disposable db> python scripts/perf_sources.py` (manual; wipes that database's opportunities and non-built-in sources; times 10/25/50-board syncs, discovery, and the list query, [operations.md](operations.md#operational-source-cap)) | — |
 
 ### Test boundary: unit vs PostgreSQL vs end-to-end
 
-- **Unit tests** (education resolver, eligibility rules, fit scoring and its text matcher, the fit fingerprint, the internship title filter, password hashing, CSRF, throttle, config, health, the ingestion HTTP client, HTML-to-text, URL canonicalization, adapters, the evaluation fingerprint) are pure and need no database. Milestone 7 adds `tests/test_feed_provider_identity.py`, pure unit tests of the feed adapter's `provider_identity` function (the Greenhouse/Lever/Ashby rules shared by deduplication and discovery, [ADR-013 §2](decisions/ADR-013-provider-enrichment-and-source-authority.md#2-ats-source-discovery)).
+- **Unit tests** (education resolver, eligibility rules, fit scoring and its text matcher, the fit fingerprint, the internship title filter, password hashing, CSRF, throttle, config, health, the ingestion HTTP client, HTML-to-text, URL canonicalization, adapters, the evaluation fingerprint) are pure and need no database. Since Milestone 7: `tests/test_feed_provider_identity.py`, pure unit tests of the feed adapter's `provider_identity` function (the Greenhouse/Lever/Ashby rules shared by deduplication and discovery, [ADR-013 §2](decisions/ADR-013-provider-enrichment-and-source-authority.md#2-ats-source-discovery)).
 - **Résumé parser tests** (`tests/test_resume_parser.py`, Milestone 5) are unit tests too. They build synthetic text and PDF files in code (`tests/resume_fixtures.py`: a hand-written PDF writer, an encrypted PDF, and a flate-bomb PDF); no real résumé is ever used. PDF extraction runs in a spawned child process ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)), so those tests start Python subprocesses; the bomb test waits for a shortened 3 s time limit.
 - **No test calls a real job board.** Ingestion tests serve fabricated provider payloads (`tests/ingestion_fixtures.py`: "Example Robotics", "Example Institute", fictional dates) through an in-memory `httpx2` transport. Live sources are exercised only by the manual smoke test below.
-- **PostgreSQL tests** (`@pytest.mark.postgres`: models, constraints, repositories, migrations, the owner CLI, and the whole HTTP API through FastAPI's `TestClient`) run against a real, disposable PostgreSQL database named by `TEST_DATABASE_URL`. The session fixture migrates it to head, each test runs in a rolled-back transaction (the API's commits become savepoints), and `tests/test_migrations.py` steps down through the Milestone 1 revision to base and back up. Never point `TEST_DATABASE_URL` at a database whose data you want to keep. Milestone 7 adds `tests/test_source_authority.py` (rank, tie-break, takeover, and fallback-from-stored-payload over real opportunity/source rows, ADR-013 §1, §4, §5) and `tests/test_source_discovery.py` (the `source-coverage` CLI, `GET /api/sources/discovery`, and `POST /api/sources/discovery/add`, including the 25-item all-or-nothing limit and already-configured skips, ADR-013 §2–§3), both PostgreSQL tests since they exercise real deduplication and persistence.
+- **PostgreSQL tests** (`@pytest.mark.postgres`: models, constraints, repositories, migrations, the owner CLI, and the whole HTTP API through FastAPI's `TestClient`) run against a real, disposable PostgreSQL database named by `TEST_DATABASE_URL`. The session fixture migrates it to head, each test runs in a rolled-back transaction (the API's commits become savepoints), and `tests/test_migrations.py` steps down through the Milestone 1 revision to base and back up. Never point `TEST_DATABASE_URL` at a database whose data you want to keep. Since Milestone 7: `tests/test_source_authority.py` (rank, tie-break, takeover, and fallback-from-stored-payload over real opportunity/source rows, ADR-013 §1, §4, §5) and `tests/test_source_discovery.py` (the `source-coverage` CLI, `GET /api/sources/discovery`, and `POST /api/sources/discovery/add`, including the 25-item all-or-nothing limit and already-configured skips, ADR-013 §2–§3), both PostgreSQL tests since they exercise real deduplication and persistence.
 - **Milestone 8.1** ([ADR-015](decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)): unit `tests/test_freshness_unit.py` (freshness derivation), `tests/test_requirement_extractor_v2.py` (the 258-sentence synthetic corpus in `tests/requirement_corpus_v2.py`, v1-vs-v2 table against the frozen test-only `tests/_extractor_v1_reference.py`), `tests/test_requirement_extractor_v2_adversarial.py`, `tests/test_workable_adapter.py`, `tests/test_pinpoint_adapter.py`; PostgreSQL `tests/test_m81_freshness.py` (freshness states/filters, discovered filter, constant list statement count, independent coverage, Direct Source Catalog API and file validation), `tests/test_m81_extractor_rescan.py` (v1→v2 rescan keeps reviewed decisions), `tests/test_m81_adapters_adversarial.py`, and `tests/test_feed_off_resilience.py` (the whole product with the community feed disabled or failing).
 - **Frontend component tests** stub `fetch`, so they need no backend.
 - **End-to-end tests** (`frontend/e2e/`) run the real stack in Chromium against a disposable database named by `E2E_DATABASE_URL`.
@@ -170,10 +172,11 @@ Details are in [ENGINEERING_GUIDELINES.md §3](../ENGINEERING_GUIDELINES.md#3-re
 
 ## CI
 
-GitHub Actions, within included free usage only. No paid runners, scheduled jobs, or deployment workflows.
+GitHub Actions, within included free usage only. No paid runners and no deployment workflows (Render and Vercel deploy from `main` themselves). The one scheduled workflow, [`sync-production.yml`](../.github/workflows/sync-production.yml), is the production source sync, not a check ([operations.md](operations.md)).
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and on every pull request:
 
+- Docs (Python, standard library only): the checker's own tests, `scripts/check_docs.py` repository checks, and the changed-path guards against the PR base (or the pushed range) ([docs/README.md](README.md#enforcement))
 - Frontend (Node 24): `npm ci`, lint, format check, typecheck, tests, build
 - Backend (Python 3.12): install, `ruff check`, `ruff format --check`, `pyright`, unit tests, then against an ephemeral PostgreSQL 18 service container (test-only credentials in the workflow, not secrets): `alembic upgrade head`, `alembic check` (models match migrations), `alembic downgrade base`, `alembic upgrade head`, and the PostgreSQL tests (including the API and CLI)
 - No CI job calls a third-party job board; ingestion is tested with synthetic fixtures only
@@ -193,9 +196,7 @@ See [ENGINEERING_GUIDELINES.md §12](../ENGINEERING_GUIDELINES.md#12-testing-sta
 
 ## Migrations Workflow
 
-Alembic is set up in `backend/`. Migrations: `3b9c6b57bb60` (initial core domain schema, Milestone 1), `7d7f4f8b9a3c` (auth sessions and application tracking, Milestone 2), `726372d627b8` (opportunity ingestion and deduplication, Milestone 3), `92a17353e5a8` (reconciles the one-running-ingestion-run index, Milestone 3.5), and `b41e7c9d2f60` (fit scoring v1, Match Profile preferences, board scope, Milestone 4). Merged migrations are **immutable**: never edit them. Schema changes are new revisions. A development database migrated with the pre-merge local version of `7d7f4f8b9a3c` (missing `ck_profiles_graduation_after_status_as_of`) is repaired automatically by `alembic upgrade head` ([data-model.md](data-model.md#graduation-constraint-reconciliation-726372d627b8)), and so is one migrated with the pre-merge local `726372d627b8` (missing `uq_ingestion_runs_one_running_per_source`, [data-model.md](data-model.md#running-run-index-reconciliation-92a17353e5a8)); no manual SQL is needed. `alembic/env.py` uses `sqlalchemy.url` if it's set programmatically (the tests do this), otherwise `DATABASE_URL` from app settings. The autogenerate target is `app.models.Base.metadata`. Add new model modules to `app/models/__init__.py` so autogenerate sees them. Enum columns autogenerate duplicate CHECK constraints: keep one named `ck_…` constraint per enum and set `create_constraint=False` on the `sa.Enum` (see the initial migration).
-
-Milestone 5 adds `c5a1e0f3d7b2` (profile source artifacts, upload metadata, and `profile_facts.review_state`, [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)). Verified locally on PostgreSQL 18: base → head, `alembic check`, head → `b41e7c9d2f60` → head, and the review-state backfill for every provenance combination (`tests/test_migrations.py`).
+Alembic is set up in `backend/`. The revision list (ten, linear, head `b7e3d9f1a2c4`) and what each one changes are in [data-model.md](data-model.md#current-database-state). Merged migrations are **immutable**: never edit them. Schema changes are new revisions. Two early development databases migrated with pre-merge local versions of `7d7f4f8b9a3c` and `726372d627b8` are repaired automatically by `alembic upgrade head` ([graduation constraint](data-model.md#graduation-constraint-reconciliation-726372d627b8), [running-run index](data-model.md#running-run-index-reconciliation-92a17353e5a8)); no manual SQL is needed. `alembic/env.py` uses `sqlalchemy.url` if it's set programmatically (the tests do this), otherwise `DATABASE_URL` from app settings. The autogenerate target is `app.models.Base.metadata`. Add new model modules to `app/models/__init__.py` so autogenerate sees them. Enum columns autogenerate duplicate CHECK constraints: keep one named `ck_…` constraint per enum and set `create_constraint=False` on the `sa.Enum` (see the initial migration). `tests/test_migrations.py` covers each revision's round trip and guards.
 
 From `backend/` with the venv active and `DATABASE_URL` set:
 
@@ -208,7 +209,7 @@ alembic current                                       # show the applied revisio
 alembic check                                         # fail if models and migrations differ
 ```
 
-Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade 7d7f4f8b9a3c`, `downgrade 3b9c6b57bb60`, `downgrade base`, `upgrade head`, `check` (CI skips the intermediate downgrades; `tests/test_migrations.py` covers them, plus the stale-`7d7f4f8b9a3c` repair). Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. A hosted database (Neon Free) is provisioned and migrated to the current head; see [deployment.md](deployment.md). Rules:
+Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `downgrade 7d7f4f8b9a3c`, `downgrade 3b9c6b57bb60`, `downgrade base`, `upgrade head`, `check` (CI skips the intermediate downgrades; `tests/test_migrations.py` covers them, plus the stale-`7d7f4f8b9a3c` repair). Without `DATABASE_URL`, Alembic commands fail with `DATABASE_URL must be set to run Alembic migrations`. The hosted database (Neon Free) is migrated to the current head; see [deployment.md](deployment.md). Rules:
 
 - every schema change is an Alembic migration, committed with the code that needs it
 - update [data-model.md](data-model.md) in the same change
@@ -217,14 +218,8 @@ Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `
 
 ## Documentation Expectations
 
-Documentation updates are part of Definition of Done. See [ENGINEERING_GUIDELINES.md §15](../ENGINEERING_GUIDELINES.md#15-documentation-maintenance-rules) for which doc to update for which change.
+Documentation is part of Definition of Done: [ENGINEERING_GUIDELINES.md §15](../ENGINEERING_GUIDELINES.md#15-documentation-maintenance-rules) (what to update) and [docs/README.md](README.md) (document authority). Check locally with `python scripts/check_docs.py` (add `--base origin/main` on a branch to run the changed-path guards CI runs).
 
 ## Feature Completion Workflow
 
-1. Read relevant code, docs, [PROJECT_STATE.md](../PROJECT_STATE.md), and ADRs.
-2. Plan: files, schema/API impact, assumptions, risks, tests.
-3. Implement the minimum correct change on a feature branch.
-4. Validate: lint, typecheck, tests, build, and migrations where applicable.
-5. Update docs and `PROJECT_STATE.md`.
-6. Report using the format in [CLAUDE.md](../CLAUDE.md).
-7. Review. The work isn't done until it's reviewed.
+The workflow is defined once, in [ENGINEERING_GUIDELINES.md §4](../ENGINEERING_GUIDELINES.md#4-implementation-workflow); completion reporting is in [CLAUDE.md](../CLAUDE.md#workflow).

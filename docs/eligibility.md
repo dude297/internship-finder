@@ -37,7 +37,7 @@ Rules should be deterministic. AI may help **extract** requirements from posting
 
 Implementation: `backend/app/opportunities/eligibility/`. The single entry point is `evaluate_eligibility(profile, opportunity, requirements)`. Persisting is `app.repositories.evaluate_and_save`.
 
-### When evaluations run (Milestone 2, refined in Milestone 3)
+### When evaluations run
 
 - Creating or updating an opportunity (by hand or by a source sync) appends an evaluation if a profile exists **and** the eligibility inputs changed since the latest evaluation. The inputs are compared by a SHA-256 fingerprint of the rules version, the canonical profile inputs, the opportunity's reference dates and assessment status, and its requirements ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion)), so a title-only edit or an unchanged sync adds nothing. Without a profile, nothing is evaluated and the UI says so. An evaluation is never faked.
 - Imported opportunities start `unassessed` (ELIG-REQ-000 → at least `needs_verification`). Source fields such as the discovery feed's sponsorship, H-1B, or skill tags never become requirements. The owner records requirements with **Review requirements** (the regular editor) and marks the assessment `partial` or `complete`; later syncs never overwrite that review.
@@ -45,20 +45,20 @@ Implementation: `backend/app/opportunities/eligibility/`. The single entry point
 - `POST /api/opportunities/{id}/evaluate` appends one on demand.
 - Application tracking never affects eligibility.
 
-Every evaluation appends history; nothing is overwritten. The rules (and `v1`) are unchanged by Milestones 2 and 3.
+Every evaluation appends history; nothing is overwritten. The rules (and `v1`) are unchanged since Milestone 1.
 
 ### How the UI presents results
 
 The UI shows `needs_verification` as its own state ("Needs verification") and never folds it into eligible. Opportunities without an evaluation show "Not evaluated". Each rule result gets a plain-language line (e.g. "Education — Eligible: based on your projected status on …: incoming undergraduate") rephrased from the stored status and details, with the stored reason and rule ID under "More detail". When the evaluation's `depends_on_projected_status` is true, the UI shows "This result depends on expected future education dates." with the resolver's explanation.
 
-### Requirement suggestions (Milestone 6)
+### Requirement suggestions (since Milestone 6)
 
-Imported and manual postings get deterministic requirement **suggestions** (`requirements-rules` v1, [ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). They live in `opportunity_requirement_candidates` and **never affect eligibility**: the engine still reads only `opportunity_requirements` and `requirements_assessment_status`. Accepting a suggestion (optionally edited) creates a canonical requirement with `extraction_method = deterministic_parser`; that, not the suggestion, is what the rules evaluate.
+Imported and manual postings get deterministic requirement **suggestions** (`requirements-rules` v2 since Milestone 8.1, [ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). They live in `opportunity_requirement_candidates` and **never affect eligibility**: the engine still reads only `opportunity_requirements` and `requirements_assessment_status`. Accepting a suggestion (optionally edited) creates a canonical requirement with `extraction_method = deterministic_parser`; that, not the suggestion, is what the rules evaluate.
 
 - Extraction never changes `requirements_assessment_status`. Accepting the first requirement while `unassessed` moves it to `partial`. Only the owner's explicit choice makes it `complete` (zero requirements allowed). Rejecting every suggestion never implies `complete`.
 - If a sync later changes a reviewed posting's text, a `complete` assessment is downgraded (to `partial`, or `unassessed` if no canonical requirement remains), the opportunity is flagged "Posting changed since requirement review", accepted requirements are kept, and the opportunity is re-evaluated.
 - An accepted work-authorization suggestion evaluates to `needs_verification` (ELIG-REQ-001) until a work-authorization rule exists.
-- Production (released 2026-10-02): the catalog scan found no suggestions, because the discovery feed provides no description text; every opportunity remains `unassessed` (`needs_verification`) until the owner enters requirements or a board source with descriptions is added.
+- Suggestions need posting text: the discovery feed has no description, so feed-only postings stay `unassessed` (`needs_verification`) until the owner enters requirements or a board source with descriptions supplies text. Production figures: [deployment.md](deployment.md), [CHANGELOG.md](../CHANGELOG.md).
 
 ## Time-Aware Evaluation
 

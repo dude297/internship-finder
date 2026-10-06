@@ -209,7 +209,7 @@ Consuming a project's published **data** (for example, a JSON listing file) as a
 
 ### 10. GitHub research references
 
-Recorded as research references only. None is a dependency. Details and status are tracked in [docs/sources.md](../sources.md#research-references).
+Recorded as research references only. None is a dependency. Details and status are tracked in [docs/sources.md](../sources.md#source-review-and-attribution).
 
 | Repository | Useful ideas | Policy |
 |---|---|---|

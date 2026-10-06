@@ -2,7 +2,7 @@
 
 ## Current Database State
 
-The schema is created by six Alembic migrations in `backend/alembic/versions/`:
+The schema is created by ten Alembic migrations (a linear chain; `b7e3d9f1a2c4` is head) in `backend/alembic/versions/`:
 
 | Revision | Milestone | Tables |
 |---|---|---|
@@ -12,8 +12,12 @@ The schema is created by six Alembic migrations in `backend/alembic/versions/`:
 | `92a17353e5a8` (reconcile the one-running-ingestion-run index) | 3.5 | No new tables or columns; ensures `uq_ingestion_runs_one_running_per_source` exists (below) |
 | `b41e7c9d2f60` (fit scoring v1, Match Profile preferences, and ATS source scope) | 4 | No new tables. `profiles`: fit preferences; `opportunity_evaluations`: fit columns; `ingestion_sources.scope`; `ingestion_runs.filtered_count` (below) |
 | `c5a1e0f3d7b2` (profile source ingestion and fact review state) | 5 | `profile_source_artifacts`; upload metadata on `profile_sources`; `profile_facts.review_state` (below) |
+| `e6d1a4b8c2f9` (requirement candidates and Ashby) | 6 | `opportunity_requirement_candidates`; staleness/fingerprint columns on `opportunities`; `ashby` source kind (below) |
+| `f2a7c9d4e1b3` (volunteer opportunity type) | 7.1 | CHECK only (below) |
+| `a8c3e5f7b9d1` (SmartRecruiters and program registry) | 8 | Registry columns on `opportunities`; `smartrecruiters` / `curated_registry` kinds; seeded registry source (below) |
+| `b7e3d9f1a2c4` (Workable and Pinpoint sources) | 8.1 | CHECK only (below) |
 
-The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope), and [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md) (profile source uploads and review). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `c5a1e0f3d7b2` (Milestone 5, applied 2026-10-01, [deployment.md](deployment.md#milestone-5-release-2026-10-01)). Locally, `compose.yaml` runs a development PostgreSQL 18.
+The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope), and [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md) (profile source uploads and review). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `b7e3d9f1a2c4` (Milestone 8.1, applied 2026-10-05; release history in [deployment.md](deployment.md) and [CHANGELOG.md](../CHANGELOG.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
 ORM models are in `backend/app/models/`. Shared enums are in `backend/app/enums.py`.
 
@@ -51,7 +55,7 @@ Additive: `'volunteer'` in the `opportunities.opportunity_type` CHECK. No row ch
 
 Additive ([ADR-014](decisions/ADR-014-structured-source-expansion-and-program-registry.md)): `'smartrecruiters'` and `'curated_registry'` in the `ingestion_sources.kind` CHECK; `'curated_registry'` in `opportunity_source_records.source_type`; the built-in scope rule (`builtin_scope_all`) covers the registry; nullable `opportunities.program_cycle` (≤ 20), `typical_open_window` (≤ 100), `typical_close_window` (≤ 100), and `verify_by` (date), no backfill; and one seeded row, the built-in **Curated Program Registry** source (`curated_registry` / `program-registry`, enabled, scope `all`). Only registry records write the new columns or the deadline/start/end dates; a typical window is text and never a date.
 
-**Compatibility.** The Milestone 7.1 backend can't load the seeded `curated_registry` source (its enum has no such value), so `GET /api/sources` and any sync would fail between migrating and deploying: disable the scheduled workflow, migrate, and deploy Render immediately (runbook in [operations.md](operations.md#milestone-8-release-and-activation-executed-2026-10-05)). The Milestone 8 backend can't run on the old schema (new columns). The 7.1 frontend rejects the sources list once the registry exists, so deploy Vercel right after Render. **Downgrade** refuses while a SmartRecruiters source or any registry record exists (rather than deleting them), otherwise deletes the seeded registry source (and its run history) and drops the columns. Verified locally on PostgreSQL 18: base → head, head → `f2a7c9d4e1b3` → head, `alembic check`; `tests/test_migrations.py` covers the seeded row and the round trip.
+**Compatibility.** The Milestone 7.1 backend can't load the seeded `curated_registry` source (its enum has no such value), so `GET /api/sources` and any sync would fail between migrating and deploying: disable the scheduled workflow, migrate, and deploy Render immediately (runbook in [operations.md](releases/2026-10-05-m8.md#release-and-activation-runbook-as-executed)). The Milestone 8 backend can't run on the old schema (new columns). The 7.1 frontend rejects the sources list once the registry exists, so deploy Vercel right after Render. **Downgrade** refuses while a SmartRecruiters source or any registry record exists (rather than deleting them), otherwise deletes the seeded registry source (and its run history) and drops the columns. Verified locally on PostgreSQL 18: base → head, head → `f2a7c9d4e1b3` → head, `alembic check`; `tests/test_migrations.py` covers the seeded row and the round trip.
 
 ### Milestone 8.1 migration (`b7e3d9f1a2c4`)
 
@@ -166,6 +170,7 @@ Canonical, source-independent opportunity.
 | `manually_curated_at` | timestamptz, null | Set when the owner creates or edits the opportunity through the API. Sync never overwrites the canonical fields, requirements, or assessment of a curated opportunity. NULL for imported opportunities the owner hasn't edited. Backfilled from `updated_at` for opportunities that existed before Milestone 3 (Milestone 3) |
 | `requirements_stale_since` | timestamptz, null | Set when a sync materially changed the posting text (title, description, deadline, start date) after the owner had reviewed its requirements; the owner's next review batch clears it. A `complete` assessment is downgraded at the same time ([ADR-012 §6](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md#6-lifecycle-and-staleness)) (Milestone 6) |
 | `requirement_extraction_fingerprint` | varchar(64), null | SHA-256 of the extractor name, version, and extraction inputs at the last extraction. NULL = never extracted. CHECK: 64 characters (Milestone 6) |
+| `program_cycle`, `typical_open_window`, `typical_close_window`, `verify_by` | varchar(20), varchar(100), varchar(100), date; all null | Curated-registry records only (Milestone 8, [ADR-014](decisions/ADR-014-structured-source-expansion-and-program-registry.md)). A typical window is text, never a date |
 | `created_at`, `updated_at` | timestamptz | |
 
 ### `opportunity_requirement_candidates`
@@ -178,7 +183,7 @@ Deterministic requirement suggestions and their owner review (Milestone 6, [ADR-
 | `semantic_key` | varchar(64) | SHA-256 of type, normalized value, applies_at, and reference date. UNIQUE (`opportunity_id`, `semantic_key`). Never position, source text, IDs, or time |
 | `requirement_type`, `value`, `applies_at`, `reference_date` | as in `opportunity_requirements` | The original proposal; an edited accept changes only the canonical requirement. CHECK: reference date iff `explicit_date` |
 | `source_text` | varchar(500) | Evidence excerpt (the extractor caps it at 300 characters). Plain text |
-| `extractor_name`, `extractor_version` | varchar | `requirements-rules`, `1` |
+| `extractor_name`, `extractor_version` | varchar | `requirements-rules`, `2` (since Milestone 8.1; rows from an earlier version are refreshed by `scan-requirements`) |
 | `review_state` | enum `pending` / `accepted` / `rejected` | |
 | `is_current` | boolean, default true | Whether the latest extraction of the current text proposed it. Pending ones that stop being proposed are deleted; reviewed ones stay with `false` |
 | `accepted_requirement_id` | uuid FK → opportunity_requirements, null, SET NULL, indexed | The canonical requirement created on accept. CHECK: set only when `accepted` |
@@ -192,7 +197,7 @@ Each place an opportunity was seen. An opportunity can have many source records.
 |---|---|---|
 | `opportunity_id` | FK → `opportunities`, cascade | |
 | `source_name` | varchar(100) | |
-| `source_type` | enum `public_feed` / `ats` / `career_page` / `browser` / `manual` / `other` | |
+| `source_type` | enum `public_feed` / `ats` / `career_page` / `browser` / `manual` / `curated_registry` / `other` | `curated_registry` since Milestone 8 |
 | `external_id` | varchar(255), null | UNIQUE with `source_name`. NULLs don't collide |
 | `source_url` | varchar(2048), null | |
 | `raw_payload` | json, null | The original source item (≤ 256 KB), never altered by normalization. Replaced by the item's newest version when it changes. Never sent to the browser |
@@ -227,16 +232,16 @@ The source registry. Safe configuration only: no URLs, no credentials. Milestone
 | Column | Type | Notes |
 |---|---|---|
 | `kind` | enum `community_feed` / `greenhouse` / `lever` / `ashby` / `smartrecruiters` / `curated_registry` / `workable` / `pinpoint` | Picks the adapter and its hard-coded host |
-| `identifier` | varchar(64) | Greenhouse board token, Lever site name, or the built-in feed's key |
+| `identifier` | varchar(64) | Board token or company identifier (Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Pinpoint), or the built-in feed's / registry's key |
 | `region` | enum `global` / `eu`, null | CHECK: set exactly when `kind = 'lever'` |
 | `display_name` | varchar(200) | Shown in the UI; the organization of opportunities imported from an ATS source |
 | `enabled` | boolean, default true | Disabled sources are skipped by "sync all" and can't be synced individually |
-| `scope` | enum `all` / `internships_only` | Milestone 4. New Greenhouse/Lever boards default to `internships_only` (title filter); CHECK `ck_ingestion_sources_builtin_scope_all`: the built-in feed is always `all`. Changing it clears `etag`/`last_modified` |
+| `scope` | enum `all` / `internships_only` | Milestone 4. New ATS boards default to `internships_only` (title filter); CHECK `ck_ingestion_sources_builtin_scope_all`: the built-in feed and registry are always `all`. Changing it clears `etag`/`last_modified` |
 | `last_attempted_at`, `last_success_at` | timestamptz, null | `no_change` counts as a success |
 | `etag`, `last_modified` | varchar, null | HTTP validators, stored only after a complete successful run |
 | `created_at`, `updated_at` | timestamptz | |
 
-UNIQUE `(kind, identifier, region)` with `NULLS NOT DISTINCT`. The migration seeds the built-in feed (`community_feed`, `zshah-tech-internships`, "Tech Internship Discovery Feed"). The API can't create `community_feed` rows or change any identifier.
+UNIQUE `(kind, identifier, region)` with `NULLS NOT DISTINCT`. Migrations seed the built-in feed (`community_feed`, `zshah-tech-internships`, "Tech Internship Discovery Feed") and the Curated Program Registry (`curated_registry`, `program-registry`). The API can't create `community_feed` rows or change any identifier.
 
 ### `ingestion_runs`
 

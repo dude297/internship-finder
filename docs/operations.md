@@ -54,7 +54,7 @@ At every size: ATS sources ran before the feed, the canonical owner didn't chang
 
 Real network fetches add roughly 1–3 s per board, so a scheduled run with 50 boards is about 1–3 minutes plus the feed sync.
 
-Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: **50** (the largest size measured). The extrapolated ceiling is around 200. Before going past 50, re-measure the elapsed time of a real scheduled run (runbook step 13). Real measurement, 2026-10-04: 20 ATS boards + the feed, a scheduled-style run of 24.6 s ([run 37234279820](https://github.com/dude297/internship-finder/actions/runs/37234279820)); first syncs of new boards took 7.6–53.6 s each (one-time creation and evaluation).
+Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: **50** (the largest size measured). The extrapolated ceiling is around 200. Before going past 50, re-measure the elapsed time of a real scheduled run ([source activation](#source-activation-procedure), step 6). Real measurement, 2026-10-04: 20 ATS boards + the feed, a scheduled-style run of 24.6 s ([run 37234279820](https://github.com/dude297/internship-finder/actions/runs/37234279820)); first syncs of new boards took 7.6–53.6 s each (one-time creation and evaluation).
 
 ### Milestone 8.1 measurements (2026-10-05)
 
@@ -62,61 +62,19 @@ Same harness, on the M8.1 branch: 50 ATS boards + feed — first sync 122.2 s (2
 
 Activating the whole Direct Source Catalog would bring production to 26 + 33 = 59 direct sources, above the measured cap of 50. Activate in batches (largest-internship boards first), watch the scheduled run's elapsed time after each batch, and re-measure before passing 50.
 
-## Milestone 8.1 activation notes (prepared, not executed)
+## Source Activation Procedure
 
-Production stays on Milestone 8 until the owner approves. After merge: migrate Neon to `b7e3d9f1a2c4` (CHECK only; the M8 app is unaffected), deploy Render then Vercel, smoke (freshness badges, filters, Source Coverage independent metric, Verified Direct Sources list). Then, only with owner approval: `python -m app.cli scan-requirements` re-extracts every opportunity with `requirements-rules` v2 (read-only measurement on 2026-10-05: 18 → 244 pending suggestions over 194 opportunities; reviewed decisions are kept, nothing is auto-accepted); add catalog sources in bounded batches from **Verified Direct Sources**.
+Adding production sources after a release (new boards, a catalog batch, a new provider) is an owner-approved step, done in bounded batches:
 
-## Milestone 7 production activation runbook (executed 2026-10-04)
+1. `python -m app.cli source-coverage` before (read-only).
+2. **If the release added a feed identity** (a new `provider_identity` rule), sync the discovery feed once on the new code *before* adding sources of that provider; otherwise the first board sync creates duplicates of feed postings that lack the new identifier.
+3. Add the batch (Sources page → Suggested Sources or **Verified Direct Sources**; Internships only). Keep enabled direct sources at or under the [operational cap](#operational-source-cap).
+4. Sync each new source manually; check deduplication (feed postings attach to the board record), no closures, no identity conflicts.
+5. `source-coverage` after; count pending requirement suggestions; accept none automatically.
+6. Watch the next scheduled run's elapsed time against the 20-minute limit.
+7. Record the batch and the before/after numbers in the release record.
 
-Code release (merge, deploy) is separate from source activation (ADR-013 §9). Executed 2026-10-04 in two batches of 10 (20 ATS sources): description coverage 0.0% → 22.4%, ATS-backed 0 → 294, 88 feed postings deduplicated exactly as predicted, 4 pending suggestions, nothing closed, eligibility unchanged; the scheduled sync with 21 sources took 24.6 s. Full record: [deployment.md](deployment.md#milestone-7-release-2026-10-04). Use the same steps for any later batch.
-
-1. Merge `feature/m7-provider-enrichment` to `main`.
-2. Confirm CI is green on the merge commit.
-3. Deploy: Render first, then Vercel, following the existing procedure in [deployment.md](deployment.md#deploy-order).
-4. Run `python -m app.cli source-coverage` against production (read-only; no sources are created or synced by this step).
-5. Open the Sources page's discovery/suggestions view and inspect what it offers.
-6. Choose a bounded first batch of suggestions (for example, at most 10 boards, largest feed-only coverage first); leave scope **Internships only**.
-7. Add the selected boards (`POST /api/sources/discovery/add`).
-8. Sync each added source manually, one at a time.
-9. Verify deduplication: counts in the run summary, no new duplicate opportunities, no unexpected closures.
-10. Re-run `source-coverage` and record the description-coverage delta against step 4.
-11. Count pending requirement suggestions created by the new syncs.
-12. Leave every suggestion pending — accept none. The scheduled sync maintains them afterward.
-13. Watch the next scheduled run's elapsed time against the 20-minute GitHub Actions limit, now that more sources are enabled.
-14. Docs closeout: record what ran, the before/after coverage numbers, and the batch added, in PROJECT_STATE.md (lead) and here if operational behavior changed.
-
-**Expected one-time side effect:** the first full feed sync after this release adds an `ashby:<board>:<posting>` identifier to feed postings that match an Ashby board (ADR-013 §2); about 60 Ashby-backed feed postings report as `updated` once, because the identifier is part of the content hash. This is normal — nothing closes, and no requirement-extraction fingerprint input changes.
-
-**Rollback.** Disable a source rather than deleting it (toggle on the Sources page, or `UPDATE ingestion_sources SET enabled = false WHERE kind = '<kind>' AND identifier = '<board>'`): disabling stops future syncs and leaves its existing records and opportunities untouched. A disabled source's canonical text stays as the last-owned text until another source either falls back onto the opportunity or the opportunity closes (ADR-013 §5); nothing is deleted or rewritten by disabling alone.
-
-## Milestone 8 release and activation (executed 2026-10-05)
-
-Executed 2026-10-05: registry live (13 programs), 6 SmartRecruiters companies (AbbVie, Bosch, Eurofins, Wellmark, Keenfinity, LLNL), description coverage 22.4% → 38.7%, 18 pending suggestions (none accepted), scheduled sync 223.7 s with 28 sources. Full record: [deployment.md](deployment.md#milestone-8-release-2026-10-05). The steps below include the correction learned during that release.
-
-**Release order** (migration `a8c3e5f7b9d1`; see [data-model.md](data-model.md#milestone-8-migration-a8c3e5f7b9d1) for the compatibility rules):
-
-1. Disable the scheduled sync workflow for the window (`gh workflow disable sync-production.yml`): the migration seeds a `curated_registry` source the Milestone 7.1 code can't read, so a scheduled run between migrate and deploy would fail.
-2. Merge; confirm CI green on the merge commit.
-3. Migrate Neon to `a8c3e5f7b9d1`, then deploy Render immediately, then Vercel (the 7.1 bundle rejects a source list containing the registry). Hard-reload open tabs.
-4. Hosted smoke; re-enable the workflow.
-
-**Activation** (owner-approved, bounded, like the Milestone 7 runbook):
-
-1. `source-coverage` before (read-only).
-2. **Sync the discovery feed once on Milestone 8 code before adding any SmartRecruiters source** (expect ~40 `updated`, 0 errors). Feed records imported by older code don't yet carry the `smartrecruiters:` identifier, so a SmartRecruiters source synced first creates duplicates of those postings (they then make the feed sync raise identity conflicts). This happened on 2026-10-05 and was repaired (see deployment.md); the same rule applies to any future provider whose feed identity is added by a release.
-3. Sync the built-in **Curated Program Registry** once manually: expect 13 created, run `success`, and only verified dates in deadline columns. Programs needing date verification show the badge from their `verify_by` date.
-4. From Suggested Sources, add a bounded batch of SmartRecruiters companies (Internships only); sync each manually. A first sync may be `partial` if a company has more than 100 internship postings needing detail (nothing closes; later runs finish it).
-5. Verify deduplication (feed postings attach to the SmartRecruiters record, no duplicates, no closures), `source-coverage` after, count pending suggestions, accept none.
-
-**Expected one-time side effect:** the first feed sync after the release adds a `smartrecruiters:<company>:<id>` identifier to the ~40 feed postings that name a SmartRecruiters posting, so they report as `updated` once (the identifier is part of the content hash). No requirement-extraction input changes and nothing closes. Items of every other source hash exactly as before (the new registry date fields are left out of the hash while unset).
-
-**Request bound:** a SmartRecruiters source makes at most 50 list + 100 detail requests per run (each with the HTTP client's ≤ 3 attempts); the registry makes none. The ADR-013 cap of 50 enabled ATS sources still applies, SmartRecruiters included.
-
-**Measured (2026-10-04, `scripts/perf_sources.py --sr`, local Docker PostgreSQL 18, all HTTP mocked):** 20 Greenhouse/Lever/Ashby boards + 10 SmartRecruiters sources (small, 100-posting, and 500-posting multi-page boards, Internships only) + a 1,000-item feed. First sync (1,986 created): 90.5 s, 22 SmartRecruiters list and 612 detail requests in total, at most 5 list / 100 detail per source. Unchanged re-sync: 6.8 s, 22 list and **0** detail requests, all 31 runs `success`. With failing details and a 429 (`Retry-After`): 14.1 s, the failing board `partial` with nothing closed, the rate-limited board `success` after one retry. Elapsed time is dominated by database work on first creation, not requests.
-
-**Large companies:** a company with hundreds of internship titles (Bosch: 391 of 4,832 postings, 49 list pages) fills over several runs at 100 details each; those runs are `partial`, close nothing, and Source Health shows the source as `failing` until the backlog is fetched. A company over 5,000 postings fails every run (closes nothing); disable it. Prefer companies whose feed coverage justifies the runtime (Bosch ≈ 165–230 s per run).
-
-**Rollback:** disable a SmartRecruiters source or the registry to stop its syncs (records and opportunities stay). Rolling code back to Milestone 7.1 needs the schema downgraded first, which refuses while SmartRecruiters sources or registry records exist: delete those sources' records/opportunities deliberately (or keep the Milestone 8 code).
+**Rollback:** disable a source (Sources page toggle) rather than deleting it; its records and opportunities stay, and nothing is rewritten by disabling alone.
 
 ## Source Health (implemented, Milestone 6)
 
@@ -152,7 +110,7 @@ Every sync records an `ingestion_runs` row: status (`running`, `success`, `parti
 
 ## Board Scope Changes (implemented)
 
-Switching a Greenhouse/Lever board between **Internships only** and **All postings** takes effect on its next sync: the change clears the HTTP validators, so that sync fetches the whole board, closes postings the new scope excludes, and reopens ones it admits again ([sources.md](sources.md#board-scope-internships-only-greenhouse-and-lever)). A partial run closes nothing, as always.
+Switching a Greenhouse/Lever board between **Internships only** and **All postings** takes effect on its next sync: the change clears the HTTP validators, so that sync fetches the whole board, closes postings the new scope excludes, and reopens ones it admits again ([sources.md](sources.md#board-scope-internships-only-every-ats-board)). A partial run closes nothing, as always.
 
 ## Closed Postings (implemented)
 

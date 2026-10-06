@@ -9,7 +9,7 @@ Scoring is **versioned behavior**. Status: **v1 implemented** (Milestone 4, [ADR
 - **One canonical location.** `backend/app/opportunities/scoring/config.py` holds `SCORING_VERSION`, the weights, the alias dictionary, stop words, and every threshold. The backend is authoritative; the frontend only displays stored results.
 - **Deterministic.** No AI, embeddings, randomness, network, or paid service ([ADR-003](decisions/ADR-003-ai-as-enrichment.md), [ADR-004](decisions/ADR-004-technology-stack.md)). Same inputs, same score.
 - **Unknown is never a match.** A component without evidence scores 0 and is marked missing; coverage shows how much of the score could be measured.
-- **Provenance.** v1 reads only facts with `review_state = accepted`: Match Profile entries, and imported facts after the owner accepts them on the Sources tab ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)). Pending and rejected imported facts never score ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Accepting imported facts changes the fit input, so the batch triggers one catalog pass; the scoring rules and version stay `v1`.
+- **Provenance.** v1 reads only facts with `review_state = accepted`: Match Profile entries, and imported facts after the owner accepts them on the Imported Profile page ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)). Pending and rejected imported facts never score ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md)). Accepting imported facts changes the fit input, so the batch triggers one catalog pass; the scoring rules and version stay `v1`.
 
 ## Inputs
 

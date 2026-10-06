@@ -56,7 +56,7 @@ For every task:
 - keep deterministic business rules outside UI
 - add/update meaningful tests
 - use migrations for database changes
-- update documentation when behavior, architecture, schemas, configuration, or operations change
+- update the canonical documentation in the same change ([Documentation Synchronization Contract](#documentation-synchronization-contract))
 - do not silently ignore failures
 - clearly state assumptions and unresolved issues
 - do not claim checks passed unless actually run
@@ -69,6 +69,7 @@ Before declaring completion, run all applicable:
 - typecheck
 - tests
 - build
+- docs check (`python scripts/check_docs.py`, plus `--base origin/main` for a branch)
 
 (Commands are listed in [`docs/development.md`](docs/development.md). If a check does not exist yet, say so. Do not report it as passed.)
 
@@ -79,12 +80,20 @@ At completion always report:
 - database changes
 - tests/build results
 - manual verification
-- documentation updated
+- documentation impact audit (changed behavior, affected canonical docs, updated, not applicable, reason)
 - known limitations
 - risks
 - recommended next task
 
-Update `PROJECT_STATE.md` after every meaningful milestone or architecture change.
+## Documentation Synchronization Contract
+
+Documentation is part of the implementation, not follow-up work. Document authority and formats: [`docs/README.md`](docs/README.md); change → document mapping: [ENGINEERING_GUIDELINES.md §15](ENGINEERING_GUIDELINES.md#15-documentation-maintenance-rules).
+
+- **Sprint/milestone:** never declare it complete until code, tests, topic docs, PROJECT_STATE.md, CHANGELOG.md, affected ADRs, and known limitations are synchronized and the docs check is green.
+- **Feature PR:** before opening it, run a Documentation Impact Audit and put it in the PR description. Never write just "docs updated".
+- **PROJECT_STATE.md:** current state only. Keep **Current Production** (the released milestone, from `docs/status.json`) and **Current Development** (the branch) separate; never present unreleased work as production.
+- **Release:** after a production deployment, report the milestone as **RELEASED — DOCS CLOSEOUT PENDING** and open the docs-only closeout PR (release record, `docs/status.json` + `--write-status`, PROJECT_STATE.md, CHANGELOG.md). Report **MILESTONE COMPLETE** only after it merges.
+- Never hand-edit the generated status blocks; never rewrite accepted ADRs or release records in place.
 
 Do not begin unrelated improvements without explicit authorization.
 

@@ -1,5 +1,8 @@
 # Volunteer Opportunity Sources (research, 2026-10-04)
 
+> **Research only (non-normative).** Date: 2026-10-04. Last verified: 2026-10-04.
+> Used by / superseded by: not yet acted on (Milestone 7.1 added only the `volunteer` opportunity type; no volunteer source adapter exists).
+
 > Local examples use the San Francisco Bay Area as an example region; nothing here is specific to a person, and every adapter considered would be region-agnostic. Claims were checked on 2026-10-04 and decay: re-verify terms, robots.txt and API docs before building anything.
 
 Research only. No code written, no accounts created, no keys requested, no forms submitted. Only public pages, robots.txt files, sitemaps and a handful of single public page GETs (identifying UA `research-check`) were read.

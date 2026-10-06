@@ -469,7 +469,7 @@ A task is complete only when:
 3. tests pass
 4. errors are handled
 5. security implications are addressed
-6. documentation is updated
+6. documentation is synchronized and the docs check is green (§15)
 7. unrelated regressions are not introduced
 8. an implementation summary is provided
 9. review is complete
@@ -480,34 +480,60 @@ A task is complete only when:
 
 ## 15. Documentation Maintenance Rules
 
-Documentation changes are part of the Definition of Done.
+**Documentation is part of the implementation, not follow-up work.** Which document owns what, how release records and `docs/status.json` work, and how the rules are enforced: [`docs/README.md`](docs/README.md).
 
-Update [`PROJECT_STATE.md`](PROJECT_STATE.md) after:
+### Change → canonical document
 
-- completing a milestone
-- architecture changes
-- database changes
-- adding/removing sources
-- introducing known issues
-- changing next planned work
+Every change that alters behavior updates its canonical document **in the same PR**:
 
-Update ADRs when an architectural decision changes. **Do not silently rewrite accepted ADR history.** Instead:
-
-1. mark the old ADR as `Superseded by ADR-XXX`
-2. create a new ADR
-
-Keep topic docs in sync:
-
-| Change | Update |
+| Change | Canonical document |
 |---|---|
-| Schema / migrations | [`docs/data-model.md`](docs/data-model.md) |
-| Eligibility rules | [`docs/eligibility.md`](docs/eligibility.md) |
-| Scoring model | [`docs/scoring.md`](docs/scoring.md) |
-| Ingestion sources | [`docs/sources.md`](docs/sources.md) |
-| Production process | [`docs/deployment.md`](docs/deployment.md) |
-| Runtime / monitoring | [`docs/operations.md`](docs/operations.md) |
-| Setup / scripts | [`docs/development.md`](docs/development.md), [`README.md`](README.md) |
-| Notable changes | [`CHANGELOG.md`](CHANGELOG.md) |
+| Database schema, migration, models | [`docs/data-model.md`](docs/data-model.md) |
+| Eligibility engine, requirement semantics or extraction | [`docs/eligibility.md`](docs/eligibility.md) |
+| Scoring | [`docs/scoring.md`](docs/scoring.md) |
+| Source adapter, ingestion, source authority, Direct Source Catalog | [`docs/sources.md`](docs/sources.md) |
+| Runtime, scheduler, source health | [`docs/operations.md`](docs/operations.md) |
+| Deployment, hosting, environment topology | [`docs/deployment.md`](docs/deployment.md) |
+| Architecture | [`docs/architecture.md`](docs/architecture.md), plus an ADR when it's a decision |
+| Setup, tooling, local workflow | [`docs/development.md`](docs/development.md) (and [`README.md`](README.md) quick start) |
+| User-visible or notable behavior | [`CHANGELOG.md`](CHANGELOG.md) |
+| Every meaningful sprint/milestone | [`PROJECT_STATE.md`](PROJECT_STATE.md) (**Current Development**) |
+
+`python scripts/check_docs.py --base <ref>` fails a PR whose high-confidence code paths changed without their document (CI job `docs`); the waiver trailer exists for genuinely behavior-neutral changes only.
+
+### Sprint / milestone done
+
+A sprint or milestone is **not** complete until all of these hold:
+
+1. code complete
+2. tests complete
+3. topic docs synchronized (table above)
+4. PROJECT_STATE.md synchronized: **Current Production** stays the released milestone; **Current Development** describes the branch
+5. CHANGELOG.md synchronized
+6. affected ADRs written or amended
+7. known limitations recorded
+8. `python scripts/check_docs.py` green
+
+Before opening the final feature PR, put a **Documentation Impact Audit** in the PR description (format in [`docs/README.md`](docs/README.md#sprint-documentation-contract)): the changed behavior, every affected canonical document, what was updated, what was reviewed and left unchanged, and why. "Docs updated" is not an audit.
+
+### Release closeout
+
+A production deployment leaves the milestone **RELEASED — DOCS CLOSEOUT PENDING** until a docs-only closeout PR merges: a new `docs/releases/<date>-<milestone>.md`, `docs/status.json` plus regenerated status blocks, PROJECT_STATE.md, CHANGELOG.md, and topic docs only where production differs from the feature PR's docs. Only then is the milestone reported **COMPLETE** ([`docs/deployment.md`](docs/deployment.md#release-procedure)).
+
+### What goes where
+
+- PROJECT_STATE.md is **current state only** (an agent handoff): history goes to CHANGELOG.md, release records, and ADRs.
+- Release records are immutable; corrections are appended as dated notes.
+- Research (`docs/research/`) is non-normative and dated, with a "used by / superseded by" line.
+
+### ADRs
+
+Accepted ADRs are immutable history. **Do not silently rewrite accepted ADR history.** When a decision changes:
+
+1. mark the old ADR as `Superseded by ADR-XXX` and create a new ADR, or
+2. add a dated **Amendment** section.
+
+Editorial link-target repairs that don't change the decision text are the only in-place edits allowed.
 
 ---
 

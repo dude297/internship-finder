@@ -1,5 +1,8 @@
 # Requirement extractor v2 (`requirements-rules` version "2")
 
+> **Research only (non-normative).** Date: 2026-10-05. Last verified: 2026-10-05.
+> Used by / superseded by: [ADR-015 §4](../decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md); implemented in `backend/app/opportunities/requirements/extractor.py` (Milestone 8.1).
+
 Implements the recommendations of [requirement-extractor-recall.md](requirement-extractor-recall.md) (the v1 recall analysis). Same architecture as v1: a pure function `extract_requirements(ExtractionInput) -> tuple[Proposal, ...]`, no network, AI, clock or randomness, same `Proposal` model, no schema, service, database or eligibility change. Precision first: a false hard requirement is worse than a miss, and every proposal still goes through owner review (ADR-012).
 
 Code: `backend/app/opportunities/requirements/extractor.py`. Tests: `backend/tests/test_requirement_extractor.py` (updated v1 tests), `backend/tests/test_requirement_extractor_v2.py` (corpus), `backend/tests/requirement_corpus_v2.py` (corpus data), `backend/tests/_extractor_v1_reference.py` (frozen test-only copy of v1 for the comparison; not shipped in `app/`).
