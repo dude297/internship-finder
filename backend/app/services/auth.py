@@ -27,7 +27,7 @@ USERNAME_PATTERN = re.compile(r"\A[A-Za-z0-9_.-]{3,64}\Z")
 _password_hash = PasswordHash.recommended()
 
 # Each Argon2id operation holds ~64 MiB (m=65536 KiB). Render Free has 512 MB, and sync routes
-# run on a thread pool, so cap concurrent hash/verify work per process (ADR-009 �7). Extra
+# run on a thread pool, so cap concurrent hash/verify work per process (ADR-009 §7). Extra
 # callers wait; parameters and the dummy verification are unchanged.
 ARGON2_CONCURRENCY = 2
 _argon2_slots = threading.BoundedSemaphore(ARGON2_CONCURRENCY)
@@ -147,7 +147,7 @@ class FailedLoginLimiter:
 
     A key is blocked once it has `max_failures` in the window; everyone is blocked once all
     keys together have `max_global_failures`. Per process and reset on restart, which fits the
-    one-instance, one-worker deployment (ADR-009 �6).
+    one-instance, one-worker deployment (ADR-009 §6).
     """
 
     def __init__(
