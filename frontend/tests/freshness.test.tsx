@@ -357,8 +357,11 @@ describe('verified direct sources', () => {
       sources: [{ kind: 'greenhouse', identifier: 'examplelabs', region: null }],
     })
     expect(add.headers['X-CSRF-Token']).toBe('synthetic-csrf')
-    expect(calls.filter((c) => c.path === '/api/sources/catalog')).toHaveLength(2)
-    expect(calls.filter((c) => c.path === '/api/sources')).toHaveLength(2)
+    // The reload after adding races the success message: wait for it.
+    await waitFor(() => {
+      expect(calls.filter((c) => c.path === '/api/sources/catalog')).toHaveLength(2)
+      expect(calls.filter((c) => c.path === '/api/sources')).toHaveLength(2)
+    })
   })
 
   it('caps the selection at 25 and shows API errors', async () => {
