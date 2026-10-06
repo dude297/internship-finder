@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | Milestone 9 on `feature/m9-owner-decisions` |
+| **Current Development** | Milestone 12 on `feature/m12-encrypted-backup` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-05
@@ -88,6 +88,8 @@ Merged to `main` since the Milestone 8.1 release, **not deployed** (Render/Verce
 - Eligibility re-evaluation ([PR #29](https://github.com/dude297/internship-finder/pull/29), [ADR-018](docs/decisions/ADR-018-evaluation-staleness.md)): `python -m app.cli reevaluate [--dry-run]` as a release step after a rules/scoring version bump. Work-authorization evaluation is design only ([note](docs/research/work-authorization-eligibility-design.md)).
 - Data: Curated Program Registry 13 → 24 ([PR #31](https://github.com/dude297/internship-finder/pull/31)); Direct Source Catalog 36 → 64 ([PR #32](https://github.com/dude297/internship-finder/pull/32)); backend dependency lock ([PR #28](https://github.com/dude297/internship-finder/pull/28)).
 
+In review (not merged): encrypted weekly database backup and a restore script on `feature/m12-encrypted-backup` ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md)). No migration; inert until the owner sets the `BACKUP_AGE_RECIPIENT` variable.
+
 In review, release-gated: Milestone 9 owner decisions, Hide/Unhide and Revert to source ([PR #33](https://github.com/dude297/internship-finder/pull/33), ADR-017 on that branch; migration `d4f8a1c6e2b9`). Merging it requires migrating Neon in the same window, because the scheduled sync refuses a schema behind `main`.
 
 ## Known Operational Issues
@@ -111,7 +113,7 @@ None open. Fixed during hosted validation (2026-09-29):
 - Every current evaluation is `needs_verification`: no imported requirement has been accepted yet, so eligibility can't be decided. Cross-bucket dominance is covered by deterministic tests, not production data.
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
 - Render Free cold starts take about 1–3 minutes (measured 73 s and ~3 min); Vercel either holds the request or returns `502`, which the UI shows as the waking state. Sessions survive the restart.
-- No database backups beyond Neon Free's short restore window.
+- Database backups: an encrypted weekly backup workflow and a restore script are implemented ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md), Proposed, unreleased) but **not activated**: until the owner sets `BACKUP_AGE_RECIPIENT`, there is no backup beyond Neon Free's short restore window. The private key is the owner's alone; losing it loses every backup.
 - Board scope is title-based: internships titled without intern/co-op/apprentice words are filtered, and titles such as "Internship Program Manager" are kept. Greenhouse postings are typed by title from Milestone 6 (still `other` in production until released). Boards added before Milestone 4 were migrated to **All postings**.
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
 - Deleting an imported opportunity deletes its source records, so the next sync re-imports it (no "hide" yet). There's no "revert to source" for curated opportunities.
