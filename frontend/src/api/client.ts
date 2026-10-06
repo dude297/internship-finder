@@ -16,6 +16,8 @@ import {
   profileSourceDetailSchema,
   profileSourceReviewResultSchema,
   profileSourceSummarySchema,
+  batchRejectResultSchema,
+  queuePageSchema,
   requirementReviewResponseSchema,
   requirementReviewResultSchema,
   runSchema,
@@ -30,6 +32,7 @@ import {
   type OpportunityQuery,
   type ProfileInput,
   type ProfileSourceReviewInput,
+  type QueueQuery,
   type RequirementReviewInput,
   type SourceInput,
   type SourceScope,
@@ -234,6 +237,17 @@ export const api = {
       `/opportunities/${encodeURIComponent(id)}/requirement-review/refresh`,
       requirementReviewResponseSchema,
     ),
+  getRequirementQueue: (query: QueueQuery) => {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(query))
+      if (value !== undefined && value !== '' && value !== false)
+        params.set(key, String(value))
+    return request('GET', `/requirement-review/queue?${params}`, queuePageSchema)
+  },
+  rejectCandidatesBatch: (candidateIds: string[]) =>
+    request('POST', '/requirement-review/reject-batch', batchRejectResultSchema, {
+      candidate_ids: candidateIds,
+    }),
   reviewRequirements: (id: string, body: RequirementReviewInput) =>
     request(
       'POST',

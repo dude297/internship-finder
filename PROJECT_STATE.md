@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | none |
+| **Current Development** | Milestone 14 on `feature/m14-requirement-workbench` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -87,11 +87,13 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-None on `main`. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+Milestone 14, Requirement Review Workbench, merged to `main` ([PR #53](https://github.com/dude297/internship-finder/pull/53); not deployed; no migration): a global **Review** queue (`/requirements`) over the pending suggestions, keyboard-driven accept/edit/reject/skip through the existing atomic review endpoint, and an all-or-nothing **Reject selected** (no accept-all). [ADR-024](docs/decisions/ADR-024-requirement-review-workbench.md). Production is unchanged until it is released.
+
+On `main`, merged but **not deployed**: security low debt ([PR #48](https://github.com/dude297/internship-finder/pull/48)), Workday/Oracle provider gate research ([PR #49](https://github.com/dude297/internship-finder/pull/49)), feed-dependence Pareto and 26 more catalog boards ([PR #50](https://github.com/dude297/internship-finder/pull/50), none enabled), and the landing page, login states, and design tokens ([PR #51](https://github.com/dude297/internship-finder/pull/51), Milestone 19). Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
 In review on `chore/m17-least-privilege-sync-role` (not merged, **not activated**): a least-privilege `if_sync` database role for the scheduled sync ([ADR-027](docs/decisions/ADR-027-least-privilege-sync-role.md), Proposed; [`scripts/sql/sync_role_grants.sql`](scripts/sql/sync_role_grants.sql), grant-drift test, owner runbook in [operations.md](docs/operations.md#least-privilege-sync-role-owner-action-not-activated)). The workflow prefers `SYNC_DATABASE_URL` and falls back to `PRODUCTION_DATABASE_URL`, so production is unchanged until the owner acts.
 
-Open pull requests: the one above, once opened.
+Open pull requests: see GitHub (Milestones 12, 14, 15, 17 in review).
 
 ## Known Operational Issues
 
