@@ -845,6 +845,349 @@
         "research",
         "hardware"
       ]
+    },
+    {
+      "organization": "Hudson River Trading",
+      "kind": "greenhouse",
+      "identifier": "wehrtyou",
+      "region": null,
+      "careers_url": "https://www.hudsonrivertrading.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/wehrtyou/jobs (documented public API, HTTP 200, board name \"Hudson River Trading\"; posting links on www.hudsonrivertrading.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "fintech",
+        "software"
+      ]
+    },
+    {
+      "organization": "IMC Trading",
+      "kind": "greenhouse",
+      "identifier": "imc",
+      "region": null,
+      "careers_url": "https://www.imc.com/us/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/imc/jobs (documented public API, HTTP 200, board name \"IMC\"; posting links on job-boards.eu.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "fintech",
+        "software",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Virtu Financial",
+      "kind": "greenhouse",
+      "identifier": "virtu",
+      "region": null,
+      "careers_url": "https://www.virtu.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/virtu/jobs (documented public API, HTTP 200, board name \"Virtu Financial\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "fintech",
+        "software",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Tower Research Capital",
+      "kind": "greenhouse",
+      "identifier": "towerresearchcapital",
+      "region": null,
+      "careers_url": "https://tower-research.com/open-positions/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/towerresearchcapital/jobs (documented public API, HTTP 200, board name \"Tower Research Capital\"; posting links on www.tower-research.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "fintech",
+        "software"
+      ]
+    },
+    {
+      "organization": "Five Rings",
+      "kind": "greenhouse",
+      "identifier": "fiveringsllc",
+      "region": null,
+      "careers_url": "https://fiverings.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/fiveringsllc/jobs (documented public API, HTTP 200, board name \"Five Rings LLC - Careers\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "fintech",
+        "software"
+      ]
+    },
+    {
+      "organization": "Muon Space",
+      "kind": "greenhouse",
+      "identifier": "muonspace",
+      "region": null,
+      "careers_url": "https://www.muonspace.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/muonspace/jobs (documented public API, HTTP 200, board name \"Muon Space\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "K2 Space",
+      "kind": "greenhouse",
+      "identifier": "k2spacecorporation",
+      "region": null,
+      "careers_url": "https://www.k2space.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/k2spacecorporation/jobs (documented public API, HTTP 200, board name \"K2 Space\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "General Matter",
+      "kind": "greenhouse",
+      "identifier": "generalmatter",
+      "region": null,
+      "careers_url": "https://generalmatter.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/generalmatter/jobs (documented public API, HTTP 200, board name \"General Matter\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "research",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Graphcore",
+      "kind": "greenhouse",
+      "identifier": "graphcore",
+      "region": null,
+      "careers_url": "https://www.graphcore.ai/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/graphcore/jobs (documented public API, HTTP 200, board name \"Graphcore\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "ai",
+        "semiconductor",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "QuEra Computing",
+      "kind": "greenhouse",
+      "identifier": "queracomputinginc",
+      "region": null,
+      "careers_url": "https://www.quera.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/queracomputinginc/jobs (documented public API, HTTP 200, board name \"QuEra Computing, Inc.\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "research",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "GITAI",
+      "kind": "greenhouse",
+      "identifier": "gitai",
+      "region": null,
+      "careers_url": "https://gitai.tech/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/gitai/jobs (documented public API, HTTP 200, board name \"GITAI\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "robotics",
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Pacific Fusion",
+      "kind": "greenhouse",
+      "identifier": "pacificfusion",
+      "region": null,
+      "careers_url": "https://www.pacificfusion.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/pacificfusion/jobs (documented public API, HTTP 200, board name \"Pacific Fusion\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "research",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Stoke Space",
+      "kind": "greenhouse",
+      "identifier": "stokespacetechnologies",
+      "region": null,
+      "careers_url": "https://www.stokespace.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/stokespacetechnologies/jobs (documented public API, HTTP 200, board name \"Stoke Space\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Rendezvous Robotics",
+      "kind": "greenhouse",
+      "identifier": "rendezvousrobotics",
+      "region": null,
+      "careers_url": "https://www.rendezvousrobotics.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/rendezvousrobotics/jobs (documented public API, HTTP 200, board name \"Rendezvous Robotics\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "robotics",
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Mill",
+      "kind": "greenhouse",
+      "identifier": "mill",
+      "region": null,
+      "careers_url": "https://mill.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/mill/jobs (documented public API, HTTP 200, board name \"Mill\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "hardware",
+        "robotics"
+      ]
+    },
+    {
+      "organization": "Epic Games",
+      "kind": "greenhouse",
+      "identifier": "epicgames",
+      "region": null,
+      "careers_url": "https://www.epicgames.com/site/en-US/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/epicgames/jobs (documented public API, HTTP 200, board name \"Epic Games\"; posting links on epicgames.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "software"
+      ]
+    },
+    {
+      "organization": "Rubrik",
+      "kind": "greenhouse",
+      "identifier": "rubrik",
+      "region": null,
+      "careers_url": "https://www.rubrik.com/company/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/rubrik/jobs (documented public API, HTTP 200, board name \"Rubrik Job Board\"; posting links on www.rubrik.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "cloud",
+        "software"
+      ]
+    },
+    {
+      "organization": "Harbinger Motors",
+      "kind": "greenhouse",
+      "identifier": "harbingermotors",
+      "region": null,
+      "careers_url": "https://harbingermotors.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/harbingermotors/jobs (documented public API, HTTP 200, board name \"Harbinger Motors Inc.\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "mobility",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Bot Auto",
+      "kind": "greenhouse",
+      "identifier": "botauto",
+      "region": null,
+      "careers_url": "https://bot.auto/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/botauto/jobs (documented public API, HTTP 200, board name \"Bot Auto\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "mobility",
+        "robotics",
+        "ai"
+      ]
+    },
+    {
+      "organization": "Tanium",
+      "kind": "greenhouse",
+      "identifier": "tanium",
+      "region": null,
+      "careers_url": "https://www.tanium.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/tanium/jobs (documented public API, HTTP 200, board name \"Tanium\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "cloud",
+        "software"
+      ]
+    },
+    {
+      "organization": "TensorWave",
+      "kind": "ashby",
+      "identifier": "tensorwave",
+      "region": null,
+      "careers_url": "https://tensorwave.com/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/tensorwave (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "ai",
+        "cloud"
+      ]
+    },
+    {
+      "organization": "Cowboy Space",
+      "kind": "ashby",
+      "identifier": "cowboyspace",
+      "region": null,
+      "careers_url": "https://www.cowboyspace.com/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/cowboyspace (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "The Exploration Company",
+      "kind": "ashby",
+      "identifier": "the-exploration-company",
+      "region": null,
+      "careers_url": "https://www.exploration.space/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/the-exploration-company (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Hadrian",
+      "kind": "ashby",
+      "identifier": "hadrian-automation",
+      "region": null,
+      "careers_url": "https://www.hadrian.co/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/hadrian-automation (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "robotics",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Talos",
+      "kind": "ashby",
+      "identifier": "talos-trading",
+      "region": null,
+      "careers_url": "https://www.talos.com/working/open-roles",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/talos-trading (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "fintech",
+        "software"
+      ]
+    },
+    {
+      "organization": "Immuta",
+      "kind": "lever",
+      "identifier": "immuta",
+      "region": "global",
+      "careers_url": "https://www.immuta.com/careers/",
+      "evidence": "https://api.lever.co/v0/postings/immuta?mode=json (documented public API, HTTP 200; posting links on jobs.lever.co)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "cloud",
+        "software"
+      ]
     }
   ]
 }
