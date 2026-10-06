@@ -15,6 +15,7 @@ from app.api import (
     opportunities,
     profile,
     profile_sources,
+    requirement_queue,
     requirement_review,
     sources,
 )
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     private.include_router(opportunities.router)
     private.include_router(inbox.router)
     private.include_router(data_age.router)
+    private.include_router(requirement_queue.router)
     private.include_router(requirement_review.router)
     private.include_router(sources.router)
     app.include_router(private)

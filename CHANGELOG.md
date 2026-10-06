@@ -4,7 +4,9 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- Milestone 14, Requirement Review Workbench ([ADR-024](docs/decisions/ADR-024-requirement-review-workbench.md); no migration, no new dependency, extraction and eligibility unchanged): a **Review** page (`/requirements`, linked from the Inbox) to work the pending-suggestion backlog across opportunities. `GET /api/requirement-review/queue` (paged to at most 100, filters on category, extractor name/version, organization, source kind, opportunity, posting changed, and first-proposed date; constant statement count) returns each suggestion with its evidence sentence, opportunity and freshness, the opportunity's existing requirements, a duplicate flag, and a progress summary (pending total, category distribution, reviewed today). Accept, Edit + Accept, Reject, Skip and Previous/Next with keyboard shortcuts (`A` `E` `R` `S` `J` `K`, off while typing); accept and single reject use the existing atomic review endpoint. `POST /api/requirement-review/reject-batch` rejects 1 to 100 selected pending suggestions all-or-nothing behind a confirmation. There is no accept-all or auto-accept. "Reviewed today" is derived from `updated_at` (no review timestamp is stored), so it is approximate.
 
 ## Milestones 8.2, 9, 10, 10.1, and 11 (released 2026-10-06)
 
