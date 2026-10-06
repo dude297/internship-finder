@@ -136,13 +136,13 @@ When a complete successful sync no longer lists a posting, its source record is 
 
 **Artifacts of this public repository are downloadable by any signed-in GitHub user.** That is why the backup is encrypted before upload and why the file name is only `backup-YYYYMMDD.dump.age`. Retention (14 days) limits storage, **not exposure**: anyone signed in can download and keep the ciphertext, so confidentiality rests entirely on the private key, and a key compromise discloses every past backup. Treat the decrypted dump as exactly as sensitive as the database (it includes the profile and auth tables).
 
-Without the `BACKUP_AGE_RECIPIENT` variable (or the `PRODUCTION_DATABASE_URL` secret) the first step fails with a fixed message and nothing touches the database. `pg_dump` and `psql` output never reaches the public log (only a fixed message and exit codes); the URL, host, role and password are masked.
+Until the `BACKUP_AGE_RECIPIENT` repository variable is set, the job is **skipped** (no failed run, no weekly failure email); with the variable set but the `PRODUCTION_DATABASE_URL` secret missing, the first step fails with a fixed message and nothing touches the database. `pg_dump` and `psql` output never reaches the public log (only a fixed message and exit codes); the URL, host, role and password are masked.
 
 ### Owner activation (once)
 
 1. On a trusted machine install [age](https://github.com/FiloSottile/age) and run `age-keygen -pq -o internship-finder-backup.key` (hybrid post-quantum, recommended because the ciphertext stays downloadable; plain `age-keygen` also works). It prints `Public key: age1pq1...` (or `age1...`).
 2. Store the private key file in a password manager **and** one offline copy. Never commit it, paste it into chat, or put it in GitHub. Losing it makes every backup unreadable.
-3. Set the public key as a repository variable (not a secret): `gh variable set BACKUP_AGE_RECIPIENT --body "age1..."` (or Settings, Secrets and variables, Actions, Variables). An environment variable on `production` also works.
+3. Set the public key as a repository variable (not a secret): `gh variable set BACKUP_AGE_RECIPIENT --body "age1..."` (or Settings, Secrets and variables, Actions, Variables). It must be a **repository** variable: the job-level `if:` that skips the job until activation can't see environment variables.
 4. Dispatch once: `gh workflow run backup-production.yml --ref main`, and confirm it is green and the artifact exists.
 5. **Hard gate:** do not rely on the backup until a restore test (below) from a real artifact into a disposable target has passed.
 
