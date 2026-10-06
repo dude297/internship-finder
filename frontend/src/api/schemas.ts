@@ -867,3 +867,59 @@ export interface RequirementReviewInput {
   reject: string[]
   assessment_status?: AssessmentStatus
 }
+
+// Global requirement review queue (ADR-024). Accept/reject of one suggestion still uses the
+// per-opportunity review endpoint above; only the read and the batch reject are new.
+
+export const queueItemSchema = z.object({
+  candidate: requirementCandidateSchema,
+  opportunity: z.object({
+    id: z.string(),
+    title: z.string(),
+    organization: z.string(),
+    application_url: z.string().nullable(),
+    first_seen_at: z.string(),
+    requirements_assessment_status: z.enum(assessmentStatuses),
+    requirements_stale_since: z.string().nullable(),
+    freshness: z.enum(freshnessStates),
+    freshness_checked_at: z.string().nullable(),
+    source_names: z.array(z.string()),
+    source_kinds: z.array(z.string()),
+  }),
+  existing_requirements: z.array(requirementSchema),
+  duplicate_of: z.string().nullable(),
+})
+export type QueueItem = z.infer<typeof queueItemSchema>
+
+export const queuePageSchema = z.object({
+  items: z.array(queueItemSchema),
+  total: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+  summary: z.object({
+    pending_total: z.number().int(),
+    by_type: z.array(
+      z.object({ requirement_type: z.enum(requirementTypes), count: z.number().int() }),
+    ),
+    accepted_today: z.number().int(),
+    rejected_today: z.number().int(),
+    today: z.string(),
+    extractor_versions: z.array(z.string()),
+  }),
+})
+export type QueuePage = z.infer<typeof queuePageSchema>
+
+export const batchRejectResultSchema = z.object({
+  rejected: z.number().int(),
+  opportunities: z.number().int(),
+  evaluated: z.number().int(),
+})
+
+export interface QueueQuery {
+  requirement_type?: RequirementType
+  extractor_version?: string
+  organization?: string
+  source_kind?: SourceKind
+  posting_changed?: boolean
+  limit?: number
+}

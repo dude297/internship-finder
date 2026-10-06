@@ -3,10 +3,15 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router'
 import { api } from '../api/client'
 import type { DataAge } from '../api/schemas'
 import { useAuth } from '../auth/context'
+import { Mark } from './Mark'
 import { ErrorMessage } from './ui'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded px-2 py-1 ${isActive ? 'bg-slate-200 font-medium' : 'hover:bg-slate-100'}`
+  `inline-flex min-h-9 items-center rounded-control px-3 ${
+    isActive
+      ? 'bg-slate-100 font-medium shadow-[inset_0_-2px_0_var(--color-lab-accent-strong)]'
+      : 'text-slate-700 hover:bg-slate-100'
+  }`
 
 function age(hours: number): string {
   return hours >= 48 ? `${Math.floor(hours / 24)} days` : `${Math.round(hours)} hours`
@@ -66,8 +71,11 @@ export function AppShell() {
     <div className="min-h-screen font-sans text-slate-900">
       <header className="border-b border-slate-200">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-4 p-4">
-          <p className="text-lg font-semibold">Personal Internship Finder</p>
-          <nav aria-label="Main" className="flex gap-2">
+          <p className="flex items-center gap-2 text-lg font-semibold">
+            <Mark className="h-6 w-6 text-blue-700" />
+            Personal Internship Finder
+          </p>
+          <nav aria-label="Main" className="flex flex-wrap gap-1">
             <NavLink to="/dashboard" className={linkClass}>
               Dashboard
             </NavLink>
@@ -83,6 +91,9 @@ export function AppShell() {
             <NavLink to="/opportunities" className={linkClass}>
               Opportunities
             </NavLink>
+            <NavLink to="/requirements" className={linkClass}>
+              Review
+            </NavLink>
             <NavLink to="/sources" className={linkClass}>
               Sources
             </NavLink>
@@ -90,14 +101,14 @@ export function AppShell() {
           <button
             type="button"
             onClick={handleLogout}
-            className="ml-auto rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
+            className="ml-auto min-h-9 rounded-control border border-slate-300 px-3 hover:bg-slate-100"
           >
             Log out
           </button>
         </div>
       </header>
       <DataAgeBanner />
-      <main className="mx-auto max-w-4xl p-4">
+      <main className="mx-auto max-w-4xl px-4 py-6">
         {logoutFailed && (
           <div className="mb-4">
             <ErrorMessage>Couldn't log out. You're still signed in.</ErrorMessage>

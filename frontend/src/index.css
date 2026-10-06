@@ -1,1 +1,72 @@
 @import 'tailwindcss';
+
+/* Design tokens. The public pages (landing, login) use the dark "lab" palette; the authenticated
+   app keeps its light slate styling and only borrows the accent, radii and focus ring.
+   Contrast (WCAG AA): text #e6edf3 on bg 16:1; muted #9aa7b4 on elevated 7:1; accent #2f81f7 on
+   bg 5.2:1; white on accent-strong #1f6feb 4.6:1 and on hover #1a62d1 5.7:1; danger, warning and
+   success on surface are all above 7:1. Re-check a pair before changing a value. */
+@theme {
+  --color-lab-bg: #0b0d10;
+  --color-lab-surface: #101318;
+  --color-lab-elevated: #171c22;
+  --color-lab-border: #2a313a;
+  --color-lab-text: #e6edf3;
+  --color-lab-muted: #9aa7b4;
+  --color-lab-accent: #2f81f7;
+  --color-lab-accent-strong: #1f6feb;
+  --color-lab-accent-hover: #1a62d1;
+  --color-lab-warning: #d29922;
+  --color-lab-danger: #ff7b72;
+  --color-lab-success: #3fb950;
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --shadow-lab: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px rgb(0 0 0 / 0.35);
+  --spacing-gutter: 1.25rem;
+  --font-mono:
+    ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-lab-accent);
+  outline-offset: 2px;
+}
+
+@keyframes lab-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes lab-signal {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+@keyframes lab-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.lab-rise {
+  animation: lab-rise 300ms ease-out both;
+}
+.lab-signal {
+  stroke-dasharray: 4 20;
+  animation: lab-signal 1.6s linear infinite;
+}
+.lab-pulse {
+  animation: lab-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-rise,
+  .lab-signal,
+  .lab-pulse {
+    animation: none;
+  }
+}
