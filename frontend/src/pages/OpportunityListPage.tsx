@@ -34,6 +34,7 @@ const FILTERS: FilterName[] = [
   'needs_date_verification',
   'freshness',
   'discovered_within',
+  'posted_within',
   'hidden',
 ]
 
@@ -157,6 +158,7 @@ export function OpportunityListPage() {
         freshness: (rest.freshness || undefined) as
           'direct_verified' | 'needs_review' | undefined,
         discovered_within: (rest.discovered_within || undefined) as '1' | '7' | undefined,
+        posted_within: (rest.posted_within || undefined) as '7' | '30' | '90' | undefined,
         hidden: (rest.hidden || undefined) as 'include' | 'only' | undefined,
         requirement_review: (rest.requirement_review || undefined) as
           'pending' | 'stale' | 'needs_review' | undefined,

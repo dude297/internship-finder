@@ -26,7 +26,16 @@ export const json = (body: unknown, status = 200) =>
  * Promise (returned as is). Unhandled requests fail the test loudly. Returns the recorded calls.
  */
 export function mockApi(handlers: Record<string, Handler>): Call[] {
-  handlers = { 'GET /api/sources/catalog': () => ({ entries: [] }), ...handlers }
+  handlers = {
+    'GET /api/sources/catalog': () => ({ entries: [] }),
+    'GET /api/status/freshness': () => ({
+      last_successful_sync_at: null,
+      age_hours: null,
+      stale: false,
+      reason: 'no_sources',
+    }),
+    ...handlers,
+  }
   const calls: Call[] = []
   vi.stubGlobal(
     'fetch',

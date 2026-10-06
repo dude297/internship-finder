@@ -31,6 +31,7 @@ export type FilterName =
   | 'needs_date_verification'
   | 'freshness'
   | 'discovered_within'
+  | 'posted_within'
   | 'hidden'
 
 interface Props {
@@ -254,6 +255,18 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
             ['', 'Any'],
             ['1', 'New today'],
             ['7', 'New this week'],
+          ]}
+        />
+        <Select
+          id="filter-posted"
+          label="Posted"
+          value={values.posted_within}
+          onChange={(v) => onChange('posted_within', v)}
+          options={[
+            ['', 'Any'],
+            ['7', 'Last 7 days'],
+            ['30', 'Last 30 days'],
+            ['90', 'Last 90 days'],
           ]}
         />
         <Select
