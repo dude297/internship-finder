@@ -41,6 +41,41 @@ function HealthBadge({ source }: { source: Source }) {
   )
 }
 
+type HealthGroup = 'failing' | 'warning' | 'healthy' | 'inactive'
+
+// Failing first, then things that need a look, then everything fine, then idle sources.
+const groupOrder: { id: HealthGroup; title: string; hint: string }[] = [
+  {
+    id: 'failing',
+    title: 'Failing',
+    hint: 'Last sync failed. Check the error, then sync again or disable.',
+  },
+  {
+    id: 'warning',
+    title: 'Warning',
+    hint: 'Partly succeeded, or no recent successful sync.',
+  },
+  { id: 'healthy', title: 'Healthy', hint: 'Last sync succeeded.' },
+  {
+    id: 'inactive',
+    title: 'Not running',
+    hint: 'Disabled, or enabled but never synced.',
+  },
+]
+
+function lastError(source: Source): string | null {
+  return source.health === 'failing' || source.health === 'warning'
+    ? (source.latest_run?.error_summary ?? null)
+    : null
+}
+
+function groupOf(source: Source): HealthGroup {
+  if (source.health === 'failing') return 'failing'
+  if (source.health === 'warning' || source.health === 'stale') return 'warning'
+  if (source.health === 'healthy') return 'healthy'
+  return 'inactive'
+}
+
 export function SourcesPage() {
   const [sources, setSources] = useState<Source[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -150,6 +185,15 @@ export function SourcesPage() {
 
   if (!sources && !error) return <p role="status">Loading sources…</p>
 
+  const groups = groupOrder
+    .map((g) => ({ ...g, sources: (sources ?? []).filter((x) => groupOf(x) === g.id) }))
+    .filter((g) => g.sources.length > 0)
+  const count = (id: HealthGroup) => groups.find((g) => g.id === id)?.sources.length ?? 0
+  const healthLine =
+    count('failing') + count('warning') === 0
+      ? 'Nothing is failing. No source needs attention.'
+      : `${count('failing')} failing, ${count('warning')} warning, ${count('healthy')} healthy.`
+
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -170,88 +214,133 @@ export function SourcesPage() {
       </div>
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {notice && <SuccessMessage>{notice}</SuccessMessage>}
-      <SourceCoverage onSourcesChanged={refreshSources} syncCount={syncCount} />
-      <VerifiedDirectSources onSourcesChanged={refreshSources} reloadKey={catalogKey} />
-      <ul className="space-y-3">
-        {sources?.map((source) => (
-          <li key={source.id} className="space-y-3 rounded border border-slate-200 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h2 className="flex flex-wrap items-center gap-2 font-medium">
-                  {source.display_name}
-                  <HealthBadge source={source} />
-                </h2>
-                <p className="text-sm text-slate-600">
-                  {sourceKindLabels[source.kind]}
-                  {!source.builtin && ` · ${source.identifier}`}
-                  {source.region === 'eu' && ' (EU)'}
-                  {!source.enabled && ' · Disabled'}
-                </p>
-                {!source.builtin && (
-                  <p className="mt-1 flex items-center gap-2 text-sm">
-                    <label htmlFor={`scope-${source.id}`} className="text-slate-600">
-                      Import
-                    </label>
-                    <select
-                      id={`scope-${source.id}`}
-                      value={source.scope}
-                      disabled={busy !== null}
-                      onChange={(e) => changeScope(source, e.target.value as SourceScope)}
-                      className="rounded border border-slate-300 px-1 py-0.5"
-                    >
-                      {sourceScopes.map((scope) => (
-                        <option key={scope} value={scope}>
-                          {sourceScopeLabels[scope]}
-                        </option>
-                      ))}
-                    </select>
-                  </p>
-                )}
-                <p className="text-xs text-slate-500">
-                  Last attempted:{' '}
-                  {source.last_attempted_at
-                    ? formatDateTime(source.last_attempted_at)
-                    : 'never'}
-                  {' · '}Last successful:{' '}
-                  {source.last_success_at
-                    ? formatDateTime(source.last_success_at)
-                    : 'never'}
-                  {source.last_success_age_hours !== null &&
-                    ` (${Math.round(source.last_success_age_hours)}h ago)`}
-                  {source.consecutive_failures > 0 &&
-                    ` · ${source.consecutive_failures} failed sync${
-                      source.consecutive_failures === 1 ? '' : 's'
-                    } in a row`}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  onClick={() => toggle(source)}
-                  disabled={busy !== null}
-                >
-                  {source.enabled ? 'Disable' : 'Enable'}
-                </button>
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  onClick={() => syncOne(source)}
-                  disabled={busy !== null || !source.enabled}
-                  aria-label={`Sync ${source.display_name} now`}
-                >
-                  {busy === source.id ? 'Syncing…' : 'Sync now'}
-                </button>
-              </div>
+      <SourceCoverage
+        sources={sources ?? []}
+        onSourcesChanged={refreshSources}
+        syncCount={syncCount}
+      >
+        <section aria-labelledby="source-health" className="space-y-4">
+          <div>
+            <h2 id="source-health" className="text-lg font-semibold">
+              Source health
+            </h2>
+            <p className="text-sm text-slate-600">{healthLine}</p>
+          </div>
+          {groups.map((group) => (
+            <div key={group.id} className="space-y-2">
+              <h2 className="text-base font-semibold">
+                {group.title} ({group.sources.length})
+                <span className="ml-2 text-sm font-normal text-slate-600">
+                  {group.hint}
+                </span>
+              </h2>
+              <ul className="space-y-3">
+                {group.sources.map((source) => (
+                  <li
+                    key={source.id}
+                    className="space-y-3 rounded-card border border-slate-200 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h3 className="flex flex-wrap items-center gap-2 font-medium">
+                          {source.display_name}
+                          <HealthBadge source={source} />
+                        </h3>
+                        <p className="text-sm text-slate-600">
+                          {sourceKindLabels[source.kind]}
+                          {!source.builtin && (
+                            <>
+                              {' · '}
+                              <span className="font-mono">{source.identifier}</span>
+                            </>
+                          )}
+                          {source.region === 'eu' && ' (EU)'}
+                          {!source.enabled && ' · Disabled'}
+                        </p>
+                        {!source.builtin && (
+                          <p className="mt-1 flex items-center gap-2 text-sm">
+                            <label
+                              htmlFor={`scope-${source.id}`}
+                              className="text-slate-600"
+                            >
+                              Import
+                            </label>
+                            <select
+                              id={`scope-${source.id}`}
+                              value={source.scope}
+                              disabled={busy !== null}
+                              onChange={(e) =>
+                                changeScope(source, e.target.value as SourceScope)
+                              }
+                              className="rounded border border-slate-300 px-1 py-0.5"
+                            >
+                              {sourceScopes.map((scope) => (
+                                <option key={scope} value={scope}>
+                                  {sourceScopeLabels[scope]}
+                                </option>
+                              ))}
+                            </select>
+                          </p>
+                        )}
+                        <p className="text-sm text-slate-600">
+                          Last attempted:{' '}
+                          {source.last_attempted_at
+                            ? formatDateTime(source.last_attempted_at)
+                            : 'never'}
+                          {' · '}Last successful:{' '}
+                          {source.last_success_at
+                            ? formatDateTime(source.last_success_at)
+                            : 'never'}
+                          {source.last_success_age_hours !== null &&
+                            ` (${Math.round(source.last_success_age_hours)}h ago)`}
+                          {source.consecutive_failures > 0 &&
+                            ` · ${source.consecutive_failures} failed sync${
+                              source.consecutive_failures === 1 ? '' : 's'
+                            } in a row`}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className={secondaryButtonClass}
+                          onClick={() => toggle(source)}
+                          disabled={busy !== null}
+                        >
+                          {source.enabled ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          type="button"
+                          className={secondaryButtonClass}
+                          onClick={() => syncOne(source)}
+                          disabled={busy !== null || !source.enabled}
+                          aria-label={`Sync ${source.display_name} now`}
+                        >
+                          {busy === source.id ? 'Syncing…' : 'Sync now'}
+                        </button>
+                      </div>
+                    </div>
+                    {lastError(source) && (
+                      <p className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-900">
+                        <span className="font-medium">Last error:</span>{' '}
+                        {lastError(source)}
+                      </p>
+                    )}
+                    {source.latest_run ? (
+                      <RunSummary
+                        run={source.latest_run}
+                        hideError={lastError(source) !== null}
+                      />
+                    ) : (
+                      <p className="text-sm text-slate-600">Not synced yet.</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
-            {source.latest_run ? (
-              <RunSummary run={source.latest_run} />
-            ) : (
-              <p className="text-sm text-slate-600">Not synced yet.</p>
-            )}
-          </li>
-        ))}
-      </ul>
+          ))}
+        </section>
+      </SourceCoverage>
+      <VerifiedDirectSources onSourcesChanged={refreshSources} reloadKey={catalogKey} />
       <AddSourceForm
         onAdded={(source) => {
           setSources((current) => [...(current ?? []), source])

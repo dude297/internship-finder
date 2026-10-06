@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | Milestone 15 on `feature/m15-work-authorization` |
+| **Current Development** | Milestone 19 on `feature/m19-sources-ux` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -86,6 +86,8 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 Per-milestone implementation and release detail: [docs/releases/](docs/releases/).
 
 ## Current Development
+
+Milestone 19, Sources page UX, on branch `feature/m19-sources-ux` (unreleased; frontend only, no migration): coverage summary, health-grouped sources with last error and last success, value-ordered suggestions, clearer empty states. See [CHANGELOG.md](CHANGELOG.md).
 
 Milestone 15, work-authorization eligibility, on branch `feature/m15-work-authorization` (unreleased; [ADR-026](docs/decisions/ADR-026-work-authorization-eligibility.md), migration `c8d2f4a6b0e3`, eligibility rules `v2`). Release step after deploy: `reevaluate`.
 

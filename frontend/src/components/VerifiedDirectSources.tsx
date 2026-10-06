@@ -48,7 +48,11 @@ export function VerifiedDirectSources({
   if (!entries) return null
 
   const tags = [...new Set(entries.flatMap((e) => e.tags))].sort()
-  const visible = entries.filter((e) => !tag || e.tags.includes(tag))
+  // Not yet configured first: that is what to activate next.
+  const visible = entries
+    .filter((e) => !tag || e.tags.includes(tag))
+    .sort((a, b) => Number(a.already_configured) - Number(b.already_configured))
+  const remaining = entries.filter((e) => !e.already_configured).length
 
   function toggleOne(key: string) {
     setSelected((current) => {
@@ -90,6 +94,13 @@ export function VerifiedDirectSources({
       </p>
       {addError && <ErrorMessage>{addError}</ErrorMessage>}
       {addSummary && <SuccessMessage>{addSummary}</SuccessMessage>}
+      {entries.length > 0 && (
+        <p className="text-sm text-slate-600">
+          {remaining === 0
+            ? 'Every verified board is already configured.'
+            : `${remaining} of ${entries.length} not configured yet. Add them in small batches and watch the next sync (docs/operations.md).`}
+        </p>
+      )}
       {entries.length === 0 ? (
         <p className="text-sm text-slate-600">No verified direct sources available.</p>
       ) : (
@@ -112,72 +123,82 @@ export function VerifiedDirectSources({
               ))}
             </select>
           </div>
-          <table className="w-full text-left text-sm">
-            <caption className="sr-only">Verified direct sources</caption>
-            <thead>
-              <tr>
-                <th scope="col" className="py-1">
-                  <span className="sr-only">Select</span>
-                </th>
-                <th scope="col" className="py-1">
-                  Organization
-                </th>
-                <th scope="col" className="py-1">
-                  Provider
-                </th>
-                <th scope="col" className="py-1">
-                  Tags
-                </th>
-                <th scope="col" className="py-1">
-                  Verified
-                </th>
-                <th scope="col" className="py-1">
-                  Links
-                </th>
-                <th scope="col" className="py-1">
-                  Already configured
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((e) => (
-                <tr key={e.key} className="border-t border-slate-100">
-                  <td className="py-1">
-                    <input
-                      type="checkbox"
-                      checked={!e.already_configured && selected.has(e.key)}
-                      disabled={e.already_configured}
-                      onChange={() => toggleOne(e.key)}
-                      aria-label={`Select ${e.key}`}
-                    />
-                  </td>
-                  <td className="py-1" title={e.evidence}>
-                    {e.organization}
-                    <p className="text-xs text-slate-500">{e.evidence}</p>
-                  </td>
-                  <td className="py-1">
-                    {sourceKindLabels[e.kind]}
-                    {e.region === 'eu' && (
-                      <span className="ml-1 rounded bg-slate-100 px-1 text-xs">EU</span>
-                    )}
-                  </td>
-                  <td className="py-1">{e.tags.join(', ')}</td>
-                  <td className="py-1">{formatDate(e.verified_at)}</td>
-                  <td className="py-1">
-                    <a
-                      href={e.careers_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-800 underline"
-                    >
-                      Careers page
-                    </a>
-                  </td>
-                  <td className="py-1">{e.already_configured ? 'Configured' : ''}</td>
+          {visible.length === 0 && (
+            <p className="text-sm text-slate-600">No boards match this tag.</p>
+          )}
+          <div
+            className="overflow-x-auto"
+            role="region"
+            aria-label="Catalog boards (scrollable)"
+            tabIndex={0}
+          >
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">Verified direct sources</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="py-1">
+                    <span className="sr-only">Select</span>
+                  </th>
+                  <th scope="col" className="py-1">
+                    Organization
+                  </th>
+                  <th scope="col" className="py-1">
+                    Provider
+                  </th>
+                  <th scope="col" className="py-1">
+                    Tags
+                  </th>
+                  <th scope="col" className="py-1">
+                    Verified
+                  </th>
+                  <th scope="col" className="py-1">
+                    Links
+                  </th>
+                  <th scope="col" className="py-1">
+                    Already configured
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((e) => (
+                  <tr key={e.key} className="border-t border-slate-100">
+                    <td className="py-1">
+                      <input
+                        type="checkbox"
+                        checked={!e.already_configured && selected.has(e.key)}
+                        disabled={e.already_configured}
+                        onChange={() => toggleOne(e.key)}
+                        aria-label={`Select ${e.key}`}
+                      />
+                    </td>
+                    <td className="py-1" title={e.evidence}>
+                      <span className="font-medium">{e.organization}</span>
+                      <p className="text-xs text-slate-500">{e.evidence}</p>
+                    </td>
+                    <td className="py-1">
+                      {sourceKindLabels[e.kind]}
+                      {e.region === 'eu' && (
+                        <span className="ml-1 rounded bg-slate-100 px-1 text-xs">EU</span>
+                      )}
+                    </td>
+                    <td className="py-1">{e.tags.join(', ')}</td>
+                    <td className="py-1">{formatDate(e.verified_at)}</td>
+                    <td className="py-1">
+                      <a
+                        href={e.careers_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-800 underline"
+                      >
+                        Careers page
+                      </a>
+                    </td>
+                    <td className="py-1">{e.already_configured ? 'Configured' : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
