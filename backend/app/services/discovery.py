@@ -67,6 +67,10 @@ FreshnessFilter = Literal["direct_verified", "needs_review"]
 DiscoveredWithin = Annotated[
     Literal[1, 7], BeforeValidator(lambda v: int(v) if isinstance(v, str) else v)
 ]
+# The provider's posted date within the last N days; NULL posted_at never matches (documented).
+PostedWithin = Annotated[
+    Literal[7, 30, 90], BeforeValidator(lambda v: int(v) if isinstance(v, str) else v)
+]
 # Opportunity + the current evaluation's status, evaluated_at, fit_score, scoring_version,
 # breakdown, pending candidate count (subquery columns, so SQLAlchemy types them as Any).
 Listing = Select[Opportunity, Any, Any, Any, Any, Any, Any]
@@ -92,6 +96,7 @@ class Filters:
     needs_date_verification: bool | None = None
     freshness: FreshnessFilter | None = None
     discovered_within: DiscoveredWithin | None = None
+    posted_within: PostedWithin | None = None
     hidden: HiddenFilter = "exclude"
     # "Today" for deadline filters (ADR-012 §14): the client's local date, or the server's UTC
     # date when omitted. Never read by anything else, so tests can pass it explicitly.
@@ -250,6 +255,9 @@ def _filtered(db: Session, filters: Filters, healthy: Collection[uuid.UUID] = ()
     if filters.discovered_within is not None:
         since = datetime.now(UTC) - timedelta(days=filters.discovered_within)
         stmt = stmt.where(Opportunity.first_seen_at >= since)
+    if filters.posted_within is not None:
+        since = datetime.now(UTC) - timedelta(days=filters.posted_within)
+        stmt = stmt.where(Opportunity.posted_at >= since)
     if filters.deadline_within is not None:
         today = filters.today or datetime.now(UTC).date()
         stmt = stmt.where(

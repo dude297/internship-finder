@@ -102,6 +102,7 @@ def list_opportunities(
     needs_date_verification: bool | None = None,
     freshness: discovery.FreshnessFilter | None = None,
     discovered_within: discovery.DiscoveredWithin | None = None,
+    posted_within: discovery.PostedWithin | None = None,
     hidden: discovery.HiddenFilter = "exclude",
     today: date | None = None,
     sort: discovery.Sort = "newest",
@@ -132,6 +133,7 @@ def list_opportunities(
         needs_date_verification=needs_date_verification,
         freshness=freshness,
         discovered_within=discovered_within,
+        posted_within=posted_within,
         hidden=hidden,
         today=today,
     )

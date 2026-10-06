@@ -5,6 +5,7 @@ import {
   discoveryAddResponseSchema,
   evaluationSchema,
   inboxSchema,
+  dataAgeSchema,
   matchProfileSaveSchema,
   matchProfileSchema,
   opportunityDetailSchema,
@@ -173,6 +174,7 @@ export const api = {
   saveMatchProfile: (body: MatchProfile) =>
     request('PUT', '/profile/match', matchProfileSaveSchema, body),
 
+  getDataAge: () => request('GET', '/status/freshness', dataAgeSchema),
   getInbox: () => request('GET', '/inbox', inboxSchema),
   listOpportunities: (query: OpportunityQuery) => {
     const params = new URLSearchParams()

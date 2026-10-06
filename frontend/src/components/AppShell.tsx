@@ -1,10 +1,50 @@
-import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router'
+import { api } from '../api/client'
+import type { DataAge } from '../api/schemas'
 import { useAuth } from '../auth/context'
 import { ErrorMessage } from './ui'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded px-2 py-1 ${isActive ? 'bg-slate-200 font-medium' : 'hover:bg-slate-100'}`
+
+function age(hours: number): string {
+  return hours >= 48 ? `${Math.floor(hours / 24)} days` : `${Math.round(hours)} hours`
+}
+
+/** Shown only when the newest successful sync is past the source-health window: the scheduled
+ * sync may be paused. Never says postings are closed (ADR-015). Fetch failures show nothing. */
+function DataAgeBanner() {
+  const [dataAge, setDataAge] = useState<DataAge | null>(null)
+  useEffect(() => {
+    let active = true
+    api
+      .getDataAge()
+      .then((d) => active && setDataAge(d))
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [])
+  if (!dataAge?.stale) return null
+  return (
+    <aside
+      aria-label="Data freshness"
+      className="border-b border-amber-300 bg-amber-50 text-amber-900"
+    >
+      <p className="mx-auto max-w-4xl p-2 text-sm">
+        {dataAge.age_hours === null
+          ? 'Sources have never synced successfully'
+          : `Sources last synced ${age(dataAge.age_hours)} ago`}
+        {' — the scheduled sync may be paused. '}
+        <Link to="/sources" className="underline">
+          Check the Sources page
+        </Link>
+        .
+      </p>
+    </aside>
+  )
+}
 
 export function AppShell() {
   const { logout } = useAuth()
@@ -50,6 +90,7 @@ export function AppShell() {
           </button>
         </div>
       </header>
+      <DataAgeBanner />
       <main className="mx-auto max-w-4xl p-4">
         {logoutFailed && (
           <div className="mb-4">

@@ -166,6 +166,13 @@ const inboxSectionSchema = z.object({
   total: z.number().int(),
   items: z.array(inboxItemSchema),
 })
+export const dataAgeSchema = z.object({
+  last_successful_sync_at: z.string().nullable(),
+  age_hours: z.number().nullable(),
+  stale: z.boolean(),
+  reason: z.enum(['ok', 'stale', 'never_synced', 'no_sources']),
+})
+export type DataAge = z.infer<typeof dataAgeSchema>
 export const inboxSchema = z.object({
   today: isoDate,
   new_high_fit: inboxSectionSchema,
@@ -653,6 +660,7 @@ export interface OpportunityQuery {
   sort?: 'recommended' | 'newest' | 'deadline' | 'discovered'
   freshness?: 'direct_verified' | 'needs_review'
   discovered_within?: '1' | '7'
+  posted_within?: '7' | '30' | '90'
   requirements_assessment_status?: string
   requirement_review?: 'pending' | 'stale' | 'needs_review'
   deadline_within?: '7' | '14' | '30'
