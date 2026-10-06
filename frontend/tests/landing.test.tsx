@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { json, loggedIn, loggedOut, mockApi, renderAt } from './helpers'
+import { dashboard, json, loggedIn, loggedOut, mockApi, renderAt } from './helpers'
 
 function submit() {
   fireEvent.change(screen.getByLabelText('Username'), {
@@ -35,11 +35,13 @@ describe('landing page', () => {
   it('sends a signed-in owner to the app', async () => {
     mockApi({
       ...loggedIn,
-      'GET /api/opportunities': () => ({ items: [], total: 0, limit: 50, offset: 0 }),
+      'GET /api/dashboard': () => dashboard(),
     })
     renderAt('/')
     expect(
-      await screen.findByRole('heading', { name: 'Opportunities' }),
+      await screen.findByRole('heading', {
+        name: /^(Hello|Good (morning|afternoon|evening))$/,
+      }),
     ).toBeInTheDocument()
   })
 })

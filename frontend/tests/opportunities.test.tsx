@@ -141,6 +141,8 @@ describe('opportunity detail', () => {
 
   it('tracks the application and changes its status', async () => {
     const application = {
+      id: 'app-1',
+      opportunity_id: 'opp-1',
       status: 'saved',
       submitted_on: null,
       notes: null,
@@ -150,6 +152,7 @@ describe('opportunity detail', () => {
     const calls = mockApi({
       ...loggedIn,
       'GET /api/opportunities/opp-1': () => detail(),
+      'GET /api/applications/app-1/events': () => ({ items: [] }),
       'PUT /api/opportunities/opp-1/application': ({ body }) => ({
         ...application,
         ...(body as object),
@@ -176,7 +179,8 @@ describe('opportunity detail', () => {
         status: 'applied',
         submitted_on: '2041-01-20',
         notes: 'Synthetic note',
-        ...noFollowUp,
+        next_action: null,
+        next_action_due: null, // interview_at untouched, so it isn't sent
       },
     ])
     expect(puts[1].headers['X-CSRF-Token']).toBe('synthetic-csrf')

@@ -79,7 +79,7 @@ export function LoginPage() {
   const checkingSlow = useDelayed(auth.status === 'loading', WAKING_AFTER_MS)
   const submittingSlow = useDelayed(submitting, WAKING_AFTER_MS)
 
-  const from = (location.state as { from?: string } | null)?.from ?? '/opportunities'
+  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
   if (auth.status === 'authenticated') return <Navigate to={from} replace />
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

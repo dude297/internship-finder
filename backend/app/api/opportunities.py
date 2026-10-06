@@ -22,6 +22,7 @@ from app.schemas.opportunity import (
     OpportunityDetail,
     OpportunityPage,
 )
+from app.services import applications as applications_service
 from app.services import discovery
 from app.services import freshness as freshness_service
 from app.services import opportunities as service
@@ -219,7 +220,13 @@ def put_application(
     opportunity_id: uuid.UUID, body: ApplicationBody, db: DbSession
 ) -> ApplicationResponse:
     """Start or update application tracking. Doesn't affect eligibility."""
-    application = service.save_application(db, _load(db, opportunity_id), body)
+    try:
+        application = service.save_application(db, _load(db, opportunity_id), body)
+    except applications_service.StaleApplication as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This application changed elsewhere. Reload to see the latest.",
+        ) from error
     db.commit()
     return ApplicationResponse.model_validate(application)
 

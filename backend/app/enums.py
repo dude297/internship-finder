@@ -147,6 +147,19 @@ class ApplicationStatus(StrEnum):
     WITHDRAWN = "withdrawn"
 
 
+class ApplicationEventType(StrEnum):
+    """ADR-025: the meaningful changes recorded in an application's history."""
+
+    CREATED = "created"
+    STATUS_CHANGED = "status_changed"
+    NEXT_ACTION_CHANGED = "next_action_changed"
+    INTERVIEW_SCHEDULED = "interview_scheduled"
+    INTERVIEW_UPDATED = "interview_updated"
+    NOTE_ADDED = "note_added"
+    DEADLINE_CHANGED = "deadline_changed"  # next_action_due moved or cleared
+    OFFER_RECEIVED = "offer_received"
+
+
 class IngestionSourceKind(StrEnum):
     """Automated source types (ADR-008). Each kind has one adapter with hard-coded hosts."""
 

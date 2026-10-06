@@ -1,7 +1,7 @@
 """ORM models. Importing this package registers every table on `Base.metadata`."""
 
 from app.db.base import Base
-from app.models.application import Application
+from app.models.application import Application, ApplicationEvent
 from app.models.auth import AuthSession, AuthUser
 from app.models.evaluation import EligibilityRuleResult, OpportunityEvaluation
 from app.models.ingestion import IngestionRun, IngestionRunError, IngestionSource
@@ -16,6 +16,7 @@ from app.models.profile import Profile, ProfileFact, ProfileSource, ProfileSourc
 
 __all__ = [
     "Application",
+    "ApplicationEvent",
     "AuthSession",
     "AuthUser",
     "Base",

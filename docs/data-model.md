@@ -2,7 +2,7 @@
 
 ## Current Database State
 
-The schema is created by twelve Alembic migrations (a linear chain; `a3c7e9b1d5f2` is head on the development branch, `b7e3d9f1a2c4` is production) in `backend/alembic/versions/`:
+The schema is created by fourteen Alembic migrations (a linear chain; `c9e2b7a4d1f8` is head on the development branch, `a3c7e9b1d5f2` is production) in `backend/alembic/versions/`:
 
 | Revision | Milestone | Tables |
 |---|---|---|
@@ -17,8 +17,9 @@ The schema is created by twelve Alembic migrations (a linear chain; `a3c7e9b1d5f
 | `a8c3e5f7b9d1` (SmartRecruiters and program registry) | 8 | Registry columns on `opportunities`; `smartrecruiters` / `curated_registry` kinds; seeded registry source (below) |
 | `b7e3d9f1a2c4` (Workable and Pinpoint sources) | 8.1 | CHECK only (below) |
 | `d4f8a1c6e2b9` (owner opportunity decisions) | 9 (development, unreleased) | `opportunities.dismissed_at`, `dismissed_reason` (below) |
-| `a3c7e9b1d5f2` (application follow-up fields) | 10 (development, unreleased) | `applications.next_action`, `next_action_due`, `interview_at` (below) |
+| `a3c7e9b1d5f2` (application follow-up fields) | 10 (released) | `applications.next_action`, `next_action_due`, `interview_at` (below) |
 | `c8d2f4a6b0e3` (profile work-authorization facts) | 15 (development, unreleased) | `profiles`: seven nullable boolean work-authorization columns (below) |
+| `c9e2b7a4d1f8` (application engine v2) | 16 (development, unreleased) | `applications.applied_at`; `application_events` (below) |
 
 The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope), and [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md) (profile source uploads and review). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `b7e3d9f1a2c4` (Milestone 8.1, applied 2026-10-05; release history in [deployment.md](deployment.md) and [CHANGELOG.md](../CHANGELOG.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
@@ -74,7 +75,11 @@ Additive ([ADR-020](decisions/ADR-020-action-inbox.md)): nullable `applications.
 
 ### Milestone 15 migration (`c8d2f4a6b0e3`, unreleased)
 
-Additive ([ADR-026](decisions/ADR-026-work-authorization-eligibility.md)): seven nullable boolean columns on `profiles` (listed under [`profiles`](#profiles)). No backfill and no data change; the M10 backend runs unchanged on the migrated schema (it ignores the columns). Written against head `a3c7e9b1d5f2`; re-chain `down_revision` if another migration lands first. **Downgrade** drops the seven columns (the answers are lost). Verified locally on PostgreSQL 18: base → head, `alembic check`, head → `a3c7e9b1d5f2` → head; `tests/test_migrations.py` covers the round trip.
+Additive ([ADR-026](decisions/ADR-026-work-authorization-eligibility.md)): seven nullable boolean columns on `profiles` (listed under [`profiles`](#profiles)). No backfill and no data change; the M10 backend runs unchanged on the migrated schema (it ignores the columns). Written against head `a3c7e9b1d5f2`; re-chain `down_revision` if another migration lands first. **Downgrade** drops the seven columns (the answers are lost). Verified locally on PostgreSQL 18: base → head, `alembic check`, head → `c8d2f4a6b0e3` → head; `tests/test_migrations.py` covers the round trip.
+
+### Milestone 16 migration (`c9e2b7a4d1f8`, unreleased)
+
+Additive ([ADR-025](decisions/ADR-025-dashboard-and-application-engine-v2.md)): nullable `applications.applied_at` (timestamptz) and the append-only `application_events` table (below). No data change and no back-filled history; the M10 backend runs unchanged on the migrated schema. **Downgrade** drops the table and the column (history and `applied_at` are lost; applications are kept). Verified locally on PostgreSQL: base → head, `alembic check`, head → `c8d2f4a6b0e3` → head with an existing application row surviving; `tests/test_migrations.py` covers the round trip.
 
 ### Conventions
 
@@ -386,8 +391,23 @@ The owner's application tracking. Private runtime data; never read by eligibilit
 | `notes` | text, null | Private notes |
 | `next_action` | varchar(200), null | The owner's next step (Action Inbox, [ADR-020](decisions/ADR-020-action-inbox.md)) |
 | `next_action_due` | date, null | When it is due |
-| `interview_at` | timestamptz, null | Scheduled interview |
+| `interview_at` | timestamptz, null | Scheduled interview (the latest; earlier rounds live in `application_events`) |
+| `applied_at` | timestamptz, null | When it was submitted ([ADR-025](decisions/ADR-025-dashboard-and-application-engine-v2.md)): set once when the status first becomes `applied`; the owner may correct it; a manual value is never overwritten |
 | `created_at`, `updated_at` | timestamptz | |
+
+### `application_events`
+
+Append-only history of meaningful application changes, written in the same transaction as the change ([ADR-025](decisions/ADR-025-dashboard-and-application-engine-v2.md)). The timeline starts when the feature shipped: older applications have no events and none are fabricated. Time zones: `occurred_at` and `applied_at` are instants; `next_action_due` is a plain date.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid, PK | |
+| `application_id` | FK → `applications`, cascade, indexed | Deleting the application deletes its history |
+| `event_type` | enum `created` / `status_changed` / `next_action_changed` / `interview_scheduled` / `interview_updated` / `note_added` / `deadline_changed` / `offer_received` | `deadline_changed` = the follow-up date moved; `note_added` and `next_action_changed` store the text's length only |
+| `occurred_at` | timestamptz | |
+| `from_status`, `to_status` | status enum, null | Set on `created`, `status_changed`, `offer_received` |
+| `metadata_json` | JSONB, NOT NULL | Small, bounded (CHECK ≤ 2000 characters); no private text |
+| `created_at` | timestamptz | |
 
 ## Not Yet Modeled
 

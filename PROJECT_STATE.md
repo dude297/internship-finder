@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | Milestone 19 on `feature/m19-sources-ux` |
+| **Current Development** | Milestone 16 on `feature/m15-dashboard-application-engine` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -47,7 +47,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Action Inbox and follow-ups | **Implemented and deployed** (Milestone 10, [ADR-020](docs/decisions/ADR-020-action-inbox.md), migration `a3c7e9b1d5f2`): `GET /api/inbox`, Inbox page, Next action / due / Interview at on applications |
 | Data-age visibility | **Implemented and deployed** (Milestone 10.1, no migration): stale-sync banner (`/api/status/freshness`, 36 h) and the Posted-within filter |
 | Direct Source Catalog activation | **Activated 2026-10-06**: 19 catalog boards added, 26 → 45 enabled direct sources plus the feed and registry (cap 50); open 1,866 → 2,335, description coverage 45.1% → 56.7%, independent discovery 44.9% → 56.5%, feed-only 1,028 → 1,016. Anduril and SpaceX fail "response too large" (20 MiB cap); Anduril is disabled ([operations.md](docs/operations.md#milestone-9-11-release-train-measurements-2026-10-06)) |
-| Application tracking | **Implemented** |
+| Application tracking | **Implemented**; Milestone 16 (development, unreleased, [ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)) adds history events, `applied_at`, the Applications workspace, and the Dashboard |
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
 | Product implementation | Private single-user app with automated discovery (local and hosted) |
@@ -86,6 +86,10 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 Per-milestone implementation and release detail: [docs/releases/](docs/releases/).
 
 ## Current Development
+
+**Milestone 16, Home Dashboard and Application Engine v2** ([ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)), branch `feature/m15-dashboard-application-engine`, not merged and not in production. Migration `c9e2b7a4d1f8` (additive; production schema stays `a3c7e9b1d5f2` until it ships). Adds `application_events` and `applications.applied_at`, `GET /api/applications`, `GET /api/applications/{id}/events`, `GET /api/dashboard`, and the `/dashboard` and `/applications` pages. History and funnel medians start empty for existing applications.
+
+Live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
 Milestone 19, Sources page UX, on branch `feature/m19-sources-ux` (unreleased; frontend only, no migration): coverage summary, health-grouped sources with last error and last success, value-ordered suggestions, clearer empty states. See [CHANGELOG.md](CHANGELOG.md).
 

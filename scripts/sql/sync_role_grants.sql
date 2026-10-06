@@ -82,3 +82,4 @@ GRANT SELECT ON TABLE profile_facts TO if_sync;
 -- excluded: profile_sources: private resume/transcript metadata
 -- excluded: profile_source_artifacts: private uploaded document contents
 -- excluded: applications: owner's private application notes
+-- excluded: application_events: private application history; the sync never touches applications

@@ -11,7 +11,8 @@ from sqlalchemy import Connection, Engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Base, Profile
+from app.enums import OpportunityType
+from app.models import Base, Opportunity, Profile
 from app.repositories import fit_profile_input
 from tests.conftest import alembic_config
 
@@ -37,7 +38,7 @@ MILESTONE_5_TABLES = MILESTONE_2_TABLES | {
     "opportunity_identifiers",
     "profile_source_artifacts",
 }
-TABLES = MILESTONE_5_TABLES | {"opportunity_requirement_candidates"}
+TABLES = MILESTONE_5_TABLES | {"opportunity_requirement_candidates", "application_events"}
 MILESTONE_5_REVISION = "c5a1e0f3d7b2"
 MILESTONE_6_REVISION = "e6d1a4b8c2f9"
 MILESTONE_7_1_REVISION = "f2a7c9d4e1b3"
@@ -853,6 +854,33 @@ def test_milestone_10_follow_up_columns_round_trip(pg_engine: Engine, pg_url: st
     finally:
         command.upgrade(config, "head")
     assert new <= columns(pg_engine, "applications")
+
+
+def test_application_engine_v2_migration_round_trip(pg_engine: Engine, pg_url: str) -> None:
+    """ADR-025: additive. Down keeps applications (minus applied_at); up again restores both."""
+    config = alembic_config(pg_url)
+    command.downgrade(config, "c8d2f4a6b0e3")
+    assert "application_events" not in tables(pg_engine)
+    assert "applied_at" not in {c["name"] for c in inspect(pg_engine).get_columns("applications")}
+    with Session(pg_engine) as session:  # an old-code-shaped row: no applied_at, no events
+        old = Opportunity(title="Old", organization="Org", opportunity_type=OpportunityType.OTHER)
+        session.add(old)
+        session.flush()
+        session.execute(
+            text(
+                "INSERT INTO applications (id, opportunity_id, status) "
+                "VALUES (gen_random_uuid(), :o, 'applied')"
+            ),
+            {"o": old.id},
+        )
+        session.commit()
+    command.upgrade(config, "head")
+    assert "application_events" in tables(pg_engine)
+    with pg_engine.begin() as connection:
+        row = connection.execute(text("SELECT status, applied_at FROM applications")).one()
+        assert tuple(row) == ("applied", None)  # survived; no history was invented
+        assert connection.scalar(text("SELECT count(*) FROM application_events")) == 0
+        connection.execute(text("DELETE FROM opportunities WHERE title = 'Old'"))
 
 
 WORK_AUTH_COLUMNS = {

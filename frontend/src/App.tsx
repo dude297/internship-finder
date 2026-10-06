@@ -3,6 +3,8 @@ import { useAuth } from './auth/context'
 import { AuthProvider } from './auth/AuthProvider'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppShell } from './components/AppShell'
+import { ApplicationsPage } from './pages/ApplicationsPage'
+import { DashboardPage } from './pages/DashboardPage'
 import { InboxPage } from './pages/InboxPage'
 import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
@@ -20,7 +22,7 @@ import { SourcesPage } from './pages/SourcesPage'
 function Home() {
   const { auth } = useAuth()
   return auth.status === 'authenticated' ? (
-    <Navigate to="/opportunities" replace />
+    <Navigate to="/dashboard" replace />
   ) : (
     <LandingPage />
   )
@@ -34,6 +36,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/applications" element={<ApplicationsPage />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/match" element={<MatchProfilePage />} />
@@ -46,7 +50,7 @@ export default function App() {
             <Route path="/sources" element={<SourcesPage />} />
           </Route>
         </Route>
-        <Route path="*" element={<Navigate to="/opportunities" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AuthProvider>
   )

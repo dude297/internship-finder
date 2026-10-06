@@ -1,12 +1,23 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { json, listPage, loggedIn, loggedOut, mockApi, renderAt } from './helpers'
+import {
+  dashboard,
+  json,
+  listPage,
+  loggedIn,
+  loggedOut,
+  mockApi,
+  renderAt,
+} from './helpers'
 
 function fillLogin(username: string, password: string) {
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: username } })
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } })
   fireEvent.click(screen.getByRole('button', { name: 'Log in' }))
 }
+
+// The post-login landing page is the dashboard (ADR-025).
+const greeting = /^(Hello|Good (morning|afternoon|evening))$/
 
 describe('authentication', () => {
   it('shows a loading state while the session is checked', () => {
@@ -107,21 +118,19 @@ describe('authentication', () => {
         username: 'synthetic-owner',
         csrf_token: 'synthetic-csrf',
       }),
-      'GET /api/opportunities': () => listPage([]),
+      'GET /api/dashboard': () => dashboard(),
     })
     renderAt('/login')
 
     fillLogin('synthetic-owner', 'synthetic-password')
-    expect(
-      await screen.findByRole('heading', { name: 'Opportunities' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: greeting })).toBeInTheDocument()
 
     // The initial, pre-login check finally answers "anonymous": it must not log us out.
     await act(async () => {
       resolveSession(json({ authenticated: false, username: null, csrf_token: null }))
       await Promise.resolve()
     })
-    expect(screen.getByRole('heading', { name: 'Opportunities' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: greeting })).toBeInTheDocument()
     expect(screen.queryByRole('form', { name: 'Log in' })).not.toBeInTheDocument()
   })
 
@@ -318,17 +327,17 @@ describe('authentication', () => {
           username: 'synthetic-owner',
           csrf_token: 'synthetic-csrf',
         }),
-        'GET /api/opportunities': () => listPage([]),
+        'GET /api/dashboard': () => dashboard(),
       })
       renderAt('/login')
       await waitFor(() => expect(sessionChecks).toBe(1))
 
       fillLogin('synthetic-owner', 'synthetic-password')
-      await screen.findByRole('heading', { name: 'Opportunities' })
+      await screen.findByRole('heading', { name: greeting })
       await act(() => vi.advanceTimersByTimeAsync(120_000))
 
       expect(sessionChecks).toBe(1)
-      expect(screen.getByRole('heading', { name: 'Opportunities' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: greeting })).toBeInTheDocument()
     })
   })
 })

@@ -8,6 +8,7 @@ import {
 import { orNull } from '../lib/forms'
 import { applicationStatusLabels } from '../lib/labels'
 import { buttonClass, dangerButtonClass, inputClass } from '../lib/styles'
+import { ApplicationHistory } from './ApplicationHistory'
 import { ErrorMessage, Field, SuccessMessage } from './ui'
 
 // <input type="datetime-local"> works in local time without a zone; the API stores an instant.
@@ -34,9 +35,15 @@ export function ApplicationTracker({
   const [notes, setNotes] = useState(application?.notes ?? '')
   const [nextAction, setNextAction] = useState(application?.next_action ?? '')
   const [nextActionDue, setNextActionDue] = useState(application?.next_action_due ?? '')
-  const [interviewAt, setInterviewAt] = useState(
-    toLocalInput(application?.interview_at ?? null),
-  )
+  const initialInterview = toLocalInput(application?.interview_at ?? null)
+  // null = untouched, so an unedited interview time isn't re-sent (and rounded to the minute).
+  const [interviewEdit, setInterviewEdit] = useState<string | null>(null)
+  const interviewAt = interviewEdit ?? initialInterview
+  const initialApplied = toLocalInput(application?.applied_at ?? null)
+  // null = untouched, so the server's own stamp (set when the status first becomes applied)
+  // is shown and never re-sent.
+  const [appliedEdit, setAppliedEdit] = useState<string | null>(null)
+  const appliedAt = appliedEdit ?? initialApplied
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -47,6 +54,8 @@ export function ApplicationTracker({
     setMessage(null)
     try {
       onChange(await action())
+      setAppliedEdit(null)
+      setInterviewEdit(null)
       setMessage(done)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save.')
@@ -65,7 +74,11 @@ export function ApplicationTracker({
           notes: orNull(notes),
           next_action: orNull(nextAction),
           next_action_due: orNull(nextActionDue),
-          interview_at: toInstant(interviewAt),
+          ...(interviewAt !== initialInterview && {
+            interview_at: toInstant(interviewAt),
+          }),
+          // Only when the owner edited it: a manual value is never rewritten (ADR-025).
+          ...(appliedAt !== initialApplied && { applied_at: toInstant(appliedAt) }),
         }),
       'Application tracking saved.',
     )
@@ -153,7 +166,20 @@ export function ApplicationTracker({
               id="application-interview"
               type="datetime-local"
               value={interviewAt}
-              onChange={(e) => setInterviewAt(e.target.value)}
+              onChange={(e) => setInterviewEdit(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field
+            id="application-applied-at"
+            label="Applied at"
+            hint="Set automatically when you mark it applied; correct it here (your local time)."
+          >
+            <input
+              id="application-applied-at"
+              type="datetime-local"
+              value={appliedAt}
+              onChange={(e) => setAppliedEdit(e.target.value)}
               className={inputClass}
             />
           </Field>
@@ -182,7 +208,8 @@ export function ApplicationTracker({
                   setNotes('')
                   setNextAction('')
                   setNextActionDue('')
-                  setInterviewAt('')
+                  setInterviewEdit(null)
+                  setAppliedEdit(null)
                   return null
                 }, 'Stopped tracking this opportunity.')
               }
@@ -191,6 +218,12 @@ export function ApplicationTracker({
             </button>
           </div>
         </form>
+      )}
+      {application && (
+        <ApplicationHistory
+          applicationId={application.id}
+          refreshKey={application.updated_at}
+        />
       )}
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {message && <SuccessMessage>{message}</SuccessMessage>}

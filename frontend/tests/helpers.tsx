@@ -379,3 +379,54 @@ export const detail = (changes: Record<string, unknown> = {}) => ({
   },
   ...changes,
 })
+
+// ADR-025: an empty home dashboard response (the post-login landing page).
+export const empty = { total: 0, items: [] }
+export const zeroPipeline = {
+  saved: 0,
+  applying: 0,
+  applied: 0,
+  interview: 0,
+  offer: 0,
+  accepted: 0,
+  rejected: 0,
+  withdrawn: 0,
+}
+export const dashboard = (over = {}) => ({
+  today: '2041-03-10',
+  actions: {
+    closing_soon: empty,
+    pending_requirement_review: empty,
+    applications: empty,
+    total: 0,
+  },
+  pipeline: zeroPipeline,
+  high_fit_new: empty,
+  upcoming: [],
+  discovery: {
+    open_opportunities: 0,
+    direct_sources: 0,
+    independent_percent: null,
+    description_percent: null,
+    feed_only: 0,
+    latest_successful_sync_at: null,
+    sync_reason: 'no_sources',
+    sources_needing_attention: 0,
+  },
+  requirements: { awaiting_review: 0, accepted: 0, rejected: 0 },
+  funnel: {
+    applied: 0,
+    interviewed: 0,
+    offered: 0,
+    accepted: 0,
+    rejected_before_interview: 0,
+    withdrawn_before_interview: 0,
+    applied_to_interview_rate: null,
+    interview_to_offer_rate: null,
+    offer_to_accepted_rate: null,
+    median_days_to_interview: null,
+    median_days_to_rejection: null,
+    median_days_to_offer: null,
+  },
+  ...over,
+})

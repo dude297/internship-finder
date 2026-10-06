@@ -12,7 +12,7 @@ A personal, single-user tool for finding internship and research opportunities, 
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | Milestone 19 on `feature/m19-sources-ux` |
+| **Current Development** | Milestone 16 on `feature/m15-dashboard-application-engine` |
 <!-- END GENERATED STATUS -->
 
 ## Stack

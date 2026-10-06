@@ -15,6 +15,8 @@ class InboxItem(BaseModel):
     organization: str
     reason: str
     date: dt.date | None = None
+    # ADR-025: for application items, why (follow_up_overdue, follow_up_due, interview, stale).
+    kind: str | None = None
 
 
 class InboxSection(BaseModel):

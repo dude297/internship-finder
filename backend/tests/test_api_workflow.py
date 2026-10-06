@@ -529,7 +529,7 @@ def test_any_status_transition_is_allowed(client: TestClient, first: str, then: 
 
 @pytest.mark.parametrize(
     "body",
-    [{"status": "ghosted"}, {}, {"status": "saved", "notes": "x" * 10_001}],
+    [{"status": "ghosted"}, {"status": None}, {"status": "saved", "notes": "x" * 10_001}],
 )
 def test_application_validation(client: TestClient, body: dict[str, Any]) -> None:
     url = f"/api/opportunities/{create(client)['id']}/application"

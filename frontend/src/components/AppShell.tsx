@@ -76,8 +76,14 @@ export function AppShell() {
             Personal Internship Finder
           </p>
           <nav aria-label="Main" className="flex flex-wrap gap-1">
+            <NavLink to="/dashboard" className={linkClass}>
+              Dashboard
+            </NavLink>
             <NavLink to="/inbox" className={linkClass}>
               Inbox
+            </NavLink>
+            <NavLink to="/applications" className={linkClass}>
+              Applications
             </NavLink>
             <NavLink to="/profile" className={linkClass}>
               Profile

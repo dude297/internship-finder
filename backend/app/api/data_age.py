@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession
 from app.enums import IngestionSourceKind
@@ -23,6 +24,10 @@ class FreshnessStatus(BaseModel):
 
 @router.get("/freshness")
 def read_data_age(db: DbSession) -> FreshnessStatus:
+    return freshness_status(db)
+
+
+def freshness_status(db: Session) -> FreshnessStatus:
     """Newest successful sync across enabled automated sources (the registry file never syncs);
     `stale` once it is older than the source-health warning window. One statement. Stale never
     means closed (ADR-015): this only says the scheduler may have stopped."""
