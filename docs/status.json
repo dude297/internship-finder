@@ -7,7 +7,7 @@
     "release_record": "docs/releases/2026-10-06-m9-m11.md"
   },
   "development": {
-    "milestone": "16",
-    "branch": "feature/m15-dashboard-application-engine"
+    "milestone": null,
+    "branch": null
   }
 }
