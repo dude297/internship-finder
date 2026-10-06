@@ -12,7 +12,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session, defer, selectinload
 
-from app.enums import ExtractionMethod, OpportunitySourceType
+from app.enums import DismissReason, ExtractionMethod, OpportunitySourceType
+from app.ingestion.pipeline import revert_to_source as restore_source_content
 from app.models import (
     Application,
     Opportunity,
@@ -161,3 +162,31 @@ def save_application(db: Session, opportunity: Opportunity, body: ApplicationBod
             setattr(opportunity.application, name, value)
     db.flush()
     return opportunity.application
+
+
+def dismiss(opportunity: Opportunity, reason: DismissReason | None) -> None:
+    """ADR-017: hide it. Idempotent; a repeat keeps the first time and updates the reason."""
+    if opportunity.dismissed_at is None:
+        opportunity.dismissed_at = datetime.now(UTC)
+    opportunity.dismissed_reason = reason.value if reason else None
+
+
+def undismiss(opportunity: Opportunity) -> None:
+    opportunity.dismissed_at = None
+    opportunity.dismissed_reason = None
+
+
+class RevertRefused(Exception):
+    """The opportunity has nothing to revert to (message is safe to show the owner)."""
+
+
+def revert_to_source(db: Session, opportunity: Opportunity) -> None:
+    """ADR-017: explicit owner action. Refuses manual-only or non-curated opportunities and ones
+    with no active source; otherwise restores source content and re-evaluates (fingerprinted)."""
+    if not any(r.ingestion_source_id for r in opportunity.source_records):
+        raise RevertRefused("This opportunity was created by hand; it has no source to revert to.")
+    if opportunity.manually_curated_at is None:
+        raise RevertRefused("This opportunity has no owner edits to revert.")
+    if not restore_source_content(db, opportunity, datetime.now(UTC)):
+        raise RevertRefused("No active source can restore this opportunity right now.")
+    evaluate_automatically(db, opportunity)

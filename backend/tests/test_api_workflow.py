@@ -280,6 +280,7 @@ def test_list_shows_latest_status_and_tracking(client: TestClient) -> None:
     assert listed["Second Synthetic"]["id"] == second["id"]
     assert listed["Second Synthetic"]["evaluated_at"] is not None
     assert set(listed["First Synthetic"]) == {
+        "dismissed_at",
         "id",
         "title",
         "organization",
