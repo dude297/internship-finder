@@ -23,7 +23,7 @@ docker compose up -d
 cd backend
 python -m venv .venv
 source .venv/bin/activate          # Windows (PowerShell): .venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+pip install -r requirements-dev.lock && pip install --no-deps -e .   # or: pip install -e ".[dev]"
 cp .env.example .env               # DATABASE_URL points at the Compose database
 alembic upgrade head
 python -m app.cli create-owner --username <your-username>   # prompts for the password twice
@@ -54,7 +54,8 @@ These commands have all been run successfully in this repository.
 
 | Check | Backend (in `backend/`, venv active) | Frontend (in `frontend/`) |
 |---|---|---|
-| Install | `pip install -e ".[dev]"` | `npm install` (CI: `npm ci`) |
+| Install | `pip install -r requirements-dev.lock && pip install --no-deps -e .` (locked, as CI; `pip install -e ".[dev]"` also works) | `npm install` (CI: `npm ci`) |
+| Re-lock dependencies | after any `pyproject.toml` dependency change, see [Dependency lock](#dependency-lock) | — |
 | Dev server | `uvicorn app.main:app --reload` | `npm run dev` |
 | Lint | `ruff check .` | `npm run lint` (ESLint) |
 | Format check | `ruff format --check .` | `npm run format:check` (Prettier) |
@@ -72,6 +73,21 @@ These commands have all been run successfully in this repository.
 | Source coverage | `python -m app.cli source-coverage` (read-only; counts only, no network) | — |
 | Performance smoke | `PERF_DATABASE_URL=<disposable db> python scripts/perf_smoke.py` (manual; replaces that database's opportunities, profile, and profile sources; also times a résumé review batch) | — |
 | Source sync performance | `PERF_DATABASE_URL=<disposable db> python scripts/perf_sources.py` (manual; wipes that database's opportunities and non-built-in sources; times 10/25/50-board syncs, discovery, and the list query, [operations.md](operations.md#operational-source-cap)) | — |
+
+### Dependency lock
+
+`backend/requirements.lock` (runtime) and `backend/requirements-dev.lock` (runtime + `dev` extra) pin every backend dependency, transitively, with SHA-256 hashes, resolved for Python 3.12 on every platform (`--universal`, so platform markers such as `uvloop` and `colorama` are kept). `pyproject.toml` still holds the allowed ranges; the locks are what CI, the E2E job, and the scheduled production sync install (`pip install -r <lock>`, then the app with `--no-deps`, so a dependency missing from the lock fails the install or the first import instead of being silently resolved).
+
+Regenerate both after changing a dependency in `pyproject.toml` (uv is a free, MIT/Apache-licensed developer tool; it is not a runtime dependency):
+
+```bash
+cd backend
+pip install uv     # or any uv install
+uv pip compile pyproject.toml --universal --python-version 3.12 --generate-hashes -o requirements.lock
+uv pip compile pyproject.toml --extra dev --universal --python-version 3.12 --generate-hashes -o requirements-dev.lock
+```
+
+Upgrading a pinned version is the same command with `--upgrade-package <name>` (or `--upgrade`). Render still builds with `pip install .` until its build command is switched to the lock ([deployment.md](deployment.md#render-internship-finder-api)).
 
 ### Test boundary: unit vs PostgreSQL vs end-to-end
 

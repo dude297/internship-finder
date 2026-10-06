@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | none |
+| **Current Development** | Milestone 9 on `feature/m9-owner-decisions` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-05
@@ -112,12 +112,12 @@ None open. Fixed during hosted validation (2026-09-29):
 - Every opportunity update replaces every requirement row (new IDs; old rule results keep their text with `requirement_id` NULL).
 - Expired sessions are deleted only when that user logs in again; there's no periodic cleanup.
 - `profiles` is logically a singleton, but only the service enforces that.
-- Backend dependencies are range-pinned in `pyproject.toml` without a lock file, so backend installs aren't fully reproducible. The frontend has `package-lock.json`.
+- Backend dependencies are hash-locked (`backend/requirements.lock`, `requirements-dev.lock`) for CI and the scheduled sync, but Render still builds with `pip install .` (range-resolved) until its build command is switched to the lock (owner action, [deployment.md](docs/deployment.md#render-internship-finder-api)).
 - Nothing re-evaluates when the eligibility rules version changes or when time passes an expected graduation/enrollment date.
 - `work_authorization` requirements are stored but not evaluated (always `needs_verification`, ELIG-REQ-001).
 - Milestone 8: a large SmartRecruiters internship board (> 100 postings needing detail) takes several partial runs to fill, during which Source Health shows a warning and nothing closes; a SmartRecruiters company that renames its identifier closes its postings (the API answers 200 with zero postings for an unknown company); registry dates are only as current as the file (`verify_by` surfaces staleness); extractor v1 proposes a work-authorization suggestion for "citizens or permanent residents" wording (pending only; see the recall analysis); a SmartRecruiters posting whose detail fails on every run keeps its source partial, so removed postings stay open until it resolves; the list's "Needs date verification" uses the client's date and the detail page the server's UTC date (can differ near midnight); an owner edit of a registry opportunity can't clear `verify_by`/typical windows, so the badge can persist after the owner enters a confirmed deadline; `collect` sources load the source's stored raw payloads per run (bounded by the 5,000-posting cap).
 - Milestone 7: a database error while applying an ADR-013 §5 fallback fails that source's whole run (the stored item already normalized once, so unlikely); the abandoned-run threshold (15 min) is shorter than the scheduled workflow timeout (20 min), so keep enabled ATS sources at or under the measured cap of 50.
-- Milestone 6: the requirement extractor favors precision and misses requirements phrased unusually; a deduplicated opportunity whose earliest source has no description (the discovery feed) gets no description and therefore no suggestions from a later board record (resolved by Milestone 7's ATS authority, once released); the scheduled workflow installs range-pinned backend dependencies (no lockfile); nothing alerts when the schedule is auto-disabled after 60 days of repository inactivity (Source Health turns `stale`).
+- Milestone 6: the requirement extractor favors precision and misses requirements phrased unusually; a deduplicated opportunity whose earliest source has no description (the discovery feed) gets no description and therefore no suggestions from a later board record (resolved by Milestone 7's ATS authority, once released); nothing alerts when the schedule is auto-disabled after 60 days of repository inactivity (Source Health turns `stale`).
 
 ## Architecture Constraints
 
@@ -144,7 +144,7 @@ Current (2026-10-05, at the Milestone 8.1 release): migration `b7e3d9f1a2c4`; 1,
 ## Active Opportunity Sources
 
 - Tech Internship Discovery Feed (zshah101 public JSON API) — built in, optional and supplemental; synced with the others.
-- SmartRecruiters companies — 6 in production since 2026-10-05 (Internships only), and the built-in Curated Program Registry (13 programs) ([docs/sources.md](docs/releases/2026-10-05-m8.md)).
+- SmartRecruiters companies — 6 in production since 2026-10-05 (Internships only), and the built-in Curated Program Registry (13 programs in production; the file on `main` adds 11 more for the 2027 cycle, synced on the next registry sync after deploy, [research](docs/research/curated-program-expansion-2027.md)) ([docs/sources.md](docs/releases/2026-10-05-m8.md)).
 - Greenhouse boards, Lever sites, and Ashby boards — 20 in production since 2026-10-04 (suggested from the feed, Internships only; [docs/sources.md](docs/releases/2026-10-04-m7.md)). Synced twice daily with the feed.
 - Workable and Pinpoint: adapters available since Milestone 8.1; none configured. The Direct Source Catalog lists 36 verified boards (3 configured: Waymo, Lyft, Coinbase) for owner-approved activation ([docs/sources.md](docs/sources.md#direct-source-catalog-milestone-81-adr-015-6)).
 - Manual entry.

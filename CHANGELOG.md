@@ -9,9 +9,11 @@ All notable changes to this project are documented here.
 - Milestone 9 (in development): owner decisions on opportunities ([ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md)). Migration `d4f8a1c6e2b9` (two nullable columns).
   - **Hide / Unhide** an opportunity (`PUT`/`DELETE /api/opportunities/{id}/dismissal`): durable across syncs (source records keep updating; never re-imported as new), excluded from the default list and the recommended sort; a **Hidden** filter (`hidden=include|only`) shows them.
   - **Revert to source** (`POST /api/opportunities/{id}/revert-to-source`) for curated imported opportunities: after confirmation, discards edits and recorded requirements and restores the authoritative active source's content, then re-evaluates; refused for manual-only opportunities.
+- Curated Program Registry: 11 programs for the 2027 cycle usable by a high-school senior or incoming first-year (NIH SIP, Navy SEAP, NIST SHIP, Microsoft Discovery, Jane Street WiSE, CRA-WP DREU, Google Summer of Code, NASA Space Apps, BNL User Facility Summer School, NSF REU sites directory, FIRST volunteering); verified dates only where the official page prints them, otherwise typical windows with `verify_by` ([research](docs/research/curated-program-expansion-2027.md)).
 
 ### Changed
 
+- Backend dependency lock: `backend/requirements.lock` and `backend/requirements-dev.lock` (transitive, SHA-256 hashed, universal for Python 3.12, generated with `uv pip compile`). CI, the E2E job, and the scheduled production sync install from them; Render's build command switch is an owner action ([development.md](docs/development.md#dependency-lock)). No product change.
 - Documentation governance: [document authority map](docs/README.md), immutable [release records](docs/releases/) (history moved out of PROJECT_STATE.md, deployment.md, and operations.md), `docs/status.json` with generated status blocks, a Documentation Synchronization Contract (CLAUDE.md, ENGINEERING_GUIDELINES.md §14–§15), and `scripts/check_docs.py` enforced by a new CI `docs` job (links, anchors, status, research headers, changed-path guards). Docs and tooling only; no product change.
 
 ## Milestone 8.1 (released 2026-10-05)

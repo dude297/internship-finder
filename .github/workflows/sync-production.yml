@@ -51,7 +51,7 @@ jobs:
           python-version-file: backend/.python-version
 
       - name: Install backend
-        run: python -m venv .venv && .venv/bin/python -m pip install .
+        run: python -m venv .venv && .venv/bin/python -m pip install -r requirements.lock && .venv/bin/python -m pip install --no-deps .
 
       - name: Check the database secret is configured
         env:

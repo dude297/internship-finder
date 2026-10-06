@@ -86,7 +86,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version-file: backend/.python-version
-      - run: python -m venv .venv && .venv/bin/python -m pip install -e ".[dev]"
+      # Locked, hash-checked dependencies, then the app itself without re-resolving: a
+      # dependency missing from the lock fails here or at import, loudly (docs/development.md).
+      - run: python -m venv .venv && .venv/bin/python -m pip install -r requirements-dev.lock && .venv/bin/python -m pip install --no-deps -e .
       - run: .venv/bin/ruff check .
       - run: .venv/bin/ruff format --check .
       - run: .venv/bin/pyright
@@ -130,7 +132,7 @@ jobs:
           python-version-file: backend/.python-version
       - name: Install backend
         working-directory: backend
-        run: python -m venv .venv && .venv/bin/python -m pip install -e .
+        run: python -m venv .venv && .venv/bin/python -m pip install -r requirements.lock && .venv/bin/python -m pip install --no-deps -e .
       - uses: actions/setup-node@v5
         with:
           node-version-file: frontend/package.json
