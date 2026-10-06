@@ -69,6 +69,8 @@ Never set `INGESTION_FIXTURE_FILE`.
 | Deployment Protection | Standard (Vercel Authentication on everything except the production alias) |
 | Production alias | `internship-finder-pi.vercel.app` |
 
+Every response also carries a strict `Content-Security-Policy` (`default-src 'self'`; scripts only from the app's own bundle; inline styles allowed for React `style` attributes; no framing) and a `Permissions-Policy` denying camera, microphone, geolocation, and payment. The production build has no inline scripts and no `eval` (verified 2026-10-06 by serving `dist/` with these headers in headless Chromium: zero violations). Adding any third-party script, font, or image host requires widening the policy.
+
 Environment variables: **only** `PROXY_SHARED_SECRET`, type Sensitive, **Production** only. Nothing `VITE_*`, no API base URL, no database credentials. The `/api` route in `vercel.json` sends it as `X-IF-Proxy-Secret`, sets `Cache-Control: no-store`, and runs before the SPA fallback.
 
 ### Proxy secret
@@ -126,6 +128,7 @@ Run after every deploy; record the results in the release record.
 | Unknown API path | `GET /api/nope` | JSON `404`, not `index.html` |
 | SPA deep links | `/login`, `/sources`, `/opportunities` | `200` |
 | Headers | `/api/*` | `Cache-Control: no-store`, `X-Frame-Options: DENY` |
+| Content Security Policy | Any page, browser devtools console | `Content-Security-Policy` and `Permissions-Policy` headers present; no "Refused to …" CSP violations while using login, Opportunities, Sources |
 | Bundle | Current `index-*.js` | Contains the release's new UI strings; no Render hostname |
 | Schema | `alembic current`, `alembic check` | At head, clean |
 | Service layer (no owner password in the release shell) | The release's read-only smoke script against Neon in a `READ ONLY` transaction | All checks pass |
