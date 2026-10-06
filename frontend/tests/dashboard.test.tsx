@@ -184,11 +184,12 @@ describe('applications page', () => {
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({
         status: 'interview',
+        expected_updated_at: '2041-03-01T12:00:00Z',
       }),
     )
   })
 
-  it('quick action marks an application applied with a status-only patch', async () => {
+  it('quick action marks an application applied, guarded by updated_at', async () => {
     const calls = mockApi({
       ...loggedIn,
       'GET /api/applications': () => page([item({ status: 'applying' })]),
@@ -197,7 +198,10 @@ describe('applications page', () => {
     renderAt('/applications')
     fireEvent.click(await screen.findByRole('button', { name: 'Mark applied' }))
     await waitFor(() =>
-      expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ status: 'applied' }),
+      expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({
+        status: 'applied',
+        expected_updated_at: '2041-03-01T12:00:00Z',
+      }),
     )
   })
 
@@ -228,5 +232,75 @@ describe('applications page', () => {
     mockApi({ ...loggedIn, 'GET /api/applications': () => page([]) })
     renderAt('/applications')
     expect(await screen.findByText(/No applications match/)).toBeInTheDocument()
+  })
+})
+
+describe('stale-write safety', () => {
+  const row = {
+    id: 'app-1',
+    opportunity_id: 'opp-1',
+    title: 'Example Internship',
+    organization: 'Example Org',
+    application_url: null,
+    application_deadline: null,
+    status: 'interview',
+    next_action: null,
+    next_action_due: null,
+    interview_at: null,
+    applied_at: null,
+    updated_at: '2041-03-01T12:00:00.123456Z',
+    created_at: '2041-03-01T12:00:00Z',
+    follow_up_overdue: false,
+  }
+
+  it('a follow-up omits the status and sends the updated_at it saw', async () => {
+    const calls = mockApi({
+      ...loggedIn,
+      'GET /api/applications': () => ({ today: '2041-03-10', total: 1, items: [row] }),
+      'PUT /api/opportunities/opp-1/application': () => ({}),
+    })
+    renderAt('/applications')
+    fireEvent.click(await screen.findByRole('button', { name: 'Schedule follow-up' }))
+    fireEvent.change(screen.getByLabelText('Follow-up date'), {
+      target: { value: '2041-03-14' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save follow-up' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true))
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({
+      next_action: 'Follow up',
+      next_action_due: '2041-03-14',
+      expected_updated_at: '2041-03-01T12:00:00.123456Z', // the raw string: no ms truncation
+    })
+  })
+
+  it('shows the reload message when the application changed elsewhere', async () => {
+    mockApi({
+      ...loggedIn,
+      'GET /api/applications': () => ({ today: '2041-03-10', total: 1, items: [row] }),
+      'PUT /api/opportunities/opp-1/application': () =>
+        new Response(
+          JSON.stringify({
+            detail: 'This application changed elsewhere. Reload to see the latest.',
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        ),
+    })
+    renderAt('/applications')
+    fireEvent.change(await screen.findByLabelText('Stage for Example Internship'), {
+      target: { value: 'rejected' },
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/changed elsewhere/)
+  })
+
+  it('says when the list is truncated and sends the time-zone offset', async () => {
+    const calls = mockApi({
+      ...loggedIn,
+      'GET /api/applications': () => ({ today: '2041-03-10', total: 350, items: [row] }),
+    })
+    renderAt('/applications')
+    expect(await screen.findByText(/Showing 1 of 350/)).toBeInTheDocument()
+    expect(calls.find((c) => c.path.startsWith('/api/applications'))?.path).toMatch(
+      /tz_offset_minutes=-?\d+/,
+    )
   })
 })

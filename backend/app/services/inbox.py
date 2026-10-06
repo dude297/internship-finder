@@ -48,6 +48,12 @@ def _midnight(day: date) -> datetime:
     return datetime.combine(day, time.min, tzinfo=UTC)
 
 
+def local_midnight(day: date, offset_minutes: int = 0) -> datetime:
+    """The instant the client's local `day` begins. `offset_minutes` is the browser's
+    `getTimezoneOffset()` (UTC minus local, so UTC-8 is +480); 0 means UTC."""
+    return _midnight(day) + timedelta(minutes=offset_minutes)
+
+
 def _section(db: Session, stmt: Any) -> list[Any]:
     """Rows of `stmt` limited to SECTION_LIMIT; the last column is the section's full count."""
     return list(db.execute(stmt.limit(SECTION_LIMIT)).all())
@@ -225,9 +231,10 @@ def _applications(
         ApplicationStatus.SAVED,
         ApplicationStatus.APPLYING,
     ),
+    offset_minutes: int = 0,
 ) -> InboxSection:
-    interview_from = _midnight(today)
-    interview_to = _midnight(today + timedelta(days=INTERVIEW_DAYS + 1))
+    interview_from = local_midnight(today, offset_minutes)
+    interview_to = local_midnight(today + timedelta(days=INTERVIEW_DAYS + 1), offset_minutes)
     stale_before = _midnight(today - timedelta(days=STALE_DAYS))
     due = Application.next_action_due <= today + timedelta(days=ACTION_DUE_DAYS)
     interview = (Application.interview_at >= interview_from) & (
@@ -258,8 +265,9 @@ def _applications(
             reason, when = f"{what} (due {a.next_action_due})", a.next_action_due
             kind = "follow_up_overdue" if a.next_action_due < today else "follow_up_due"
         elif a.interview_at is not None and interview_from <= a.interview_at < interview_to:
-            reason = f"Interview {a.interview_at:%Y-%m-%d %H:%M} UTC"
-            when = a.interview_at.date()
+            local = a.interview_at.astimezone(UTC) - timedelta(minutes=offset_minutes)
+            reason = f"Interview {local:%Y-%m-%d %H:%M} {'local' if offset_minutes else 'UTC'}"
+            when = local.date()
             kind = "interview"
         else:
             reason = f"No update since {a.updated_at.date()} ({a.status.value})"

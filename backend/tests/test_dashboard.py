@@ -233,3 +233,81 @@ def test_legacy_application_counts_in_pipeline_and_funnel(client: TestClient, db
     assert body["pipeline"]["applied"] == 1
     assert body["funnel"]["applied"] == 1
     assert body["funnel"]["median_days_to_interview"] is None
+
+
+def dash(client: TestClient, offset: int = 0) -> dict[str, Any]:
+    response = client.get(
+        "/api/dashboard", params={"today": TODAY.isoformat(), "tz_offset_minutes": offset}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_interview_days_follow_the_clients_time_zone(client: TestClient) -> None:
+    # 19:00 on 2041-03-10 in UTC-8 is already 03:00 on the 11th in UTC.
+    track(client, make(client, "Evening"), status="interview", interview_at="2041-03-11T03:00:00Z")
+    # 06:00 on 2041-03-10 in UTC+10 is still the 9th in UTC.
+    track(client, make(client, "Morning"), status="interview", interview_at="2041-03-09T20:00:00Z")
+
+    def days_by_title(offset: int) -> dict[str, str]:
+        return {
+            t["title"]: t["date"]
+            for t in dash(client, offset)["upcoming"]
+            if t["kind"] == "interview"
+        }
+
+    assert days_by_title(480)["Evening"] == "2041-03-10"  # US Pacific
+    assert days_by_title(0)["Evening"] == "2041-03-11"
+    assert days_by_title(-600)["Morning"] == "2041-03-10"  # UTC+10: today in local time
+    assert "Morning" not in days_by_title(0)  # before UTC midnight of `today`
+    # The list's "interview upcoming" starts at the client's local midnight as well.
+    pacific = client.get(
+        "/api/applications",
+        params={"today": TODAY.isoformat(), "tz_offset_minutes": 480, "interview_upcoming": True},
+    ).json()["items"]
+    assert [i["title"] for i in pacific] == ["Evening"]  # Morning (Mar 9 UTC) is before 08:00Z
+    assert client.get("/api/dashboard", params={"tz_offset_minutes": 900}).status_code == 422
+
+
+def test_timeline_kinds_do_not_starve_each_other(client: TestClient) -> None:
+    for n in range(dashboard_service.UPCOMING_LIMIT * 2 + 1):
+        track(client, make(client, f"Due{n}"), status="applied", next_action_due=days(1))
+    track(
+        client,
+        make(client, "Tomorrow call"),
+        status="interview",
+        interview_at="2041-03-11T09:00:00Z",
+    )
+    track(client, make(client, "Far call"), status="interview", interview_at="2041-06-20T09:00:00Z")
+    titles = [t["title"] for t in dash(client)["upcoming"]]
+    assert "Tomorrow call" in titles
+    assert "Far call" not in titles
+
+
+def test_past_verify_by_dates_do_not_take_timeline_slots(client: TestClient, db: Session) -> None:
+    put_profile(client)
+    for n in range(12):
+        create(client, title=f"Past{n}", application_deadline=None)
+    db.execute(update(Opportunity).values(verify_by=TODAY - timedelta(days=3)))
+    db.commit()
+    create(client, title="Soon", application_deadline=days(2))
+    assert [t["title"] for t in dash(client)["upcoming"]] == ["Soon"]
+
+
+def test_funnel_stages_are_nested_and_rates_never_exceed_one(client: TestClient) -> None:
+    for n in range(6):  # accepted with no recorded history at all
+        track(client, make(client, f"A{n}"), status="accepted")
+    funnel = dash(client)["funnel"]
+    assert funnel["applied"] >= funnel["interviewed"] >= funnel["offered"] >= funnel["accepted"]
+    assert funnel["accepted"] == 6 and funnel["applied"] == 6
+    for key in ("applied_to_interview_rate", "interview_to_offer_rate", "offer_to_accepted_rate"):
+        assert funnel[key] == 1.0
+
+
+def test_actions_total_counts_an_opportunity_once(client: TestClient) -> None:
+    oid = create(client, title="Both", application_deadline=days(2))["id"]
+    track(client, oid, status="applied", next_action_due=days(-1))  # also a follow-up action
+    body = dash(client)
+    assert body["actions"]["closing_soon"]["total"] == 1
+    assert body["actions"]["applications"]["total"] == 1
+    assert body["actions"]["total"] == 1

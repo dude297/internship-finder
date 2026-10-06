@@ -6,7 +6,7 @@ is written in the caller's transaction on meaningful changes only. "Overdue" is 
 """
 
 import uuid
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 from sqlalchemy import case, func, select
@@ -20,6 +20,7 @@ from app.schemas.application import (
     ApplicationListItem,
     ApplicationPage,
 )
+from app.services.inbox import local_midnight
 
 ACTIVE = (Status.SAVED, Status.APPLYING, Status.APPLIED, Status.INTERVIEW, Status.OFFER)
 DONE = (Status.ACCEPTED, Status.REJECTED, Status.WITHDRAWN)
@@ -37,6 +38,10 @@ def _iso(value: date | datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+class StaleApplication(Exception):
+    """The client's copy is out of date (changed or deleted elsewhere): reload, don't overwrite."""
+
+
 def save_application(
     db: Session, opportunity: Opportunity, body: ApplicationBody, now: datetime | None = None
 ) -> Application:
@@ -48,7 +53,13 @@ def save_application(
     now = now or datetime.now(UTC)
     app = opportunity.application
     creating = app is None
+    expected = body.expected_updated_at
+    if expected is not None and (app is None or app.updated_at != _aware(expected)):
+        raise StaleApplication
     sent = body.model_dump() if creating else body.model_dump(exclude_unset=True)
+    sent.pop("expected_updated_at", None)
+    if creating and sent.get("status") is None:
+        sent["status"] = Status.SAVED
     for key in ("interview_at", "applied_at"):
         if key in sent:
             sent[key] = _aware(sent[key])
@@ -80,7 +91,9 @@ def save_application(
     if app.status is Status.OFFER and old["status"] is not Status.OFFER:
         events.append((EventType.OFFER_RECEIVED, old["status"], app.status, {}))
     if app.next_action != old["next_action"]:
-        events.append((EventType.NEXT_ACTION_CHANGED, None, None, {"next_action": app.next_action}))
+        events.append(
+            (EventType.NEXT_ACTION_CHANGED, None, None, {"length": len(app.next_action or "")})
+        )
     if app.next_action_due != old["next_action_due"]:
         meta = {"from": _iso(old["next_action_due"]), "to": _iso(app.next_action_due)}
         events.append((EventType.DEADLINE_CHANGED, None, None, meta))
@@ -147,6 +160,7 @@ def list_applications(
     sort: Sort = "next_action",
     limit: int = 100,
     offset: int = 0,
+    tz_offset_minutes: int = 0,
 ) -> ApplicationPage:
     active = Application.status.not_in(DONE)
     overdue = (Application.next_action_due < today) & active
@@ -166,7 +180,7 @@ def list_applications(
     if follow_up_overdue:
         stmt = stmt.where(overdue)
     if interview_upcoming:
-        start = datetime.combine(today, time.min, tzinfo=UTC)
+        start = local_midnight(today, tz_offset_minutes)
         stmt = stmt.where(active, Application.interview_at >= start)
     rows: list[Any] = list(db.execute(_order(stmt, sort).limit(limit).offset(offset)).all())
     items = [

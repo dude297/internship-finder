@@ -13,7 +13,7 @@ function detail(event: ApplicationEvent): string | null {
   const m = event.metadata_json
   switch (event.event_type) {
     case 'next_action_changed':
-      return typeof m.next_action === 'string' ? m.next_action : 'cleared'
+      return m.length === 0 ? 'cleared' : null
     case 'deadline_changed':
       return typeof m.to === 'string' ? `due ${m.to}` : 'cleared'
     case 'interview_scheduled':

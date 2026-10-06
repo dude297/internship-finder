@@ -62,7 +62,22 @@ export const actionLabels: Record<QuickAction, string> = {
 export function patchFor(
   action: QuickAction,
   current: ApplicationStatus,
-  detail: { followUpDate?: string; followUpText?: string; interviewAt?: string } = {},
+  detail: {
+    followUpDate?: string
+    followUpText?: string
+    interviewAt?: string
+    updatedAt?: string
+  } = {},
+): ApplicationInput {
+  const patch = basePatch(action, current, detail)
+  // Guard against a stale screen: the server refuses if the application changed meanwhile.
+  return detail.updatedAt ? { ...patch, expected_updated_at: detail.updatedAt } : patch
+}
+
+function basePatch(
+  action: QuickAction,
+  _current: ApplicationStatus,
+  detail: { followUpDate?: string; followUpText?: string; interviewAt?: string },
 ): ApplicationInput {
   switch (action) {
     case 'start':
@@ -70,8 +85,8 @@ export function patchFor(
     case 'applied':
       return { status: 'applied' }
     case 'follow_up':
+      // No status: a follow-up must never resend (and so revert) a stale one.
       return {
-        status: current,
         next_action: detail.followUpText?.trim() || 'Follow up',
         next_action_due: detail.followUpDate ?? null,
       }

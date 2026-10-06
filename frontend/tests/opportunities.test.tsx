@@ -179,7 +179,8 @@ describe('opportunity detail', () => {
         status: 'applied',
         submitted_on: '2041-01-20',
         notes: 'Synthetic note',
-        ...noFollowUp,
+        next_action: null,
+        next_action_due: null, // interview_at untouched, so it isn't sent
       },
     ])
     expect(puts[1].headers['X-CSRF-Token']).toBe('synthetic-csrf')

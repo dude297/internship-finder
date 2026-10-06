@@ -35,9 +35,10 @@ export function ApplicationTracker({
   const [notes, setNotes] = useState(application?.notes ?? '')
   const [nextAction, setNextAction] = useState(application?.next_action ?? '')
   const [nextActionDue, setNextActionDue] = useState(application?.next_action_due ?? '')
-  const [interviewAt, setInterviewAt] = useState(
-    toLocalInput(application?.interview_at ?? null),
-  )
+  const initialInterview = toLocalInput(application?.interview_at ?? null)
+  // null = untouched, so an unedited interview time isn't re-sent (and rounded to the minute).
+  const [interviewEdit, setInterviewEdit] = useState<string | null>(null)
+  const interviewAt = interviewEdit ?? initialInterview
   const initialApplied = toLocalInput(application?.applied_at ?? null)
   // null = untouched, so the server's own stamp (set when the status first becomes applied)
   // is shown and never re-sent.
@@ -54,6 +55,7 @@ export function ApplicationTracker({
     try {
       onChange(await action())
       setAppliedEdit(null)
+      setInterviewEdit(null)
       setMessage(done)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save.')
@@ -72,7 +74,9 @@ export function ApplicationTracker({
           notes: orNull(notes),
           next_action: orNull(nextAction),
           next_action_due: orNull(nextActionDue),
-          interview_at: toInstant(interviewAt),
+          ...(interviewAt !== initialInterview && {
+            interview_at: toInstant(interviewAt),
+          }),
           // Only when the owner edited it: a manual value is never rewritten (ADR-025).
           ...(appliedAt !== initialApplied && { applied_at: toInstant(appliedAt) }),
         }),
@@ -162,7 +166,7 @@ export function ApplicationTracker({
               id="application-interview"
               type="datetime-local"
               value={interviewAt}
-              onChange={(e) => setInterviewAt(e.target.value)}
+              onChange={(e) => setInterviewEdit(e.target.value)}
               className={inputClass}
             />
           </Field>
@@ -204,7 +208,7 @@ export function ApplicationTracker({
                   setNotes('')
                   setNextAction('')
                   setNextActionDue('')
-                  setInterviewAt('')
+                  setInterviewEdit(null)
                   setAppliedEdit(null)
                   return null
                 }, 'Stopped tracking this opportunity.')

@@ -14,11 +14,13 @@ export function ApplicationQuickActions({
   opportunityId,
   status,
   applicationUrl,
+  updatedAt,
   onSaved,
 }: {
   opportunityId: string
   status: ApplicationStatus
   applicationUrl?: string | null
+  updatedAt?: string
   onSaved: () => void
 }) {
   const [open, setOpen] = useState<'follow_up' | 'interview' | null>(null)
@@ -38,6 +40,7 @@ export function ApplicationQuickActions({
           followUpDate: date,
           followUpText: text,
           interviewAt: at,
+          updatedAt,
         }),
       )
       setOpen(null)

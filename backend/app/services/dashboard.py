@@ -21,6 +21,7 @@ from app.enums import (
     ApplicationStatus,
     EligibilityStatus,
     FactReviewState,
+    OpportunitySourceType,
 )
 from app.models import (
     Application,
@@ -28,6 +29,7 @@ from app.models import (
     Opportunity,
     OpportunityEvaluation,
     OpportunityRequirementCandidate,
+    OpportunitySourceRecord,
 )
 from app.repositories import get_profile
 from app.schemas.dashboard import (
@@ -40,9 +42,9 @@ from app.schemas.dashboard import (
     RequirementHealth,
     TimelineItem,
 )
-from app.schemas.inbox import InboxItem
 from app.services import inbox
 from app.services.discovery import is_open
+from app.services.inbox import local_midnight
 from app.services.source_discovery import _coverage_row  # pyright: ignore[reportPrivateUsage]
 
 HIGH_FIT_LIMIT = 5
@@ -56,6 +58,9 @@ _E = ApplicationEventType
 _DONE = (_S.ACCEPTED, _S.REJECTED, _S.WITHDRAWN)
 _SEEN_INTERVIEW = (_S.INTERVIEW, _S.OFFER, _S.ACCEPTED)
 _SEEN_APPLIED = (_S.APPLIED, *_SEEN_INTERVIEW)
+# The dashboard's stale rule (ADR-025 §6) differs from the Inbox's saved/applying on purpose: a
+# submitted application nobody has answered is the thing worth surfacing here.
+_STALE_STATUSES = (_S.APPLYING, _S.APPLIED)
 
 
 def _midnight(day: date) -> datetime:
@@ -133,34 +138,66 @@ def _high_fit(db: Session, today: date) -> HighFit:
     return HighFit(total=rows[0][3] if rows else 0, items=items)
 
 
-def _inbox_timeline(items: list[InboxItem], kind: str, today: date) -> list[TimelineItem]:
-    return [
-        TimelineItem(kind=kind, id=i.id, title=i.title, organization=i.organization, date=i.date)
-        for i in items
-        if i.date is not None and i.date >= today
-    ]
-
-
-def _application_timeline(db: Session, today: date) -> list[TimelineItem]:
+def _timeline_queries(db: Session, today: date, offset: int) -> list[TimelineItem]:
+    """Four independent, window-bounded, individually limited queries (a crowded kind can't
+    starve another, and past-due rows never take a slot): deadlines, verify-by dates, follow-up
+    due dates, interviews. Merged and sorted by the caller."""
     end = today + timedelta(days=UPCOMING_DAYS)
-    rows = db.execute(
+    visible = Opportunity.dismissed_at.is_(None)
+    items: list[TimelineItem] = []
+
+    for o in db.scalars(
+        select(Opportunity)
+        .where(visible, is_open, Opportunity.application_deadline.between(today, end))
+        .order_by(Opportunity.application_deadline, Opportunity.id)
+        .limit(UPCOMING_LIMIT)
+    ):
+        if o.application_deadline is not None:
+            items.append(
+                TimelineItem(
+                    kind="deadline",
+                    id=o.id,
+                    title=o.title,
+                    organization=o.organization,
+                    date=o.application_deadline,
+                )
+            )
+
+    registry = (
+        select(OpportunitySourceRecord.id)
+        .where(
+            OpportunitySourceRecord.opportunity_id == Opportunity.id,
+            OpportunitySourceRecord.source_type == OpportunitySourceType.CURATED_REGISTRY,
+            OpportunitySourceRecord.is_active,
+        )
+        .exists()
+    )
+    for o in db.scalars(
+        select(Opportunity)
+        .where(visible, registry, Opportunity.verify_by.between(today, end))
+        .order_by(Opportunity.verify_by, Opportunity.id)
+        .limit(UPCOMING_LIMIT)
+    ):
+        if o.verify_by is not None:
+            items.append(
+                TimelineItem(
+                    kind="verify_by",
+                    id=o.id,
+                    title=o.title,
+                    organization=o.organization,
+                    date=o.verify_by,
+                )
+            )
+
+    active = Application.status.not_in(_DONE)
+    for a, o in db.execute(
         select(Application, Opportunity)
         .join(Opportunity, Opportunity.id == Application.opportunity_id)
-        .where(
-            Opportunity.dismissed_at.is_(None),
-            Application.status.not_in(_DONE),
-            or_(
-                Application.next_action_due.between(today, end),
-                (Application.interview_at >= _midnight(today))
-                & (Application.interview_at < _midnight(end + timedelta(days=1))),
-            ),
-        )
-        .order_by(Application.next_action_due.nulls_last(), Application.id)
-        .limit(UPCOMING_LIMIT * 2)
-    ).all()
-    items: list[TimelineItem] = []
-    for a, o in rows:
-        if a.next_action_due is not None and today <= a.next_action_due <= end:
+        .where(visible, active, Application.next_action_due.between(today, end))
+        .order_by(Application.next_action_due, Application.id)
+        .limit(UPCOMING_LIMIT)
+    ).tuples():
+        if a.next_action_due is not None:
             items.append(
                 TimelineItem(
                     kind="follow_up",
@@ -170,14 +207,25 @@ def _application_timeline(db: Session, today: date) -> list[TimelineItem]:
                     date=a.next_action_due,
                 )
             )
-        if a.interview_at is not None and _midnight(today) <= a.interview_at:
+
+    start = local_midnight(today, offset)
+    stop = local_midnight(end + timedelta(days=1), offset)
+    for a, o in db.execute(
+        select(Application, Opportunity)
+        .join(Opportunity, Opportunity.id == Application.opportunity_id)
+        .where(visible, active, Application.interview_at >= start, Application.interview_at < stop)
+        .order_by(Application.interview_at, Application.id)
+        .limit(UPCOMING_LIMIT)
+    ).tuples():
+        if a.interview_at is not None:
             items.append(
                 TimelineItem(
                     kind="interview",
                     id=o.id,
                     title=o.title,
                     organization=o.organization,
-                    date=a.interview_at.astimezone(UTC).date(),
+                    # The client's local calendar day, so the date matches the rendered time.
+                    date=(a.interview_at.astimezone(UTC) - timedelta(minutes=offset)).date(),
                     at=a.interview_at,
                 )
             )
@@ -228,21 +276,28 @@ def _funnel(db: Session) -> Funnel:
     seen_offer = func.coalesce(
         func.bool_or(ApplicationEvent.event_type == _E.OFFER_RECEIVED), False
     )
+    # Later stages imply earlier ones (accepted => offered => interviewed => applied), so a
+    # stage count never exceeds the one before it and no rate can pass 1.
+    offered_x = Application.status.in_((_S.OFFER, _S.ACCEPTED)) | seen_offer
+    interviewed_x = (
+        Application.interview_at.is_not(None)
+        | Application.status.in_(_SEEN_INTERVIEW)
+        | seen_interview
+        | offered_x
+    )
+    applied_x = (
+        Application.applied_at.is_not(None)
+        | Application.status.in_(_SEEN_APPLIED)
+        | seen_applied
+        | interviewed_x
+    )
     flags = (
         select(
             Application.id.label("id"),
             Application.status.label("status"),
-            (
-                Application.applied_at.is_not(None)
-                | Application.status.in_(_SEEN_APPLIED)
-                | seen_applied
-            ).label("applied"),
-            (
-                Application.interview_at.is_not(None)
-                | Application.status.in_(_SEEN_INTERVIEW)
-                | seen_interview
-            ).label("interviewed"),
-            (Application.status.in_((_S.OFFER, _S.ACCEPTED)) | seen_offer).label("offered"),
+            applied_x.label("applied"),
+            interviewed_x.label("interviewed"),
+            offered_x.label("offered"),
         )
         .select_from(Application)
         .outerjoin(ApplicationEvent, ApplicationEvent.application_id == Application.id)
@@ -304,32 +359,42 @@ def _funnel(db: Session) -> Funnel:
 
 
 def build_dashboard(
-    db: Session, today: date | None = None, now: datetime | None = None
+    db: Session,
+    today: date | None = None,
+    now: datetime | None = None,
+    tz_offset_minutes: int = 0,
 ) -> DashboardResponse:
-    """The one place the dashboard reads the clock (server UTC); tests pass `today`/`now`."""
+    """The one place the dashboard reads the clock (server UTC); tests pass `today`/`now`.
+    `tz_offset_minutes` is the browser's `getTimezoneOffset()`: it places the client's local
+    "today" on the timeline and in the interview window."""
     now = now or datetime.now(UTC)
     today = today or now.date()
     closing = inbox._closing_soon(db, today)  # pyright: ignore[reportPrivateUsage]
     pending = inbox._pending_review(db)  # pyright: ignore[reportPrivateUsage]
     apps = inbox._applications(  # pyright: ignore[reportPrivateUsage]
-        db, today, stale_statuses=(_S.APPLYING, _S.APPLIED)
+        db, today, stale_statuses=_STALE_STATUSES, offset_minutes=tz_offset_minutes
     )
-    verify = inbox._program_verify_by(db, today)  # pyright: ignore[reportPrivateUsage]
-    upcoming = [
-        *_inbox_timeline(closing.items, "deadline", today),
-        *_inbox_timeline(verify.items, "verify_by", today),
-        *_application_timeline(db, today),
-    ]
+    upcoming = _timeline_queries(db, today, tz_offset_minutes)
     upcoming.sort(
-        key=lambda t: (t.at or _midnight(t.date), t.kind, str(t.id))  # chronological, stable
+        key=lambda t: (  # chronological, stable
+            # Date-only items are due *by* that day, so they sort at its end, after any
+            # interview on the same day.
+            t.at or local_midnight(t.date + timedelta(days=1), tz_offset_minutes),
+            t.kind,
+            str(t.id),
+        )
     )
+    # One opportunity in several sections is one thing to do: subtract the overlap among the
+    # shown items (exact unless a section is truncated at its 10-item limit).
+    shown = [i.id for sec in (closing, pending, apps) for i in sec.items]
+    total = closing.total + pending.total + apps.total - (len(shown) - len(set(shown)))
     return DashboardResponse(
         today=today,
         actions=Actions(
             closing_soon=closing,
             pending_requirement_review=pending,
             applications=apps,
-            total=closing.total + pending.total + apps.total,
+            total=total,
         ),
         pipeline=_pipeline(db),
         high_fit_new=_high_fit(db, today),

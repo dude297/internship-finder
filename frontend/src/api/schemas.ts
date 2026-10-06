@@ -159,19 +159,20 @@ export const applicationSchema = z.object({
   updated_at: z.string(),
 })
 export type Application = z.infer<typeof applicationSchema>
-/** The API requires `status` and merges only the fields sent, so quick actions send a few. */
-export type ApplicationInput = Pick<Application, 'status'> &
-  Partial<
-    Pick<
-      Application,
-      | 'submitted_on'
-      | 'notes'
-      | 'next_action'
-      | 'next_action_due'
-      | 'interview_at'
-      | 'applied_at'
-    >
+/** The API merges only the fields sent (an omitted `status` is unchanged), so quick actions send
+ * a few. `expected_updated_at` is the stale-write guard: the `updated_at` the screen last saw. */
+export type ApplicationInput = Partial<
+  Pick<
+    Application,
+    | 'status'
+    | 'submitted_on'
+    | 'notes'
+    | 'next_action'
+    | 'next_action_due'
+    | 'interview_at'
+    | 'applied_at'
   >
+> & { expected_updated_at?: string }
 
 // ADR-025: application history, newest last. Empty for applications older than the feature.
 export const applicationEventTypes = [

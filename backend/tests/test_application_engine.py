@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.enums import ApplicationStatus as S
@@ -250,3 +250,45 @@ def test_list_filters_sorts_and_overdue(client: TestClient) -> None:
     page = client.get("/api/applications", params={"limit": 1, "offset": 9}).json()
     assert page["items"] == [] and page["total"] == 4
     assert client.get("/api/applications", params={"stage": "nope"}).status_code == 422
+
+
+# --- Stale-write protection ------------------------------------------------------------------
+
+
+def put(client: TestClient, oid: str, body: dict[str, Any]) -> Any:
+    return client.put(f"/api/opportunities/{oid}/application", json=body)
+
+
+def test_status_is_optional_and_omitted_means_unchanged(client: TestClient) -> None:
+    oid = make(client)
+    assert put(client, oid, {}).json()["status"] == "saved"  # new application defaults to saved
+    track(client, oid, status="interview")
+    response = put(client, oid, {"next_action": "Thank-you note", "next_action_due": days(2)})
+    assert response.status_code == 200 and response.json()["status"] == "interview"
+    assert put(client, oid, {"status": None}).status_code == 422
+
+
+def test_expected_updated_at_guards_against_stale_screens(client: TestClient, db: Session) -> None:
+    oid = make(client)
+    first = put(client, oid, {"status": "applying"}).json()
+    ok = put(client, oid, {"status": "applied", "expected_updated_at": first["updated_at"]})
+    assert ok.status_code == 200
+    # One test transaction shares a single now(); make the row's updated_at move as it would.
+    db.execute(update(Application).values(updated_at=at(TODAY)))
+    db.commit()
+    stale = put(client, oid, {"status": "rejected", "expected_updated_at": first["updated_at"]})
+    assert stale.status_code == 409 and "Reload" in stale.json()["detail"]
+    assert client.get(f"/api/opportunities/{oid}").json()["application"]["status"] == "applied"
+    # Deleted elsewhere: a stage change must not recreate it.
+    assert client.delete(f"/api/opportunities/{oid}/application").status_code == 204
+    gone = put(client, oid, {"status": "applied", "expected_updated_at": ok.json()["updated_at"]})
+    assert gone.status_code == 409
+    assert client.get(f"/api/opportunities/{oid}").json()["application"] is None
+
+
+def test_next_action_event_never_stores_the_text(client: TestClient) -> None:
+    oid = make(client)
+    app = track(client, oid, status="applied", next_action="Call Dana at the lab")
+    found = [e for e in events(client, app["id"]) if e["event_type"] == "next_action_changed"]
+    assert found and found[0]["metadata_json"] == {"length": len("Call Dana at the lab")}
+    assert "Dana" not in str(events(client, app["id"]))

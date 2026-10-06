@@ -19,7 +19,7 @@ The schema is created by fourteen Alembic migrations (a linear chain; `c9e2b7a4d
 | `d4f8a1c6e2b9` (owner opportunity decisions) | 9 (development, unreleased) | `opportunities.dismissed_at`, `dismissed_reason` (below) |
 | `a3c7e9b1d5f2` (application follow-up fields) | 10 (released) | `applications.next_action`, `next_action_due`, `interview_at` (below) |
 | `c8d2f4a6b0e3` (profile work-authorization facts) | 15 (development, unreleased) | `profiles`: seven nullable boolean work-authorization columns (below) |
-| `c9e2b7a4d1f8` (application engine v2) | 15 (development, unreleased) | `applications.applied_at`; `application_events` (below) |
+| `c9e2b7a4d1f8` (application engine v2) | 16 (development, unreleased) | `applications.applied_at`; `application_events` (below) |
 
 The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope), and [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md) (profile source uploads and review). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `b7e3d9f1a2c4` (Milestone 8.1, applied 2026-10-05; release history in [deployment.md](deployment.md) and [CHANGELOG.md](../CHANGELOG.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
@@ -77,7 +77,7 @@ Additive ([ADR-020](decisions/ADR-020-action-inbox.md)): nullable `applications.
 
 Additive ([ADR-026](decisions/ADR-026-work-authorization-eligibility.md)): seven nullable boolean columns on `profiles` (listed under [`profiles`](#profiles)). No backfill and no data change; the M10 backend runs unchanged on the migrated schema (it ignores the columns). Written against head `a3c7e9b1d5f2`; re-chain `down_revision` if another migration lands first. **Downgrade** drops the seven columns (the answers are lost). Verified locally on PostgreSQL 18: base → head, `alembic check`, head → `c8d2f4a6b0e3` → head; `tests/test_migrations.py` covers the round trip.
 
-### Milestone 15 migration (`c9e2b7a4d1f8`, unreleased)
+### Milestone 16 migration (`c9e2b7a4d1f8`, unreleased)
 
 Additive ([ADR-025](decisions/ADR-025-dashboard-and-application-engine-v2.md)): nullable `applications.applied_at` (timestamptz) and the append-only `application_events` table (below). No data change and no back-filled history; the M10 backend runs unchanged on the migrated schema. **Downgrade** drops the table and the column (history and `applied_at` are lost; applications are kept). Verified locally on PostgreSQL: base → head, `alembic check`, head → `c8d2f4a6b0e3` → head with an existing application row surviving; `tests/test_migrations.py` covers the round trip.
 
@@ -403,7 +403,7 @@ Append-only history of meaningful application changes, written in the same trans
 |---|---|---|
 | `id` | uuid, PK | |
 | `application_id` | FK → `applications`, cascade, indexed | Deleting the application deletes its history |
-| `event_type` | enum `created` / `status_changed` / `next_action_changed` / `interview_scheduled` / `interview_updated` / `note_added` / `deadline_changed` / `offer_received` | `deadline_changed` = the follow-up date moved; `note_added` stores the note's length only |
+| `event_type` | enum `created` / `status_changed` / `next_action_changed` / `interview_scheduled` / `interview_updated` / `note_added` / `deadline_changed` / `offer_received` | `deadline_changed` = the follow-up date moved; `note_added` and `next_action_changed` store the text's length only |
 | `occurred_at` | timestamptz | |
 | `from_status`, `to_status` | status enum, null | Set on `created`, `status_changed`, `offer_received` |
 | `metadata_json` | JSONB, NOT NULL | Small, bounded (CHECK ≤ 2000 characters); no private text |

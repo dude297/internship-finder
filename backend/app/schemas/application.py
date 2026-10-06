@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.enums import ApplicationEventType, ApplicationStatus
 from app.schemas.common import BlankToNone
@@ -11,7 +11,8 @@ from app.schemas.common import BlankToNone
 class ApplicationBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    status: ApplicationStatus
+    # Omitted = unchanged (a new application defaults to `saved`); an explicit null is refused.
+    status: ApplicationStatus | None = None
     submitted_on: date | None = None
     notes: Annotated[Annotated[str, Field(max_length=10_000)] | None, BlankToNone] = None
     next_action: Annotated[Annotated[str, Field(max_length=200)] | None, BlankToNone] = None
@@ -20,6 +21,15 @@ class ApplicationBody(BaseModel):
     # ADR-025: set automatically the first time status becomes `applied`; the owner may correct
     # it, and a manual value is never overwritten.
     applied_at: datetime | None = None
+    # Optimistic guard (ADR-025): the `updated_at` the client last saw. A different value, or no
+    # application at all, is a 409, so a stale screen can't overwrite or recreate it.
+    expected_updated_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _status_not_null(self) -> "ApplicationBody":
+        if "status" in self.model_fields_set and self.status is None:
+            raise ValueError("status can't be null.")
+        return self
 
     @field_validator("applied_at")
     @classmethod
@@ -31,11 +41,18 @@ class ApplicationBody(BaseModel):
         return value
 
 
-class ApplicationResponse(ApplicationBody):
+class ApplicationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     opportunity_id: uuid.UUID
+    status: ApplicationStatus
+    submitted_on: date | None
+    notes: str | None
+    next_action: str | None
+    next_action_due: date | None
+    interview_at: datetime | None
+    applied_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

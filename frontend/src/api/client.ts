@@ -183,10 +183,18 @@ export const api = {
 
   getDataAge: () => request('GET', '/status/freshness', dataAgeSchema),
   getInbox: () => request('GET', '/inbox', inboxSchema),
+  // The browser's UTC-minus-local offset, so "today" and interview days are the owner's local ones.
   getDashboard: (today: string) =>
-    request('GET', `/dashboard?today=${encodeURIComponent(today)}`, dashboardSchema),
+    request(
+      'GET',
+      `/dashboard?today=${encodeURIComponent(today)}&tz_offset_minutes=${new Date().getTimezoneOffset()}`,
+      dashboardSchema,
+    ),
   listApplications: (query: ApplicationQuery) => {
-    const params = new URLSearchParams({ today: query.today })
+    const params = new URLSearchParams({
+      today: query.today,
+      tz_offset_minutes: String(new Date().getTimezoneOffset()),
+    })
     query.stage?.forEach((s) => params.append('stage', s))
     if (query.company?.trim()) params.set('company', query.company.trim())
     if (query.due_soon) params.set('due_soon', 'true')

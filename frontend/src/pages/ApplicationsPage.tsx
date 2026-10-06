@@ -36,7 +36,10 @@ function ApplicationCard({
   async function changeStage(status: ApplicationStatus) {
     setError(null)
     try {
-      await api.saveApplication(item.opportunity_id, { status })
+      await api.saveApplication(item.opportunity_id, {
+        status,
+        expected_updated_at: item.updated_at,
+      })
       onChanged()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save.')
@@ -44,7 +47,7 @@ function ApplicationCard({
   }
 
   return (
-    <li className="space-y-2 py-3">
+    <li className="min-w-0 space-y-2 break-words py-3">
       <div className="flex flex-wrap items-baseline gap-x-2">
         <Link
           to={`/opportunities/${item.opportunity_id}`}
@@ -89,6 +92,7 @@ function ApplicationCard({
         opportunityId={item.opportunity_id}
         status={item.status}
         applicationUrl={item.application_url}
+        updatedAt={item.updated_at}
         onSaved={onChanged}
       />
       {error && (
@@ -272,6 +276,11 @@ export function ApplicationsPage() {
       {!items && !error && (
         <p role="status" aria-live="polite">
           Loading…
+        </p>
+      )}
+      {items && total > items.length && (
+        <p className="text-sm text-amber-800">
+          Showing {items.length} of {total}. Narrow the filters to see the rest.
         </p>
       )}
       {items && items.length === 0 && (

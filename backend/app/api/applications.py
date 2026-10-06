@@ -27,6 +27,7 @@ def list_applications(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
     today: date | None = None,
+    tz_offset_minutes: Annotated[int, Query(ge=-840, le=840)] = 0,
 ) -> ApplicationPage:
     """ADR-025: the owner's applications for the List and Pipeline views. `today` (the client's
     local date) drives due-soon and overdue; it defaults to the server's UTC date."""
@@ -45,6 +46,7 @@ def list_applications(
         sort=sort,
         limit=limit,
         offset=offset,
+        tz_offset_minutes=tz_offset_minutes,
     )
 
 
