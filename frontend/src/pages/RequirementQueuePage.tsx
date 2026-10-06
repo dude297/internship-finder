@@ -113,7 +113,7 @@ function Card({
   return (
     <section
       aria-label="Current suggestion"
-      className="space-y-3 rounded border border-slate-300 p-4"
+      className="min-w-0 space-y-3 break-words rounded border border-slate-300 p-4"
     >
       <p className="text-sm text-slate-600">
         Suggestion {position} of {count} loaded{skipped ? ' · skipped' : ''}
@@ -568,7 +568,7 @@ export function RequirementQueuePage() {
       <p className="text-sm text-slate-700" aria-label="Keyboard shortcuts">
         Shortcuts:{' '}
         {shortcutHints.map((h) => (
-          <span key={h.key} className="mr-3 whitespace-nowrap">
+          <span key={h.key} className="mr-3 inline-block whitespace-nowrap">
             <kbd className="rounded border border-slate-300 bg-slate-50 px-1">
               {h.key}
             </kbd>{' '}
@@ -705,7 +705,7 @@ export function RequirementQueuePage() {
                     setEditRow(null)
                     setCursor(index)
                   }}
-                  className="text-left"
+                  className="min-w-0 break-words text-left"
                   aria-current={index === cursor ? 'true' : undefined}
                 >
                   <span className="font-medium">

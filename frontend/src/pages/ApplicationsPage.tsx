@@ -177,7 +177,7 @@ export function ApplicationsPage() {
       role="tab"
       aria-selected={view === v}
       onClick={() => setView(v)}
-      className={`rounded px-3 py-1 ${view === v ? 'bg-slate-900 text-white' : 'border border-slate-300 hover:bg-slate-100'}`}
+      className={`min-h-9 rounded px-3 py-1 ${view === v ? 'bg-slate-900 text-white' : 'border border-slate-300 hover:bg-slate-100'}`}
     >
       {label}
     </button>
@@ -188,15 +188,15 @@ export function ApplicationsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Applications</h1>
         <p className="text-sm text-slate-600">
-          Your workspace for tracked applications. See the{' '}
+          Your workspace for tracked applications. For the big picture see the{' '}
           <Link to="/dashboard" className="underline">
-            overview
-          </Link>{' '}
-          and the{' '}
+            Dashboard
+          </Link>
+          ; for what needs doing next, the{' '}
           <Link to="/inbox" className="underline">
-            action queue
-          </Link>{' '}
-          are separate pages.
+            Inbox
+          </Link>
+          .
         </p>
       </div>
 
@@ -320,7 +320,7 @@ export function ApplicationsPage() {
               </button>
             ))}
           </div>
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {pipelineColumns.map((c) => {
               const column = items.filter((i) => c.statuses.includes(i.status))
               return (

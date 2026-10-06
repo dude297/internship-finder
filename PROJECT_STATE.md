@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | Milestone 19 on `feature/m19-ux-freshness-inbox` |
+| **Current Development** | Milestone 19 on `feature/m19-ux-a11y` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -102,8 +102,10 @@ Merged to `main`, **not deployed**. Production still runs Milestone 11 (`cf1ad43
 | 19 UX (Freshness wording and Inbox dates) | [#63](https://github.com/dude297/internship-finder/pull/63) | none | plain-language freshness labels, one authoritative Freshness section, human Inbox dates, two-row list badges; not merged |
 | 18 Discovery quality | [#61](https://github.com/dude297/internship-finder/pull/61) | none | dashboard New supply: new today/this week, independent, by provider, 8-week trend ([ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md) amendment) |
 | 17 Pre-release hardening | [#64](https://github.com/dude297/internship-finder/pull/64) | none | security review of `cf1ad43..main`: safe to release |
+| 19 UX (accessibility, responsive, nav) | [#62](https://github.com/dude297/internship-finder/pull/62) | none | axe-core e2e on every route (0 serious/critical), overflow checks at 5 widths, nav on its own row, pipeline columns |
 
 
+| 19 UX final pass (a11y, responsive) | this PR (`feature/m19-ux-a11y`) | none | axe e2e on every route, nav and pipeline layout; unmerged |
 
 Deferred: Milestone 16 in the original roadmap (Target Company Intelligence; the feed Pareto and catalog cover gap finding for now) and Milestone 18 beyond what the dashboard shows. Merged but **not activated**: the encrypted weekly backup ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 

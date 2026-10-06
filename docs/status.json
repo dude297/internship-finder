@@ -8,6 +8,6 @@
   },
   "development": {
     "milestone": "19",
-    "branch": "feature/m19-ux-freshness-inbox"
+    "branch": "feature/m19-ux-a11y"
   }
 }
