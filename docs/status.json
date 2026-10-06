@@ -8,6 +8,6 @@
   },
   "development": {
     "milestone": "9",
-    "branch": "feature/m9-eligibility-reevaluation"
+    "branch": "feature/m9-owner-decisions"
   }
 }

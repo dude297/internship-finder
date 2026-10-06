@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | Milestone 9 on `feature/m9-eligibility-reevaluation` |
+| **Current Development** | Milestone 9 on `feature/m9-owner-decisions` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-05
@@ -82,9 +82,13 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-Merged to `main`, not released: Milestone 8.2 "True Feed Independence" ([PR #30](https://github.com/dude297/internship-finder/pull/30), [ADR-016](docs/decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)), not released: `retire-source` (safe, atomic, dry-run-default source retirement through the normal closure and fallback path) and `bootstrap-sources` (feed-free setup of a new installation). No migration. Retiring the production feed is an owner-gated step not yet run.
+Merged to `main` since the Milestone 8.1 release, **not deployed** (Render/Vercel still run `203a562`; the scheduled sync runs `main`'s code against Neon, so ingestion-side changes apply there):
 
-`feature/m9-eligibility-reevaluation` (unreleased, not merged): evaluation staleness ([ADR-018](docs/decisions/ADR-018-evaluation-staleness.md)). `python -m app.cli reevaluate [--dry-run]` runs the batched catalog pass as a release step after a rules/scoring version bump (both versions were already fingerprinted; tests now prove it). No fingerprint changed. Work-authorization evaluation is design only ([note](docs/research/work-authorization-eligibility-design.md)).
+- Milestone 8.2 "True Feed Independence" ([PR #30](https://github.com/dude297/internship-finder/pull/30), [ADR-016](docs/decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)): `retire-source` (dry-run-default, atomic retirement through the normal closure and fallback path) and `bootstrap-sources` (feed-free setup of a new installation); the scheduled sync skips a source disabled mid-run. No migration. Retiring the production feed is an owner decision, not planned.
+- Eligibility re-evaluation ([PR #29](https://github.com/dude297/internship-finder/pull/29), [ADR-018](docs/decisions/ADR-018-evaluation-staleness.md)): `python -m app.cli reevaluate [--dry-run]` as a release step after a rules/scoring version bump. Work-authorization evaluation is design only ([note](docs/research/work-authorization-eligibility-design.md)).
+- Data: Curated Program Registry 13 → 24 ([PR #31](https://github.com/dude297/internship-finder/pull/31)); Direct Source Catalog 36 → 64 ([PR #32](https://github.com/dude297/internship-finder/pull/32)); backend dependency lock ([PR #28](https://github.com/dude297/internship-finder/pull/28)).
+
+In review, release-gated: Milestone 9 owner decisions, Hide/Unhide and Revert to source ([PR #33](https://github.com/dude297/internship-finder/pull/33), ADR-017 on that branch; migration `d4f8a1c6e2b9`). Merging it requires migrating Neon in the same window, because the scheduled sync refuses a schema behind `main`.
 
 ## Known Operational Issues
 
