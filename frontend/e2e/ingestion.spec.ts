@@ -8,6 +8,7 @@ import { ingestionFixtureFile, owner } from './env.ts'
 const run = Date.now()
 const board = `examplerobotics${run}`
 const boardUrl = `https://boards-api.greenhouse.io/v1/boards/${board}/jobs?content=true`
+const listUrl = `https://boards-api.greenhouse.io/v1/boards/${board}/jobs`
 const titleA = `Synthetic Robotics Intern ${run}`
 const titleB = `Synthetic Controls Intern ${run}`
 const staffTitle = `Synthetic Staff Engineer ${run}`
@@ -32,7 +33,11 @@ function job(id: number, title: string) {
 function publish(...jobs: ReturnType<typeof job>[]) {
   writeFileSync(
     ingestionFixtureFile,
-    JSON.stringify({ [boardUrl]: { jobs, meta: { total: jobs.length } } }),
+    // The adapter reads the content-free list first (ADR-022), then the content list.
+    JSON.stringify({
+      [boardUrl]: { jobs, meta: { total: jobs.length } },
+      [listUrl]: { jobs, meta: { total: jobs.length } },
+    }),
     'utf-8',
   )
 }
@@ -176,13 +181,15 @@ test('board scope: switching to all postings imports the full-time posting, and 
     ...job(id, title),
     absolute_url: `https://job-boards.greenhouse.io/${scopeBoard}/jobs/${id}`,
   })
+  const scopeBody = {
+    jobs: [post(11, `Synthetic Scope Intern ${run}`), post(12, staffTitle)],
+    meta: { total: 2 },
+  }
   writeFileSync(
     ingestionFixtureFile,
     JSON.stringify({
-      [scopeUrl]: {
-        jobs: [post(11, `Synthetic Scope Intern ${run}`), post(12, staffTitle)],
-        meta: { total: 2 },
-      },
+      [scopeUrl]: scopeBody,
+      [scopeUrl.replace('?content=true', '')]: scopeBody,
     }),
     'utf-8',
   )

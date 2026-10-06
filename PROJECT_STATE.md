@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | none |
+| **Current Development** | Milestone 12 on `feature/m12-large-board-greenhouse` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -87,13 +87,15 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-None on `main`. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+**Milestone 12, large-response source architecture** (branch `feature/m12-large-board-greenhouse`, open PR; [ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md), Proposed): Greenhouse boards over 500 jobs (Anduril, SpaceX) are read from the content-free list plus per-job detail for internship titles, under fixed bounds; the 20 MiB per-request cap is unchanged. Not released: production still has Anduril disabled and SpaceX unactivated until a release and an owner-approved activation. No migration.
 
-Open pull requests: none.
+On `main`: nothing else in development. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+
+Open pull requests: the Milestone 12 branch above (not merged).
 
 ## Known Operational Issues
 
-- Direct sources: 45 enabled (cap 50). `greenhouse:andurilindustries` fails ("The source response is too large": 2,457 jobs exceed the 20 MiB `MAX_BYTES` cap) and is disabled; SpaceX fails the same way in a disposable-database test. Both stay in the catalog as failing entries until a size-tolerant adapter exists.
+- Direct sources: 45 enabled (cap 50). `greenhouse:andurilindustries` fails ("The source response is too large": 2,457 jobs exceed the 20 MiB `MAX_BYTES` cap) and is disabled; SpaceX fails the same way in a disposable-database test. A size-tolerant Greenhouse adapter is implemented on the Milestone 12 branch ([ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md)) but not released; both stay failing/unactivated in production until it ships.
 - 558 requirement suggestions are pending (all `requirements-rules` v3 after the 2026-10-06 rescan), none accepted. The deemed-export false positives (21) are gone; review the rest one by one.
 - Backup is not active: no backup beyond Neon Free's short restore window until the owner installs `age`, generates a key pair into private storage, sets `BACKUP_AGE_RECIPIENT`, dispatches once, and runs a restore drill.
 - Render still builds with `pip install .`; switch the build command to `pip install -r requirements.lock && pip install --no-deps .` (owner action).

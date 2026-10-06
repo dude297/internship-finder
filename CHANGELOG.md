@@ -4,7 +4,13 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- Large-board Greenhouse sources ([ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md), Proposed; Milestone 12, no migration): the adapter reads the ~2.5 MB content-free `/jobs` list as the complete snapshot (`meta.total` checked, duplicate ids and more than 10,000 jobs refused), then `?content=true` for boards of at most 500 jobs as before, or one `/jobs/<id>` request per internship-titled job for larger ones (Anduril, SpaceX), with fixed bounds (100 detail requests, 1 MiB per detail, 8 MiB and 120 s of detail per run, stop after 5 consecutive failures) and reuse of stored text while `updated_at` is unchanged. A detail that isn't fetched never closes or fails anything. The 20 MiB per-request cap is unchanged; `fetch_json` gains a tightening-only `max_bytes` and `Fetched.size`. Tests: a compression bomb is capped on decoded bytes.
+
+### Changed
+
+- Greenhouse boards now make two requests (list, then content) and no longer use conditional requests, so an unchanged board syncs to `success` rather than `no_change`.
 
 ## Milestones 8.2, 9, 10, 10.1, and 11 (released 2026-10-06)
 

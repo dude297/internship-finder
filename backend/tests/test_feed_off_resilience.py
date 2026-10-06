@@ -79,6 +79,7 @@ class Web:
             return httpx2.Response(200, json=feed(*self.feed_jobs))
         bodies = {
             GREENHOUSE_URL: greenhouse_board(*self.gh),
+            GREENHOUSE_URL.removesuffix("?content=true"): greenhouse_board(*self.gh),
             ASHBY_URL: ashby_board(ashby_job()),
             WORKABLE_URL: {"name": "Example Robotics", "jobs": [workable_job()]},
             PINPOINT_URL: pinpoint_payload(pinpoint_posting()),
