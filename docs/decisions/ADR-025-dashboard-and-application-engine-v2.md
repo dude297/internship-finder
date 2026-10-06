@@ -86,3 +86,15 @@ Day-only fields (`next_action_due`, `application_deadline`, `submitted_on`, `ver
 - Negative: history and medians start empty for existing applications. `interview_at` still holds one value on the row. The dashboard reads the clock from the browser's `today`, so two devices in different zones can disagree near midnight. The pipeline grid is cramped at tablet width (it scrolls into stage tabs on mobile).
 - Rollback: the migration is additive; rolling the app back without a downgrade leaves the column and table unused. `alembic downgrade c8d2f4a6b0e3` drops them (history lost).
 - Not built: editing or deleting individual events, reminders or notifications, compensation, `started_at`, stricter transitions, drag-and-drop, saved filters, charts beyond the bar.
+
+
+## Amendment: new-supply metrics in `discovery` (Milestone 18)
+
+No migration; everything derives from `opportunities.first_seen_at`, `opportunity_source_records` (active, `source_type`) and `ingestion_sources.kind`. Two extra aggregate statements (total 22, was 20), still constant in catalog size. `discovery` gains `new_today`, `new_this_week`, `new_this_week_independent`, `new_this_week_by_provider` (top 5), `weekly_new` (8 weeks, oldest first) and `closing_soon` (the Inbox's count, no extra statement).
+
+- **Windows** use the client's `today` and `tz_offset_minutes` (section 7): "today" is the client's local day, "this week" its last 7 local days including today, the trend 8 such windows.
+- **Hidden** opportunities are excluded from every new number (as from actions and the timeline); un-hiding brings them back.
+- **Open vs discovered.** Today, week, independent and provider counts are open opportunities only. The weekly trend counts everything first seen that week, **including opportunities that have since closed**, because `first_seen_at` never moves; it measures supply arriving, not what is still open.
+- **Independent** means an active automated record whose `source_type` is not `public_feed` (an ATS, career page or registry record). Hand-managed opportunities are not counted, which differs from the coverage percentage's "independent" on purpose: this asks what the owner's own sources found.
+- **By provider** groups active records by ingestion source kind (`community_feed`, `greenhouse`, ...). An opportunity with records from two kinds counts under each, so rows can sum above `new_this_week`.
+- **Descriptions gained this week is not shown.** No history of when a description appeared is stored (`updated_at` moves on any edit), so it cannot be derived honestly; the existing description percentage stays. Adding it would need a stored event, which is a migration and out of scope here.

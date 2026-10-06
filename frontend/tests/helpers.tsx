@@ -412,6 +412,12 @@ export const dashboard = (over = {}) => ({
     latest_successful_sync_at: null,
     sync_reason: 'no_sources',
     sources_needing_attention: 0,
+    new_today: 0,
+    new_this_week: 0,
+    new_this_week_independent: 0,
+    new_this_week_by_provider: [],
+    weekly_new: [{ week_start: '2041-03-04', count: 0 }],
+    closing_soon: 0,
   },
   requirements: { awaiting_review: 0, accepted: 0, rejected: 0 },
   funnel: {

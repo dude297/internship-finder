@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from statistics import median
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from app.enums import (
 from app.models import (
     Application,
     ApplicationEvent,
+    IngestionSource,
     Opportunity,
     OpportunityEvaluation,
     OpportunityRequirementCandidate,
@@ -39,16 +40,23 @@ from app.schemas.dashboard import (
     Funnel,
     HighFit,
     HighFitItem,
+    ProviderNew,
     RequirementHealth,
     TimelineItem,
+    WeekNew,
 )
 from app.services import inbox
 from app.services.discovery import is_open
 from app.services.inbox import local_midnight
-from app.services.source_discovery import _coverage_row  # pyright: ignore[reportPrivateUsage]
+from app.services.source_discovery import (
+    _active_non_feed,  # pyright: ignore[reportPrivateUsage]
+    _coverage_row,  # pyright: ignore[reportPrivateUsage]
+)
 
 HIGH_FIT_LIMIT = 5
 UPCOMING_LIMIT = 8
+TREND_WEEKS = 8  # discovery trend length
+PROVIDER_LIMIT = 5
 UPCOMING_DAYS = 14  # follow-ups, interviews, deadlines, and verify-by dates this far ahead
 MIN_RATE_DENOMINATOR = 5  # a rate over fewer applications than this is noise: null
 MIN_MEDIAN_SAMPLES = 3  # a median over fewer timed applications than this is noise: null
@@ -246,9 +254,60 @@ def _requirements(db: Session) -> RequirementHealth:
     )
 
 
-def _discovery(db: Session, now: datetime) -> DiscoveryHealth:
+def _supply(
+    db: Session, today: date, offset: int
+) -> tuple[int, int, int, list[ProviderNew], list[WeekNew]]:
+    """New-supply counts from first_seen_at (two statements). Hidden opportunities are excluded
+    throughout. "Week" = the client's last 7 local days including today; the trend is 8 such
+    weeks, oldest first. The trend counts everything first seen that week, even if it has since
+    closed (first_seen_at never moves); today/week/independent/provider count only open ones."""
+    stop = local_midnight(today + timedelta(days=1), offset)
+    seen = Opportunity.first_seen_at
+    weeks = [
+        (today - timedelta(days=6 + 7 * k), k) for k in range(TREND_WEEKS - 1, -1, -1)
+    ]  # oldest first; k weeks back
+
+    def in_week(k: int) -> Any:
+        return seen.between(
+            local_midnight(today - timedelta(days=6 + 7 * k), offset),
+            stop - timedelta(days=7 * k) - timedelta(microseconds=1),
+        )
+
+    visible = Opportunity.dismissed_at.is_(None)
+    this_week = in_week(0)
+    row = db.execute(
+        select(
+            func.count().filter(is_open, seen >= local_midnight(today, offset), seen < stop),
+            func.count().filter(is_open, this_week),
+            func.count().filter(is_open, this_week, exists(_active_non_feed)),
+            *(func.count().filter(in_week(k)) for _, k in weeks),
+        ).where(visible, seen < stop, seen >= local_midnight(weeks[0][0], offset))
+    ).one()
+    by_provider = db.execute(
+        select(IngestionSource.kind, func.count(func.distinct(Opportunity.id)))
+        .select_from(OpportunitySourceRecord)
+        .join(Opportunity, Opportunity.id == OpportunitySourceRecord.opportunity_id)
+        .join(IngestionSource, IngestionSource.id == OpportunitySourceRecord.ingestion_source_id)
+        .where(visible, OpportunitySourceRecord.is_active, this_week)
+        .group_by(IngestionSource.kind)
+        .order_by(func.count(func.distinct(Opportunity.id)).desc(), IngestionSource.kind)
+        .limit(PROVIDER_LIMIT)
+    ).all()
+    return (
+        row[0],
+        row[1],
+        row[2],
+        [ProviderNew(provider=str(kind.value), count=n) for kind, n in by_provider],
+        [WeekNew(week_start=d, count=row[3 + i]) for i, (d, _) in enumerate(weeks)],
+    )
+
+
+def _discovery(
+    db: Session, now: datetime, today: date, offset: int, closing_soon: int
+) -> DiscoveryHealth:
     counts = _coverage_row(db, [])
     fresh = freshness_status(db)
+    today_n, week_n, week_independent, providers, trend = _supply(db, today, offset)
     return DiscoveryHealth(
         open_opportunities=counts.active,
         direct_sources=counts.ats_backed,
@@ -258,6 +317,12 @@ def _discovery(db: Session, now: datetime) -> DiscoveryHealth:
         latest_successful_sync_at=fresh.last_successful_sync_at,
         sync_reason=fresh.reason,
         sources_needing_attention=inbox._source_warnings(db, now).total,  # pyright: ignore[reportPrivateUsage]
+        new_today=today_n,
+        new_this_week=week_n,
+        new_this_week_independent=week_independent,
+        new_this_week_by_provider=providers,
+        weekly_new=trend,
+        closing_soon=closing_soon,
     )
 
 
@@ -399,7 +464,7 @@ def build_dashboard(
         pipeline=_pipeline(db),
         high_fit_new=_high_fit(db, today),
         upcoming=upcoming[:UPCOMING_LIMIT],
-        discovery=_discovery(db, now),
+        discovery=_discovery(db, now, today, tz_offset_minutes, closing.total),
         requirements=_requirements(db),
         funnel=_funnel(db),
     )

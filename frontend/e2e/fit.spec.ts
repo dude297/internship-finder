@@ -33,7 +33,7 @@ async function createOpportunity(page: Page, body: Record<string, unknown>) {
 }
 
 async function setSkill(page: Page, add: string, remove?: string) {
-  await page.getByRole('link', { name: 'Profile', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Profile', exact: true }).click()
   await page.getByRole('link', { name: 'Match Profile' }).click()
   if (remove) await page.getByRole('button', { name: `Remove ${remove}` }).click()
   await page.getByLabel('Skills', { exact: true }).fill(add)
@@ -43,7 +43,7 @@ async function setSkill(page: Page, add: string, remove?: string) {
 }
 
 async function rankedTitles(page: Page): Promise<string[]> {
-  await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Opportunities', exact: true }).click()
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
   await expect(page.getByRole('status')).toHaveText('Showing 1–4 of 4')
@@ -57,7 +57,7 @@ test('fit ranking: Match Profile, recommended order, why this match, eligibility
   await login(page)
 
   // Eligibility profile (synthetic): old enough for most postings, never for age 99.
-  await page.getByRole('link', { name: 'Profile', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Profile', exact: true }).click()
   await page.getByLabel('Current level').selectOption('high_school')
   await page.getByLabel('Status as of').fill('2040-09-01')
   await page.getByLabel('Expected graduation').fill('2041-06-10')

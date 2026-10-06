@@ -76,7 +76,7 @@ async function fitBreakdown(page: Page, id: string): Promise<ScoreBreakdown | nu
 }
 
 async function goToSources(page: Page) {
-  await page.getByRole('link', { name: 'Profile', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Profile', exact: true }).click()
   await page.getByRole('link', { name: 'Imported Profile', exact: true }).click()
 }
 
@@ -86,7 +86,7 @@ test('profile sources: pending has no effect, review + apply rescoring, persiste
   await login(page)
 
   // A manual Match Profile skill, unrelated to the résumé about to be uploaded.
-  await page.getByRole('link', { name: 'Profile', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Profile', exact: true }).click()
   await page.getByRole('link', { name: 'Match Profile' }).click()
   await page.getByLabel('Skills', { exact: true }).fill(manualSkill)
   await page.getByLabel('Skills', { exact: true }).press('Enter')
@@ -164,7 +164,7 @@ test('profile sources: pending has no effect, review + apply rescoring, persiste
   expect(afterAcceptB?.components?.technical?.matched ?? []).not.toContain(importedSkill)
 
   // Recommended order: A (matches both Match Profile skills) ranks above B (matches one).
-  await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Opportunities', exact: true }).click()
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
   await expect(page.getByRole('status')).toHaveText('Showing 1–2 of 2')
@@ -206,7 +206,7 @@ test('profile sources: pending has no effect, review + apply rescoring, persiste
   expect(afterDeleteA?.components?.technical?.matched ?? []).toContain(manualSkill)
 
   // The manual Match Profile skill was never touched by the source's deletion.
-  await page.getByRole('link', { name: 'Profile', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Profile', exact: true }).click()
   await page.getByRole('link', { name: 'Match Profile' }).click()
   await expect(page.getByRole('button', { name: `Remove ${manualSkill}` })).toBeVisible()
 })

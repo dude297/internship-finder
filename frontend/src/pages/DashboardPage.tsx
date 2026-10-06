@@ -11,6 +11,8 @@ import { ErrorMessage } from '../components/ui'
 import { localToday } from '../lib/deadlines'
 import {
   ageText,
+  barHeights,
+  trendSummary,
   formatDays,
   formatPercent,
   formatRate,
@@ -264,6 +266,67 @@ function Upcoming({ d }: { d: Dashboard }) {
   )
 }
 
+function NewSupply({ h }: { h: Dashboard['discovery'] }) {
+  const heights = barHeights(h.weekly_new.map((w) => w.count))
+  const barW = 14
+  return (
+    <div className="space-y-2 border-t border-slate-100 pt-2">
+      <p className={groupLabel}>New supply</p>
+      <dl>
+        <Stat label="New today (open)" value={h.new_today} />
+        <Stat label="New this week (open)" value={h.new_this_week} />
+        <Stat label="Independent of the feed" value={h.new_this_week_independent} />
+        <Stat label="Closing soon" value={h.closing_soon} />
+      </dl>
+      {h.new_this_week_by_provider.length > 0 && (
+        <table className="w-full text-sm">
+          <caption className="text-left text-xs text-slate-500">
+            New this week by source type (an opportunity with several sources counts in
+            each)
+          </caption>
+          <tbody>
+            {h.new_this_week_by_provider.map((p) => (
+              <tr key={p.provider}>
+                <td className="text-slate-600">{p.provider.replace(/_/g, ' ')}</td>
+                <td className="text-right font-medium tabular-nums">{p.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div>
+        <svg
+          role="img"
+          aria-label={trendSummary(h.weekly_new)}
+          viewBox={`0 0 ${h.weekly_new.length * (barW + 4)} 40`}
+          className="h-10 w-full max-w-xs text-blue-700"
+        >
+          {h.weekly_new.map((w, i) => {
+            const height = Math.max(heights[i] * 0.4, w.count > 0 ? 1 : 0)
+            return (
+              <rect
+                key={w.week_start}
+                x={i * (barW + 4)}
+                y={40 - height}
+                width={barW}
+                height={height}
+                fill="currentColor"
+              >
+                <title>{`Week of ${w.week_start}: ${w.count}`}</title>
+              </rect>
+            )
+          })}
+        </svg>
+        <p className="text-xs text-slate-500">
+          New opportunities per week over the last {h.weekly_new.length} weeks, counted
+          when first seen (including ones that have since closed). Hidden opportunities
+          are excluded.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function DiscoveryHealth({ d }: { d: Dashboard }) {
   const h = d.discovery
   return (
@@ -291,6 +354,7 @@ function DiscoveryHealth({ d }: { d: Dashboard }) {
         />
         <Stat label="Sources needing attention" value={h.sources_needing_attention} />
       </dl>
+      <NewSupply h={h} />
     </Section>
   )
 }
