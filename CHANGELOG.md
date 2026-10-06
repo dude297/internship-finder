@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+Nothing yet.
+
+## Milestones 12–19 (released 2026-10-06)
+
+Released 2026-10-06 as one deploy of `main` `8ea9fea` (Render `dep-db2ngbrncjis73boa6qg`, Vercel `internship-finder-ncm5ju482`); Neon `a3c7e9b1d5f2` → `c9e2b7a4d1f8`; `reevaluate` for eligibility rules `v2` (2,472 evaluated). Record: [2026-10-06-m12-m19.md](docs/releases/2026-10-06-m12-m19.md).
+
 ### Added
 
 - Milestone 18, source quality and supply intelligence (no migration; [ADR-025 amendment](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)): the dashboard's Discovery section gains a New supply block: new open opportunities today and this week (client time zone), how many of those this week were found independently of the community feed, new this week by source kind (top 5), closing-soon count, and an 8-week trend of new opportunities (inline SVG with a text equivalent; includes ones that have since closed; hidden excluded). "Descriptions gained" is not shown because no description history exists. Two extra aggregate statements.
