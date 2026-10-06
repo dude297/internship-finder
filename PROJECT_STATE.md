@@ -89,7 +89,7 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 **Milestone 12, large-response source architecture** (branch `feature/m12-large-board-greenhouse`, open PR; [ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md), Proposed): Greenhouse boards over 500 jobs (Anduril, SpaceX) are read from the content-free list plus per-job detail for internship titles, under fixed bounds; the 20 MiB per-request cap is unchanged. Not released: production still has Anduril disabled and SpaceX unactivated until a release and an owner-approved activation. No migration.
 
-On `main`: nothing else in development. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+On `main`: the public landing page and login redesign (Milestone 19, [PR #51](https://github.com/dude297/internship-finder/pull/51), frontend only) is merged but not released; nothing else in development. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
 Open pull requests: the Milestone 12 branch above (not merged).
 
