@@ -7,6 +7,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     StringConstraints,
     model_validator,
 )
@@ -30,6 +31,14 @@ class ProfileBody(BaseModel):
     date_of_birth: date | None = None
     citizenships: CountryList = None
     work_authorizations: CountryList = None
+    # ADR-026: strict true / false / null (not provided); never derived from each other.
+    work_authorized_us: StrictBool | None = None
+    needs_sponsorship_now: StrictBool | None = None
+    needs_sponsorship_future: StrictBool | None = None
+    us_citizen: StrictBool | None = None
+    us_permanent_resident: StrictBool | None = None
+    us_person_export_control: StrictBool | None = None
+    active_security_clearance: StrictBool | None = None
     location: Annotated[Annotated[str, Field(max_length=200)] | None, BlankToNone] = None
 
     # Mirrors the database CHECK constraints so clients get a 422, not a conflict.

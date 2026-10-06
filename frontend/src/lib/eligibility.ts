@@ -14,6 +14,16 @@ export function ruleTitle(result: RuleResult, requirement?: Requirement): string
       return 'Education'
     case 'ELIG-CIT-001':
       return 'Citizenship'
+    case 'ELIG-WA-001':
+      return 'Work authorization'
+    case 'ELIG-WA-002':
+      return 'Sponsorship'
+    case 'ELIG-WA-003':
+      return 'Citizenship or permanent residency'
+    case 'ELIG-WA-004':
+      return 'U.S. person (export control)'
+    case 'ELIG-WA-005':
+      return 'Security clearance'
     default:
       return requirement
         ? requirementTypeLabels[requirement.requirement_type]
@@ -67,6 +77,13 @@ export function ruleSummary(result: RuleResult): string {
         ? 'Your citizenship is accepted.'
         : `Your citizenship isn't among those accepted (${required}).`
     }
+    case 'ELIG-WA-001':
+    case 'ELIG-WA-002':
+    case 'ELIG-WA-003':
+    case 'ELIG-WA-004':
+    case 'ELIG-WA-005':
+      // These reasons are already written in plain language from the owner's own answers.
+      return result.reason
     default:
       return "This requirement isn't checked automatically. Verify it yourself."
   }

@@ -24,15 +24,73 @@ const emptyForm: Form = {
   date_of_birth: '',
   citizenships: '',
   work_authorizations: '',
+  work_authorized_us: '',
+  needs_sponsorship_now: '',
+  needs_sponsorship_future: '',
+  us_citizen: '',
+  us_permanent_resident: '',
+  us_person_export_control: '',
+  active_security_clearance: '',
   location: '',
 }
+
+// ADR-026: each answer is true / false / null (not provided) and is never derived from another.
+const triStateFields: {
+  name: keyof ProfileInput
+  label: string
+  hint: string
+}[] = [
+  {
+    name: 'work_authorized_us',
+    label: 'Currently authorized to work in the U.S.',
+    hint: 'Legally allowed to work in the U.S. today, on any basis. Answering "Yes" here is separate from citizenship or residency.',
+  },
+  {
+    name: 'needs_sponsorship_now',
+    label: 'Need employer sponsorship now',
+    hint: 'Would you need an employer to sponsor a work visa to start working?',
+  },
+  {
+    name: 'needs_sponsorship_future',
+    label: 'May need sponsorship in the future',
+    hint: 'For example, a student whose work permission ends and who would need a visa later. Separate from the question above.',
+  },
+  {
+    name: 'us_citizen',
+    label: 'U.S. citizen',
+    hint: 'Separate from the Citizenship(s) field above, which is used for citizenship-only requirements.',
+  },
+  {
+    name: 'us_permanent_resident',
+    label: 'U.S. permanent resident (green card holder)',
+    hint: 'Answer independently of citizenship.',
+  },
+  {
+    name: 'us_person_export_control',
+    label: 'U.S. person for export control (ITAR/EAR)',
+    hint: 'A legal term used by some employers: a U.S. citizen, a permanent resident, or a protected individual (such as a granted asylee or refugee). Answer it only if you know it applies; it is not worked out from your other answers.',
+  },
+  {
+    name: 'active_security_clearance',
+    label: 'Hold an active U.S. security clearance',
+    hint: 'A clearance you hold today. Answer "No" only if you hold none.',
+  },
+]
+
+const triValue = (value: boolean | null) => (value === null ? '' : value ? 'yes' : 'no')
+const triInput = (value: string) =>
+  value === 'yes' ? true : value === 'no' ? false : null
 
 function toForm(profile: Profile | null): Form {
   const form = { ...emptyForm }
   if (!profile) return form
   for (const key of Object.keys(emptyForm) as (keyof Form)[]) {
     const value = profile[key]
-    form[key] = Array.isArray(value) ? value.join(', ') : (value ?? '')
+    form[key] = Array.isArray(value)
+      ? value.join(', ')
+      : typeof value === 'boolean'
+        ? triValue(value)
+        : (value ?? '')
   }
   return form
 }
@@ -52,6 +110,13 @@ function toInput(form: Form): ProfileInput {
     date_of_birth: orNull(form.date_of_birth),
     citizenships: parseCountries(form.citizenships),
     work_authorizations: parseCountries(form.work_authorizations),
+    work_authorized_us: triInput(form.work_authorized_us),
+    needs_sponsorship_now: triInput(form.needs_sponsorship_now),
+    needs_sponsorship_future: triInput(form.needs_sponsorship_future),
+    us_citizen: triInput(form.us_citizen),
+    us_permanent_resident: triInput(form.us_permanent_resident),
+    us_person_export_control: triInput(form.us_person_export_control),
+    active_security_clearance: triInput(form.active_security_clearance),
     location: orNull(form.location),
   }
 }
@@ -123,6 +188,25 @@ export function ProfilePage() {
               {educationLevelLabels[level]}
             </option>
           ))}
+        </select>
+      </Field>
+    )
+  }
+
+  const triSelect = ({ name, label, hint }: (typeof triStateFields)[number]) => {
+    const fieldError = issueFor(issues, name)
+    return (
+      <Field key={name} id={name} label={label} hint={hint} error={fieldError}>
+        <select
+          id={name}
+          value={current[name]}
+          onChange={(event) => update(name, event.target.value)}
+          {...describedBy(name, hint, fieldError)}
+          className={inputClass}
+        >
+          <option value="">Prefer not to say / not provided</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
         </select>
       </Field>
     )
@@ -200,6 +284,18 @@ export function ProfilePage() {
           'Two-letter country codes separated by commas.',
         )}
         {input('location', 'Location (optional)')}
+      </fieldset>
+
+      <fieldset className={fieldsetClass}>
+        <legend className={legendClass}>Work authorization</legend>
+        <p className="text-sm text-slate-600">
+          Private, and used only to check postings whose requirements you have reviewed.
+          Each question stands alone: nothing is worked out from your other answers (a
+          citizen is not assumed to be "authorized", for example). Anything you leave as
+          "Prefer not to say / not provided" shows "Needs verification" for the matching
+          requirement, never a guess.
+        </p>
+        {triStateFields.map(triSelect)}
       </fieldset>
 
       {formIssues.map((issue) => (

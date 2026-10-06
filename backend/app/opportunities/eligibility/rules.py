@@ -1,4 +1,4 @@
-"""Eligibility rules v1 (docs/eligibility.md). Deterministic; each rule handles one requirement."""
+"""Eligibility rules v2 (docs/eligibility.md). Deterministic; each rule handles one requirement."""
 
 from collections.abc import Callable
 from datetime import date
@@ -23,9 +23,11 @@ from app.opportunities.eligibility.schemas import (
     RequirementInput,
     RuleResult,
 )
+from app.opportunities.eligibility.work_authorization import RULES as WORK_AUTH_RULES
+from app.opportunities.eligibility.work_authorization import work_auth_kind
 from app.profile.education import resolve_education_status
 
-RULES_VERSION = "v1"
+RULES_VERSION = "v2"
 
 ELIGIBLE = EligibilityStatus.ELIGIBLE
 INELIGIBLE = EligibilityStatus.INELIGIBLE
@@ -170,7 +172,7 @@ def check_unsupported(
         rule_id="ELIG-REQ-001",
         status=NEEDS_VERIFICATION,
         reason=f"Requirement type {requirement.requirement_type.value} isn't evaluated by"
-        f" eligibility rules {RULES_VERSION}; verify it manually.",
+        f" eligibility rules {RULES_VERSION} for this wording; verify it manually.",
         requirement_id=requirement.id,
     )
 
@@ -205,9 +207,17 @@ RULES: dict[RequirementType, Rule] = {
 }
 
 
+WORK_AUTH_TYPES = (RequirementType.WORK_AUTHORIZATION, RequirementType.OTHER)
+
+
 def evaluate_requirement(
     profile: ProfileInput, opportunity: OpportunityInput, requirement: RequirementInput
 ) -> RuleResult:
+    if requirement.requirement_type in WORK_AUTH_TYPES:
+        # Only a requirement with explicit semantics (ADR-026) is evaluated.
+        kind = work_auth_kind(requirement)
+        if kind is not None:
+            return WORK_AUTH_RULES[kind](profile, requirement)
     rule = RULES.get(requirement.requirement_type, check_unsupported)
     try:
         return rule(profile, opportunity, requirement)

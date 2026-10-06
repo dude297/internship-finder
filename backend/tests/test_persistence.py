@@ -410,7 +410,7 @@ def test_evaluation_is_persisted_with_rule_results(db: Session) -> None:
 
     assert loaded is not None and loaded.id == saved.id
     assert loaded.eligibility_status is EligibilityStatus.NEEDS_VERIFICATION  # citizenship unset
-    assert loaded.eligibility_rules_version == "v1"
+    assert loaded.eligibility_rules_version == "v2"
     assert loaded.depends_on_projected_status is False
     assert [r.rule_id for r in loaded.rule_results] == [
         "ELIG-REQ-000",

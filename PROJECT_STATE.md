@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | none |
+| **Current Development** | Milestone 15 on `feature/m15-work-authorization` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -41,7 +41,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
 | Opportunity ingestion | **Implemented and deployed** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`). Since Milestone 6: Ashby boards (no production Ashby source), a scheduled GitHub Actions sync (active since 2026-10-02), derived source health ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) |
 | Requirement suggestions and review | **Implemented and deployed; v3 scanned** (`requirements-rules` v2 deployed 2026-10-05, v3 2026-10-06 [PR #45](https://github.com/dude297/internship-finder/pull/45); catalog scans run 2026-10-06: all stored suggestions are v3, 558 pending, 0 accepted, 0 rejected, 0 canonical; [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). About 90% precision in the audit; two false-positive families await extractor v3 ([PR #45](https://github.com/dude297/internship-finder/pull/45), not merged). Suggestions never affect eligibility until accepted |
-| Eligibility | **Implemented** v1 (rules version `v1`; still v1, unchanged by the 2026-10-06 release train), evaluated automatically (only when inputs change). Every latest evaluation is `needs_verification` until requirements are accepted |
+| Eligibility | **Implemented** v1 in production (rules version `v1`, unchanged by the 2026-10-06 release train); v2 (work-authorization rules ELIG-WA-001 to 005, [ADR-026](docs/decisions/ADR-026-work-authorization-eligibility.md)) is in development, unreleased, evaluated automatically (only when inputs change). Every latest evaluation is `needs_verification` until requirements are accepted |
 | Fit scoring and ranking | **Implemented and deployed: scoring v2** (Milestone 11, [ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), no migration; `reevaluate` applied 2026-10-06, 2,451 evaluations, 10 scores changed all upward). v1 history rows kept ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`) |
 | Owner decisions: hide and revert | **Implemented and deployed** (Milestone 9, [ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md), migration `d4f8a1c6e2b9`): Hide/Unhide durable across syncs, Hidden filter, Revert to source (irreversible; confirmation in the UI) |
 | Action Inbox and follow-ups | **Implemented and deployed** (Milestone 10, [ADR-020](docs/decisions/ADR-020-action-inbox.md), migration `a3c7e9b1d5f2`): `GET /api/inbox`, Inbox page, Next action / due / Interview at on applications |
@@ -87,7 +87,9 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-None on `main`. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+Milestone 15, work-authorization eligibility, on branch `feature/m15-work-authorization` (unreleased; [ADR-026](docs/decisions/ADR-026-work-authorization-eligibility.md), migration `c8d2f4a6b0e3`, eligibility rules `v2`). Release step after deploy: `reevaluate`.
+
+None otherwise on `main`. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
 Open pull requests: none.
 

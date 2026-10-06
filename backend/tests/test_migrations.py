@@ -43,6 +43,7 @@ MILESTONE_6_REVISION = "e6d1a4b8c2f9"
 MILESTONE_7_1_REVISION = "f2a7c9d4e1b3"
 MILESTONE_8_1_REVISION = "b7e3d9f1a2c4"
 MILESTONE_9_REVISION = "d4f8a1c6e2b9"
+MILESTONE_10_REVISION = "a3c7e9b1d5f2"
 GRADUATION_CHECK = "ck_profiles_graduation_after_status_as_of"
 MILESTONE_3_REVISION = "726372d627b8"
 RUNNING_INDEX = "uq_ingestion_runs_one_running_per_source"
@@ -852,3 +853,27 @@ def test_milestone_10_follow_up_columns_round_trip(pg_engine: Engine, pg_url: st
     finally:
         command.upgrade(config, "head")
     assert new <= columns(pg_engine, "applications")
+
+
+WORK_AUTH_COLUMNS = {
+    "work_authorized_us",
+    "needs_sponsorship_now",
+    "needs_sponsorship_future",
+    "us_citizen",
+    "us_permanent_resident",
+    "us_person_export_control",
+    "active_security_clearance",
+}
+
+
+def test_milestone_15_work_authorization_round_trip(pg_engine: Engine, pg_url: str) -> None:
+    """ADR-026: seven additive nullable boolean columns; downgrade drops them, keeps the rest."""
+    config = alembic_config(pg_url)
+    try:
+        assert columns(pg_engine, "profiles") >= WORK_AUTH_COLUMNS
+        command.downgrade(config, MILESTONE_10_REVISION)
+        assert not WORK_AUTH_COLUMNS & columns(pg_engine, "profiles")
+        assert {"citizenships", "work_authorizations"} <= columns(pg_engine, "profiles")
+    finally:
+        command.upgrade(config, "head")
+    assert columns(pg_engine, "profiles") >= WORK_AUTH_COLUMNS

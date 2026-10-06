@@ -73,6 +73,15 @@ class Profile(IdMixin, TimestampMixin, Base):
     # ISO 3166-1 alpha-2 codes. NULL means "not provided", never "none".
     citizenships: Mapped[list[str] | None] = mapped_column(JSON)
     work_authorizations: Mapped[list[str] | None] = mapped_column(JSON)
+    # Work-authorization facts (ADR-026). Each is the owner's own explicit answer; NULL means
+    # "not provided", never "no". No column is ever derived from another.
+    work_authorized_us: Mapped[bool | None]
+    needs_sponsorship_now: Mapped[bool | None]
+    needs_sponsorship_future: Mapped[bool | None]
+    us_citizen: Mapped[bool | None]
+    us_permanent_resident: Mapped[bool | None]
+    us_person_export_control: Mapped[bool | None]
+    active_security_clearance: Mapped[bool | None]
     location: Mapped[str | None] = mapped_column(String(200))
 
     # Fit preferences (ADR-010 §5). Never read by eligibility.
