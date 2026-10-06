@@ -172,7 +172,8 @@ def check_unsupported(
         rule_id="ELIG-REQ-001",
         status=NEEDS_VERIFICATION,
         reason=f"Requirement type {requirement.requirement_type.value} isn't evaluated by"
-        f" eligibility rules {RULES_VERSION} for this wording; verify it manually.",
+        f" eligibility rules {RULES_VERSION} for this wording (an edited suggestion is no longer"
+        " checked automatically); verify it manually.",
         requirement_id=requirement.id,
     )
 

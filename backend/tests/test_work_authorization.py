@@ -210,3 +210,14 @@ def test_facts_drive_evaluation_and_changes_reevaluate(client: TestClient) -> No
 
     put_profile(client, us_citizen=True, us_person_export_control=False)
     assert latest()["eligibility_status"] == "ineligible"
+
+
+@pytest.mark.postgres
+def test_a_body_without_the_answers_keeps_them(client: TestClient) -> None:
+    put_profile(client, us_citizen=True, needs_sponsorship_now=False)
+    response = client.put("/api/profile", json=PROFILE)  # an older client omits the answers
+    assert response.status_code == 200
+    read = client.get("/api/profile").json()
+    assert read["us_citizen"] is True and read["needs_sponsorship_now"] is False
+    # An explicit null still clears an answer.
+    assert put_profile(client, us_citizen=None)["profile"]["us_citizen"] is None

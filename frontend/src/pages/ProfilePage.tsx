@@ -48,7 +48,7 @@ const triStateFields: {
   {
     name: 'needs_sponsorship_now',
     label: 'Need employer sponsorship now',
-    hint: 'Would you need an employer to sponsor a work visa to start working?',
+    hint: 'Do you need a new work visa or sponsorship from an employer before you can start any job? Work permission you already hold (for example through your school) is not sponsorship.',
   },
   {
     name: 'needs_sponsorship_future',
