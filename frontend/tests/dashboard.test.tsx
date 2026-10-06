@@ -48,6 +48,7 @@ describe('dashboard page', () => {
     expect(screen.getByText(/No applications tracked yet/)).toBeInTheDocument()
     expect(screen.getAllByText('Not enough data yet').length).toBe(6)
     expect(container.textContent).not.toMatch(/NaN|Infinity|undefined/)
+    expect(screen.getByRole('img', { name: /2041-03-04: 0/ })).toBeInTheDocument()
     const funnel = screen.getByRole('region', { name: 'Outcomes' })
     expect(within(funnel).queryByText('0%')).not.toBeInTheDocument()
   })

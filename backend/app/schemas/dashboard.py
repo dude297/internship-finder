@@ -44,6 +44,16 @@ class TimelineItem(BaseModel):
     at: dt.datetime | None = None
 
 
+class ProviderNew(BaseModel):
+    provider: str  # ingestion source kind of an active record
+    count: int
+
+
+class WeekNew(BaseModel):
+    week_start: dt.date  # client-local first day of a 7-day window
+    count: int
+
+
 class DiscoveryHealth(BaseModel):
     open_opportunities: int
     direct_sources: int  # open opportunities with an active direct ATS record
@@ -53,6 +63,13 @@ class DiscoveryHealth(BaseModel):
     latest_successful_sync_at: dt.datetime | None
     sync_reason: str  # ok | stale | never_synced | no_sources
     sources_needing_attention: int  # warning, stale, or failing
+    # New supply from first_seen_at, hidden opportunities excluded (ADR-025 amendment).
+    new_today: int  # open, first seen on the client's local today
+    new_this_week: int  # open, first seen in the last 7 local days including today
+    new_this_week_independent: int  # ... with an active non-feed automated record
+    new_this_week_by_provider: list[ProviderNew]  # top 5; a multi-source opportunity counts in each
+    weekly_new: list[WeekNew]  # 8 weeks oldest first, including opportunities since closed
+    closing_soon: int  # same count as the Inbox's "closing soon" section
 
 
 class RequirementHealth(BaseModel):
