@@ -18,12 +18,12 @@ An audit of v1 on a 58-posting synthetic benchmark (one fictional EE/CS profile,
 
 `SCORING_VERSION = "v2"`. Weights stay 35/20/15/10/10/10; no new component, no input field, no schema or frontend change. Four rule changes, all deterministic, all in `scoring/config.py` tables:
 
-- **A. Ambiguous-skill guard.** The skills `go`, `c`, `r`, `rust` (single-word, after alias expansion) match only when a programming-context word (list in config, e.g. `python`, `backend`, `proficiency`, `experience`, `grpc`, `libraries`) is within 6 words, and never when the next word is in that skill's denylist (`go to/getter/with/on/...`, `c suite/level/...`, `rust proof/resistant/...`). Applies to the technical component only; matching is still case-folded.
+- **A. Ambiguous-skill guard.** The skills `go`, `c`, `r`, `rust` (single-word, after alias expansion) match only when (a) a programming-context word (list in config, e.g. `python`, `backend`, `grpc`, `libraries`, `skills`, `tools`, `stack`, `analysis`, `statistics`) is within 6 words, own position excluded; (b) the two preceding words are an "experience/knowledge/proficiency/..." noun plus "with/in/of/using"; or (c) it is a bare item of a delimited list next to a known technology (`TECH_TOKENS`); and never when the next word is in that skill's denylist (`go to/getter/with/on/...`, `c suite/level/...`, `rust proof/resistant/...`, `r d` for R&D). `go` is also in the `golang` alias group. Broad words (`software`, `systems`, `services`, `experience`, `knowledge`) are not context words. Applies to the technical component only; matching is still case-folded; the per-skill check is memoised per posting.
 - **B. Reviewed aliases (two-way):** `pcb`/`printed circuit board(s)`/`pcb design`/`pcb layout`/`printed circuit board layout|design`; `python`/`python3`; `c++`/`cpp`; `verilog`/`systemverilog`/`system verilog`. **One-way related (skills only):** Machine Learning is also credited by `deep learning`, `neural network(s)`. Related matches are labelled "related", not "alias".
-- **C. Course subject groups.** Five groups (digital logic and architecture; circuits; signals and control; data structures and algorithms; linear algebra, machine learning, statistics). A course named in a group earns the existing keyword point (1) when any of the group's posting terms appears and the course did not match by name or words. The breakdown names the posting term (`details.groups`).
-- **D. Locations.** A region table (Bay Area cities). A preferred location that is a region label (`Bay Area`, `Silicon Valley`) scores 100 against any listed city; a preferred city scores 75 against another city of the same region; exact matches still score 100. If `remote_mode` is unknown and the location text starts with "Remote", the posting is treated as remote (a known mode is never overridden).
+- **C. Course subject groups.** Five groups with specific posting terms only (no `software`, `systems`, `models`, `control`, `hardware`, `chip`) (digital logic and architecture; circuits; signals and control; data structures and algorithms; linear algebra, machine learning, statistics). A course named in a group earns the existing keyword point (1) when any of the group's posting terms appears and the course did not match by name or words. The breakdown names the posting term (`details.groups`).
+- **D. Locations.** A region table (Bay Area cities). A preferred location that is a region label (`Bay Area`, `Silicon Valley`) scores 100 against any listed city; a preferred city scores 75 against another city of the same region; exact matches still score 100. The remainder of the posting location may hold only CA/US words, so other states and countries never region-match (an exact city text match such as `San Jose, Costa Rica` for a `San Jose, CA` preference is the unchanged v1 rule). If `remote_mode` is unknown and the location text is exactly "Remote" optionally followed by the US or one US state, the posting is treated as remote (a known mode is never overridden; `Remote - Canada` and `Not remote` are not). This is fit scoring only; eligibility does not import or see it.
 
-Every contribution is explained: skill reasons say `Verilog (alias systemverilog)` / `Machine Learning (related deep learning)` with `details.evidence`; the academic reason says `course group: Digital Logic Design (posting says asic)`; the location reason says `Region match: sunnyvale is in the bay area region.` or `Location text says remote...`.
+Every contribution is explained: skill reasons say `Verilog (alias systemverilog)` / `Machine Learning (related deep learning)` with `details.evidence`; the academic reason says `course group: Digital Logic Design (posting says asic)`; the location reason says `Region match: "Sunnyvale, CA" is in the bay area region.` or `Location text says remote...`.
 
 Freshness as final tie-breaker already exists (`discovery._order` ends every sort with newest posted date, then first seen, then ID), so nothing changes there, and nothing time-related enters `score_fit` or the fingerprint.
 
@@ -37,18 +37,18 @@ Synthetic, author-labelled, so a regression and direction check, not a generalis
 
 | Profile | | v1 | v2 |
 |---|---|---:|---:|
-| EE/CS (drove the rules) | NDCG@10 | 0.826 | 0.892 |
+| EE/CS (drove the rules) | NDCG@10 | 0.826 | 0.865 |
 | | precision@10 (label >= 2) | 0.90 | 1.00 |
 | | strong postings outside top 20 | 7 | 3 |
 | | trap postings with false Go/C/Rust evidence | 6 of 8 | 0 |
-| Software-only (overfitting check) | NDCG@10 | 0.708 | 0.736 |
+| Software-only (overfitting check) | NDCG@10 | 0.708 | 0.762 |
 | | precision@10 (label >= 2) | 0.60 | 0.70 |
 | | trap postings with false Go/C/Rust evidence | 5 | 0 |
 
-Enforced by `backend/tests/test_fit_benchmark.py` (EE NDCG >= 0.88, traps 0, strong outside top 20 <= 3; software-only not worse than v1 by more than 0.03).
+Enforced by `backend/tests/test_fit_benchmark.py` (EE NDCG >= 0.84, the measured 0.865 minus a small margin, traps 0, strong outside top 20 <= 3; software-only not worse than v1 by more than 0.03).
 
 ## Consequences
 
-- v1 evaluation rows are never rewritten (ADR-006). `SCORING_VERSION` is in the fit fingerprint, so every opportunity is stale: after deploying, run `python -m app.cli reevaluate --dry-run`, then `reevaluate` ([ADR-018](ADR-018-evaluation-staleness.md), [deployment.md](../deployment.md#release-procedure)). It appends one v2 row per opportunity (~1 row each); lists switch to v2 as the latest row wins. v1 and v2 scores of one posting are comparable (same weights) but not equal.
+- v1 evaluation rows are never rewritten (ADR-006). Review fixes (R&D, list recall, generic context and group words) lowered the EE/CS NDCG@10 from the prototype's 0.892 to 0.865 and raised the software-only one from 0.736 to 0.762. `SCORING_VERSION` is in the fit fingerprint, so every opportunity is stale: after deploying, run `python -m app.cli reevaluate --dry-run`, then `reevaluate` ([ADR-018](ADR-018-evaluation-staleness.md), [deployment.md](../deployment.md#release-procedure)). It appends one v2 row per opportunity (~1 row each); lists switch to v2 as the latest row wins. Until `reevaluate` finishes, a list orders a mix of v1 and v2 scores (same weights, different evidence rules), so run it immediately after the deploy. v1 and v2 scores of one posting are comparable (same weights) but not equal.
 - Recall risk of the guard: a bare short mention with no context word (a lone "Go") and phrases such as "Go with ..." / "Go on ..." are rejected. The tables need review as new traps and misses appear.
 - Related and region tables are judgment calls and cover only what is listed.

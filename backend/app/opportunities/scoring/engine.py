@@ -208,20 +208,38 @@ _MODE_LABELS = {
 }
 
 
-def _region_match(place: str, where: Corpus) -> tuple[int, str] | None:
+def _remote_in_text(location: str | None) -> bool:
+    """Strict: "Remote", or "Remote" plus the US or one US state ("Remote - US", "Remote (CA)")."""
+    words = tokens(location)
+    if words[:1] != ("remote",):
+        return False
+    rest = " ".join(words[1:])
+    return (
+        rest == ""
+        or rest in config.REMOTE_US_WORDS
+        or rest in config.US_STATE_NAMES
+        or rest in config.US_STATE_CODES
+    )
+
+
+def _region_match(place: str, location: str) -> tuple[int, str] | None:
     """(score, explanation) when the preferred place and the posting are in the same region."""
     key = " ".join(tokens(place.split(",")[0]))
     for region, cities in config.REGION_CITIES.items():
         if key not in cities:
             continue
-        city = next((c for c in sorted(cities) if where.has_phrase(tokens(c))), None)
-        if city:
+        where = Corpus(location)
+        found = [c for c in sorted(cities) if where.has_phrase(tokens(c))]
+        covered = {word for city in found for word in tokens(city)}
+        # Anything else in the location (another state, a country) means a different place.
+        extra = [w for w in tokens(location) if w not in covered | config.REGION_ALLOWED_WORDS]
+        if found and not extra:
             score = (
                 config.LOCATION_MATCH_SCORE
                 if key in config.REGION_LABELS
                 else config.REGION_CITY_SCORE
             )
-            return score, f"Region match: {city} is in the {region} region."
+            return score, f'Region match: "{location}" is in the {region} region.'
     return None
 
 
@@ -231,7 +249,7 @@ def _place(
     reasons: list[str] = []
     mode_score: int | None = None
     mode = opportunity.remote_mode
-    if mode is None and tokens(opportunity.location)[:1] == ("remote",):
+    if mode is None and _remote_in_text(opportunity.location):
         mode = RemoteMode.REMOTE
         reasons.append("Location text says remote, so it is treated as remote work.")
     if profile.remote_preference is not None and mode is not None:
@@ -253,7 +271,7 @@ def _place(
         region_notes: list[str] = []
         if not hits:
             for place in profile.preferred_locations:
-                region = _region_match(place, where)
+                region = _region_match(place, opportunity.location)
                 if region:
                     hits.append(place)
                     score, note = region

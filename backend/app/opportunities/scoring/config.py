@@ -36,7 +36,7 @@ ALIAS_GROUPS: Final[tuple[frozenset[str], ...]] = tuple(
         {"react", "reactjs", "react.js"},
         {"node.js", "nodejs"},
         {".net", "dotnet"},
-        {"golang", "go lang"},
+        {"golang", "go lang", "go"},  # bare "go" stays behind the v2 guard
         # v2 (ADR-019), reviewed groups. Kept small and explicit.
         {
             "pcb",
@@ -154,9 +154,24 @@ CONTEXT_WINDOW: Final = 6
 SKILL_CONTEXT_WORDS: Final = frozenset(
     """
     python java rust c++ c# golang programming language languages coding backend kubernetes
-    docker linux embedded firmware software microservices api apis sql javascript typescript
-    matlab verilog fpga git concurrency developer services systems compiler toolchain drivers
-    microcontrollers proficiency proficient familiarity experience knowledge grpc libraries
+    docker linux embedded firmware microservices api apis sql javascript typescript matlab
+    verilog fpga git concurrency developer compiler toolchain drivers microcontrollers
+    proficiency proficient familiarity grpc libraries skills tools stack tech analysis statistics
+    """.split()  # noqa: SIM905
+)
+# "experience with Go", "knowledge of R": the two words just before the skill.
+SKILL_LEAD_IN: Final = frozenset(
+    (noun, link)
+    for noun in ("experience", "knowledge", "proficiency", "familiarity", "expertise", "skills")
+    for link in ("with", "in", "of", "using")
+)
+# A bare ambiguous skill that is one item of a list next to one of these counts ("Tools: R,
+# Tableau, Excel"). Ambiguous skills themselves are deliberately not in this set.
+TECH_TOKENS: Final = frozenset(
+    """
+    python java sql tableau excel stata sas pandas numpy tensorflow pytorch spark terraform aws
+    gcp azure docker kubernetes postgres postgresql mysql redis kafka linux javascript typescript
+    matlab scala julia c++ c# golang git react node.js hadoop airflow
     """.split()  # noqa: SIM905
 )
 AMBIGUOUS_NEXT_BLOCK: Final[dict[str, frozenset[str]]] = {
@@ -167,11 +182,12 @@ AMBIGUOUS_NEXT_BLOCK: Final[dict[str, frozenset[str]]] = {
     "rust": frozenset(
         "proof resistant free belt inhibitor prevention removal".split()  # noqa: SIM905
     ),
-    "r": frozenset(),
+    "r": frozenset({"d"}),  # R&D
 }
 
 # Course subject groups: (course names, posting terms). A course whose name is in the first set
-# earns the keyword points when any posting term of the group appears in the posting.
+# earns the keyword points when any posting term of the group appears in the posting. Posting
+# terms are specific (no "software", "systems", "models", "control", "hardware", "chip").
 SUBJECT_GROUPS: Final[tuple[tuple[frozenset[str], frozenset[str]], ...]] = (
     (
         frozenset(
@@ -193,13 +209,11 @@ SUBJECT_GROUPS: Final[tuple[tuple[frozenset[str], frozenset[str]], ...]] = (
                 "verilog",
                 "systemverilog",
                 "vhdl",
+                "vlsi",
                 "digital design",
                 "logic design",
                 "microarchitecture",
                 "computer architecture",
-                "chip",
-                "silicon",
-                "soc",
             }
         ),
     ),
@@ -209,25 +223,24 @@ SUBJECT_GROUPS: Final[tuple[tuple[frozenset[str], frozenset[str]], ...]] = (
         ),
         frozenset(
             {
-                "circuit",
-                "circuits",
+                "circuit design",
                 "analog",
                 "schematic",
                 "spice",
                 "pcb",
-                "printed",
-                "hardware",
+                "printed circuit board",
+                "embedded",
                 "rf",
             }
         ),
     ),
     (
         frozenset({"signals and systems", "digital signal processing", "dsp", "control systems"}),
-        frozenset({"signal", "dsp", "wireless", "control", "sensor", "pid", "filters"}),
+        frozenset({"signal processing", "dsp", "control systems", "pid", "filter design"}),
     ),
     (
         frozenset({"data structures and algorithms", "algorithms", "data structures"}),
-        frozenset({"algorithms", "data structures", "software", "backend", "systems"}),
+        frozenset({"algorithms", "data structures"}),
     ),
     (
         frozenset({"linear algebra", "machine learning", "statistics", "probability"}),
@@ -235,10 +248,10 @@ SUBJECT_GROUPS: Final[tuple[tuple[frozenset[str], frozenset[str]], ...]] = (
             {
                 "machine learning",
                 "deep learning",
-                "neural",
+                "neural network",
+                "neural networks",
                 "data science",
                 "computer vision",
-                "models",
             }
         ),
     ),
@@ -246,6 +259,8 @@ SUBJECT_GROUPS: Final[tuple[tuple[frozenset[str], frozenset[str]], ...]] = (
 
 # Location regions. A preferred location that is a region label (or a city inside it) matches a
 # posting in any listed city of the same region. Not geocoding; add metros here, deliberately.
+# The rest of the posting location may only hold REGION_ALLOWED_WORDS (so "San Jose, Costa Rica"
+# and "Oakland, NY" never match).
 REGION_CITIES: Final[dict[str, frozenset[str]]] = {
     "bay area": frozenset(
         {
@@ -261,6 +276,7 @@ REGION_CITIES: Final[dict[str, frozenset[str]]] = {
             "redwood city",
             "menlo park",
             "oakland",
+            "berkeley",
             "san mateo",
             "bay area",
             "silicon valley",
@@ -269,3 +285,76 @@ REGION_CITIES: Final[dict[str, frozenset[str]]] = {
 }
 REGION_LABELS: Final = frozenset({"bay area", "silicon valley"})
 REGION_CITY_SCORE: Final = 75  # same-region city; a region-label preference scores 100
+REGION_ALLOWED_WORDS: Final = frozenset(
+    """
+    ca california united states usa us america south east north west downtown hybrid onsite
+    """.split()  # noqa: SIM905
+)
+
+# Remote-from-text: location text that is exactly "Remote", optionally followed by the United
+# States or one US state ("Remote - US", "Remote (CA)", "Remote, United States").
+US_STATE_NAMES: Final = frozenset(
+    name.strip()
+    for name in [
+        "alabama",
+        "alaska",
+        "arizona",
+        "arkansas",
+        "california",
+        "colorado",
+        "connecticut",
+        "delaware",
+        "florida",
+        "georgia",
+        "hawaii",
+        "idaho",
+        "illinois",
+        "indiana",
+        "iowa",
+        "kansas",
+        "kentucky",
+        "louisiana",
+        "maine",
+        "maryland",
+        "massachusetts",
+        "michigan",
+        "minnesota",
+        "mississippi",
+        "missouri",
+        "montana",
+        "nebraska",
+        "nevada",
+        "ohio",
+        "oklahoma",
+        "oregon",
+        "pennsylvania",
+        "tennessee",
+        "texas",
+        "utah",
+        "vermont",
+        "virginia",
+        "washington",
+        "wisconsin",
+        "wyoming",
+        "new hampshire",
+        "new jersey",
+        "new mexico",
+        "new york",
+        "north carolina",
+        "north dakota",
+        "rhode island",
+        "south carolina",
+        "south dakota",
+        "west virginia",
+        "district of columbia",
+    ]  # noqa: SIM905
+)
+REMOTE_US_WORDS: Final = frozenset(
+    {"us", "usa", "u.s", "u.s.a", "united states", "united states of america", "america"}
+)
+US_STATE_CODES: Final = frozenset(
+    """
+    al ak az ar ca co ct de fl ga hi id il in ia ks ky la me md ma mi mn ms mo mt ne nv nh nj nm
+    ny nc nd oh ok or pa ri sc sd tn tx ut vt va wa wv wi wy dc
+    """.split()  # noqa: SIM905
+)
