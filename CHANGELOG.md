@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
-Nothing yet.
+- Frontend: design tokens, public landing page at `/` for logged-out visitors, redesigned login with waking-server, rate-limit and unavailable states, `IF` mark and favicon, light AppShell nav pass. No backend or API changes.
 
 ## Milestones 8.2, 9, 10, 10.1, and 11 (released 2026-10-06)
 
