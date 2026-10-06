@@ -5,7 +5,7 @@ Milestone 15 (ADR-025): `applications.applied_at` (nullable) and the append-only
 no history is invented for existing applications.
 
 Revision ID: c9e2b7a4d1f8
-Revises: a3c7e9b1d5f2
+Revises: c8d2f4a6b0e3
 Create Date: 2026-10-06 18:00:00.000000
 
 """
@@ -18,7 +18,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "c9e2b7a4d1f8"
-down_revision: str | Sequence[str] | None = "a3c7e9b1d5f2"
+down_revision: str | Sequence[str] | None = "c8d2f4a6b0e3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

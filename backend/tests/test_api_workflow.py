@@ -189,7 +189,7 @@ def test_new_opportunity_is_evaluated_and_unassessed_needs_verification(
     evaluation = create(client, requirements=[AGE_16])["latest_evaluation"]
 
     assert evaluation["eligibility_status"] == "needs_verification"
-    assert evaluation["eligibility_rules_version"] == "v1"
+    assert evaluation["eligibility_rules_version"] == "v2"
     assert [r["rule_id"] for r in evaluation["rule_results"]] == ["ELIG-REQ-000", "ELIG-AGE-001"]
     assert evaluation["rule_results"][1]["status"] == "eligible"
 

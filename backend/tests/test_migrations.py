@@ -44,6 +44,7 @@ MILESTONE_6_REVISION = "e6d1a4b8c2f9"
 MILESTONE_7_1_REVISION = "f2a7c9d4e1b3"
 MILESTONE_8_1_REVISION = "b7e3d9f1a2c4"
 MILESTONE_9_REVISION = "d4f8a1c6e2b9"
+MILESTONE_10_REVISION = "a3c7e9b1d5f2"
 GRADUATION_CHECK = "ck_profiles_graduation_after_status_as_of"
 MILESTONE_3_REVISION = "726372d627b8"
 RUNNING_INDEX = "uq_ingestion_runs_one_running_per_source"
@@ -858,7 +859,7 @@ def test_milestone_10_follow_up_columns_round_trip(pg_engine: Engine, pg_url: st
 def test_application_engine_v2_migration_round_trip(pg_engine: Engine, pg_url: str) -> None:
     """ADR-025: additive. Down keeps applications (minus applied_at); up again restores both."""
     config = alembic_config(pg_url)
-    command.downgrade(config, "a3c7e9b1d5f2")
+    command.downgrade(config, "c8d2f4a6b0e3")
     assert "application_events" not in tables(pg_engine)
     assert "applied_at" not in {c["name"] for c in inspect(pg_engine).get_columns("applications")}
     with Session(pg_engine) as session:  # an old-code-shaped row: no applied_at, no events
@@ -880,3 +881,27 @@ def test_application_engine_v2_migration_round_trip(pg_engine: Engine, pg_url: s
         assert tuple(row) == ("applied", None)  # survived; no history was invented
         assert connection.scalar(text("SELECT count(*) FROM application_events")) == 0
         connection.execute(text("DELETE FROM opportunities WHERE title = 'Old'"))
+
+
+WORK_AUTH_COLUMNS = {
+    "work_authorized_us",
+    "needs_sponsorship_now",
+    "needs_sponsorship_future",
+    "us_citizen",
+    "us_permanent_resident",
+    "us_person_export_control",
+    "active_security_clearance",
+}
+
+
+def test_milestone_15_work_authorization_round_trip(pg_engine: Engine, pg_url: str) -> None:
+    """ADR-026: seven additive nullable boolean columns; downgrade drops them, keeps the rest."""
+    config = alembic_config(pg_url)
+    try:
+        assert columns(pg_engine, "profiles") >= WORK_AUTH_COLUMNS
+        command.downgrade(config, MILESTONE_10_REVISION)
+        assert not WORK_AUTH_COLUMNS & columns(pg_engine, "profiles")
+        assert {"citizenships", "work_authorizations"} <= columns(pg_engine, "profiles")
+    finally:
+        command.upgrade(config, "head")
+    assert columns(pg_engine, "profiles") >= WORK_AUTH_COLUMNS

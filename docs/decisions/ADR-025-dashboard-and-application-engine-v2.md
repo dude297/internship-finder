@@ -10,7 +10,7 @@ The Action Inbox ([ADR-020](ADR-020-action-inbox.md)) answers "what needs me tod
 
 ## Decision
 
-### 1. One additive migration (`c9e2b7a4d1f8`, after `a3c7e9b1d5f2`)
+### 1. One additive migration (`c9e2b7a4d1f8`, after `c8d2f4a6b0e3`)
 
 - `applications.applied_at` (timestamptz, nullable).
 - `application_events` (append-only): `id` uuid, `application_id` FK to `applications` ON DELETE CASCADE (indexed), `event_type`, `occurred_at` timestamptz, `from_status`, `to_status` (nullable, the existing status values), `metadata_json` JSONB (NOT NULL, CHECK `length(metadata_json::text) <= 2000`), `created_at`.
@@ -80,5 +80,5 @@ Day-only fields (`next_action_due`, `application_deadline`, `submitted_on`, `ver
 
 - Positive: an overview from existing data, durable and honest outcome history from now on, one extra table, no new service, no new dependency.
 - Negative: history and medians start empty for existing applications. `interview_at` still holds one value on the row. The dashboard reads the clock from the browser's `today`, so two devices in different zones can disagree near midnight. The pipeline grid is cramped at tablet width (it scrolls into stage tabs on mobile).
-- Rollback: the migration is additive; rolling the app back without a downgrade leaves the column and table unused. `alembic downgrade a3c7e9b1d5f2` drops them (history lost).
+- Rollback: the migration is additive; rolling the app back without a downgrade leaves the column and table unused. `alembic downgrade c8d2f4a6b0e3` drops them (history lost).
 - Not built: editing or deleting individual events, reminders or notifications, compensation, `started_at`, stricter transitions, drag-and-drop, saved filters, charts beyond the bar.

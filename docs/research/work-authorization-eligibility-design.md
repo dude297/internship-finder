@@ -1,7 +1,7 @@
 # Work authorization eligibility: design
 
 > **Research only (non-normative).** Date: 2026-10-06. Last verified: 2026-10-06.
-> Used by / superseded by: not yet adopted. Proposal for a future ADR and milestone; no code, schema, or rule changes in the branch that carries this note.
+> Used by / superseded by: partly adopted by [ADR-026](../decisions/ADR-026-work-authorization-eligibility.md) (Milestone 15): seven boolean profile columns and five fixed-label rules instead of the per-country JSONB, dates, and clearance levels below, which stay deferred.
 
 ## Problem
 

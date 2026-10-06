@@ -2,7 +2,7 @@
 
 ## Current Database State
 
-The schema is created by thirteen Alembic migrations (a linear chain; `c9e2b7a4d1f8` is head on the development branch, `a3c7e9b1d5f2` is production) in `backend/alembic/versions/`:
+The schema is created by fourteen Alembic migrations (a linear chain; `c9e2b7a4d1f8` is head on the development branch, `a3c7e9b1d5f2` is production) in `backend/alembic/versions/`:
 
 | Revision | Milestone | Tables |
 |---|---|---|
@@ -18,6 +18,7 @@ The schema is created by thirteen Alembic migrations (a linear chain; `c9e2b7a4d
 | `b7e3d9f1a2c4` (Workable and Pinpoint sources) | 8.1 | CHECK only (below) |
 | `d4f8a1c6e2b9` (owner opportunity decisions) | 9 (development, unreleased) | `opportunities.dismissed_at`, `dismissed_reason` (below) |
 | `a3c7e9b1d5f2` (application follow-up fields) | 10 (released) | `applications.next_action`, `next_action_due`, `interview_at` (below) |
+| `c8d2f4a6b0e3` (profile work-authorization facts) | 15 (development, unreleased) | `profiles`: seven nullable boolean work-authorization columns (below) |
 | `c9e2b7a4d1f8` (application engine v2) | 15 (development, unreleased) | `applications.applied_at`; `application_events` (below) |
 
 The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope), and [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md) (profile source uploads and review). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `b7e3d9f1a2c4` (Milestone 8.1, applied 2026-10-05; release history in [deployment.md](deployment.md) and [CHANGELOG.md](../CHANGELOG.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
@@ -72,9 +73,13 @@ Additive ([ADR-017](decisions/ADR-017-owner-opportunity-decisions.md)): nullable
 
 Additive ([ADR-020](decisions/ADR-020-action-inbox.md)): nullable `applications.next_action` (varchar(200)), `next_action_due` (date) and `interview_at` (timestamptz). No data change; the M9 backend runs unchanged on the migrated schema. **Downgrade** drops the three columns (follow-up fields are lost). Verified locally on PostgreSQL: base → head, `alembic check`, head → `d4f8a1c6e2b9` → head; `tests/test_migrations.py` covers the round trip.
 
+### Milestone 15 migration (`c8d2f4a6b0e3`, unreleased)
+
+Additive ([ADR-026](decisions/ADR-026-work-authorization-eligibility.md)): seven nullable boolean columns on `profiles` (listed under [`profiles`](#profiles)). No backfill and no data change; the M10 backend runs unchanged on the migrated schema (it ignores the columns). Written against head `a3c7e9b1d5f2`; re-chain `down_revision` if another migration lands first. **Downgrade** drops the seven columns (the answers are lost). Verified locally on PostgreSQL 18: base → head, `alembic check`, head → `c8d2f4a6b0e3` → head; `tests/test_migrations.py` covers the round trip.
+
 ### Milestone 15 migration (`c9e2b7a4d1f8`, unreleased)
 
-Additive ([ADR-025](decisions/ADR-025-dashboard-and-application-engine-v2.md)): nullable `applications.applied_at` (timestamptz) and the append-only `application_events` table (below). No data change and no back-filled history; the M10 backend runs unchanged on the migrated schema. **Downgrade** drops the table and the column (history and `applied_at` are lost; applications are kept). Verified locally on PostgreSQL: base → head, `alembic check`, head → `a3c7e9b1d5f2` → head with an existing application row surviving; `tests/test_migrations.py` covers the round trip.
+Additive ([ADR-025](decisions/ADR-025-dashboard-and-application-engine-v2.md)): nullable `applications.applied_at` (timestamptz) and the append-only `application_events` table (below). No data change and no back-filled history; the M10 backend runs unchanged on the migrated schema. **Downgrade** drops the table and the column (history and `applied_at` are lost; applications are kept). Verified locally on PostgreSQL: base → head, `alembic check`, head → `c8d2f4a6b0e3` → head with an existing application row surviving; `tests/test_migrations.py` covers the round trip.
 
 ### Conventions
 
@@ -101,7 +106,8 @@ The canonical profile: user-entered or user-confirmed values. It's the only inpu
 | `expected_future_education_level` | enum, null | |
 | `date_of_birth` | date, null | |
 | `citizenships` | json list of ISO 3166-1 alpha-2 codes, null | NULL = not provided. The API accepts only the 249 officially assigned codes (e.g. `GB`, not `UK`) |
-| `work_authorizations` | json list of country codes, null | Stored; no v1 rule uses it |
+| `work_authorizations` | json list of country codes, null | Stored; no rule reads it (ADR-026) |
+| `work_authorized_us`, `needs_sponsorship_now`, `needs_sponsorship_future`, `us_citizen`, `us_permanent_resident`, `us_person_export_control`, `active_security_clearance` | boolean, null | Milestone 15 ([ADR-026](decisions/ADR-026-work-authorization-eligibility.md)): the owner's explicit answers; NULL = not provided, never "no"; never derived from each other. Read by ELIG-WA-001 to ELIG-WA-005 |
 | `location` | varchar(200), null | |
 | `interests` | json list of strings, null | Fit input only (Milestone 4). NULL or empty = none |
 | `preferred_locations` | json list of strings, null | Fit input only |

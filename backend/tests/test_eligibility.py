@@ -1,4 +1,4 @@
-"""Eligibility rules v1. All profile data and dates are synthetic."""
+"""Eligibility rules v2. All profile data and dates are synthetic."""
 
 from datetime import date
 from typing import Any
@@ -317,7 +317,7 @@ def test_no_requirements_depends_on_assessment(
     evaluation = evaluate_eligibility(PROFILE, opportunity(assessment=assessment), [])
 
     assert evaluation.status is status
-    assert evaluation.rules_version == RULES_VERSION == "v1"
+    assert evaluation.rules_version == RULES_VERSION == "v2"
     [result] = evaluation.rule_results
     assert result.rule_id == "ELIG-REQ-000"
     assert result.status is status

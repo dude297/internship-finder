@@ -41,12 +41,12 @@ Implementation: `backend/app/opportunities/eligibility/`. The single entry point
 
 - Creating or updating an opportunity (by hand or by a source sync) appends an evaluation if a profile exists **and** the eligibility inputs changed since the latest evaluation. The inputs are compared by a SHA-256 fingerprint of the rules version, the canonical profile inputs, the opportunity's reference dates and assessment status, and its requirements ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion)), so a title-only edit or an unchanged sync adds nothing. Without a profile, nothing is evaluated and the UI says so. An evaluation is never faked.
 - Imported opportunities start `unassessed` (ELIG-REQ-000 → at least `needs_verification`). Source fields such as the discovery feed's sponsorship, H-1B, or skill tags never become requirements. The owner records requirements with **Review requirements** (the regular editor) and marks the assessment `partial` or `complete`; later syncs never overwrite that review.
-- Saving the profile re-evaluates every opportunity when an input the rules read changed (the fields of `ProfileInput`: the education timeline, date of birth, and citizenships). Changing only the grade, location, or work authorizations doesn't, because no v1 rule reads them.
+- Saving the profile re-evaluates every opportunity when an input the rules read changed (the fields of `ProfileInput`: the education timeline, date of birth, citizenships, and the seven work-authorization answers). Changing only the grade, location, or the legacy `work_authorizations` country list doesn't, because no rule reads them.
 - A rules or scoring version bump makes every evaluation stale ([ADR-018](decisions/ADR-018-evaluation-staleness.md)): both versions are part of the fingerprints. `python -m app.cli reevaluate` runs the catalog pass and appends the new rows (a release step). Time passing never makes an evaluation stale: rules resolve the education status and age at each requirement's reference date, never at today, so an evaluation is a pure function of the profile and the opportunity's dates.
 - `POST /api/opportunities/{id}/evaluate` appends one on demand.
 - Application tracking never affects eligibility.
 
-Every evaluation appends history; nothing is overwritten. The rules (and `v1`) are unchanged since Milestone 1.
+Every evaluation appends history; nothing is overwritten. Rules v2 (Milestone 15) extend v1 (Milestone 1); no v1 rule changed.
 
 ### How the UI presents results
 
@@ -59,7 +59,7 @@ Imported and manual postings get deterministic requirement **suggestions** (`req
 - Extraction never changes `requirements_assessment_status`. Accepting the first requirement while `unassessed` moves it to `partial`. Only the owner's explicit choice makes it `complete` (zero requirements allowed). Rejecting every suggestion never implies `complete`.
 - If a sync later changes a reviewed posting's text, a `complete` assessment is downgraded (to `partial`, or `unassessed` if no canonical requirement remains), the opportunity is flagged "Posting changed since requirement review", accepted requirements are kept, and the opportunity is re-evaluated.
 - **Review queue** (Milestone 14, [ADR-024](decisions/ADR-024-requirement-review-workbench.md)): the **Review** page (`/requirements`, `GET /api/requirement-review/queue`) lists pending suggestions across all visible opportunities with their evidence sentence, the opportunity's existing requirements, and a warning when an equal requirement already exists (accepting then links to it; it never duplicates). Accept, Edit + Accept, and Reject there are the same atomic review request as on the opportunity page, so eligibility re-evaluation is unchanged. The only bulk action is **Reject selected** (`POST /api/requirement-review/reject-batch`, 1 to 100 pending IDs, all-or-nothing); there is no accept-all.
-- An accepted work-authorization suggestion evaluates to `needs_verification` (ELIG-REQ-001) until a work-authorization rule exists (design: [work-authorization-eligibility-design.md](research/work-authorization-eligibility-design.md); not implemented).
+- An accepted suggestion with one of the five fixed work-authorization labels is evaluated by ELIG-WA-001 to ELIG-WA-005 (rules v2, [ADR-026](decisions/ADR-026-work-authorization-eligibility.md)) against the owner's explicit profile answers, and is `needs_verification` when the matching answer wasn't provided. Any other wording of a work-authorization or `other` requirement stays `needs_verification` (ELIG-REQ-001).
 - Suggestions need posting text: the discovery feed has no description, so feed-only postings stay `unassessed` (`needs_verification`) until the owner enters requirements or a board source with descriptions supplies text. Production figures: [deployment.md](deployment.md), [CHANGELOG.md](../CHANGELOG.md).
 
 ## Time-Aware Evaluation
@@ -103,7 +103,8 @@ Transitions take effect **on** their date. `unknown` (insufficient information) 
 
 | Version | Status | Date | Notes |
 |---|---|---|---|
-| v1 | Implemented | 2026-09-25 | ELIG-REQ-000, ELIG-AGE-001, ELIG-EDU-001, ELIG-CIT-001, ELIG-REQ-001. Time-aware per ADR-005. Rules version string: `v1`. Requirement-assessment semantics (ELIG-REQ-000) added 2026-09-26 in PR review, before v1 was merged or released. |
+| v2 | Implemented (Milestone 15, unreleased) | 2026-10-06 | Adds ELIG-WA-001 to ELIG-WA-005 ([ADR-026](decisions/ADR-026-work-authorization-eligibility.md)); every v1 rule is unchanged. Rules version string: `v2`. Release step: `python -m app.cli reevaluate --dry-run`, then `reevaluate` ([ADR-018](decisions/ADR-018-evaluation-staleness.md)). |
+| v1 | Superseded by v2 | 2026-09-25 | ELIG-REQ-000, ELIG-AGE-001, ELIG-EDU-001, ELIG-CIT-001, ELIG-REQ-001. Time-aware per ADR-005. Rules version string: `v1`. Requirement-assessment semantics (ELIG-REQ-000) added 2026-09-26 in PR review, before v1 was merged or released. |
 
 ## Rule Format
 
@@ -210,12 +211,35 @@ Status: Implemented (2026-09-25)
 
 ```text
 Rule ID: ELIG-REQ-001
-Description: A requirement v1 can't evaluate: its type has no v1 rule (work_authorization, other),
+Description: A requirement the rules can't evaluate: its type has no rule (`other`, or a
+             `work_authorization` / `other` description that isn't one of the five fixed labels),
              or its value doesn't match the schema for its type.
 Output: needs_verification. Requirements are never silently ignored.
 Reason: "Requirement type {type} isn't evaluated by eligibility rules v1; verify it manually."
 Status: Implemented (2026-09-25)
 ```
+
+### ELIG-WA-001 to ELIG-WA-005 (v2, work authorization)
+
+Each rule evaluates one accepted requirement whose `description` is exactly one of the extractor's fixed labels ([ADR-026](decisions/ADR-026-work-authorization-eligibility.md) §2) and reads only the profile answers it names. Answers are `true`, `false`, or not provided; none is derived from another (citizenship never implies authorization, and nothing implies "U.S. person"). No rule reads a reference date.
+
+```text
+ELIG-WA-001  "Authorized to work in the United States"            reads work_authorized_us
+             yes -> eligible; no or not provided -> needs_verification (never ineligible)
+ELIG-WA-002  "... without sponsorship"                             reads work_authorized_us,
+             needs_sponsorship_now, needs_sponsorship_future
+             need now = yes -> ineligible; authorized yes + need now no + need later no -> eligible;
+             anything else -> needs_verification
+ELIG-WA-003  "U.S. citizen or permanent resident"                  reads us_citizen, us_permanent_resident
+             either yes -> eligible; both no -> ineligible; otherwise needs_verification
+ELIG-WA-004  "U.S. person (export control)"                        reads us_person_export_control
+             yes -> eligible; no -> ineligible; not provided -> needs_verification
+ELIG-WA-005  "Security clearance required"                         reads active_security_clearance
+             yes -> eligible; no or not provided -> needs_verification (never ineligible)
+Status: Implemented (Milestone 15, unreleased)
+```
+
+Example: a posting requires a U.S. person; the owner answered "U.S. citizen: yes" and left "U.S. person" as not provided, so the result is `needs_verification` until that question itself is answered.
 
 ## Clarifications Made When Implementing v1
 
