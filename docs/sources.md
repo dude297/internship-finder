@@ -121,6 +121,8 @@ Adding a company board shouldn't flood the catalog with full-time jobs ([ADR-010
 
 Excluded postings count as **Filtered** in the run (`fetched` = provider items, `filtered` = excluded by scope, `normalized` = admitted to the pipeline) and are never processed. Changing the scope clears the source's `ETag`/`Last-Modified`, so the next sync fetches the full board instead of accepting a `304`: switching to internships-only closes previously imported postings that are now filtered (through the normal closure rule; nothing is deleted), and switching back reopens them. Items that fail validation have no trustworthy title, so they stay invalid (making the run partial) rather than filtered. Boards added before Milestone 4 were migrated to **All postings**, so the upgrade itself never closes anything. The built-in discovery feed is internship-focused already and is always **All postings**.
 
+The opportunity list also filters by the provider's posted date (`posted_within=7|30|90`, **Posted** on the Opportunities page); postings with no posted date match only when the filter is off. Old is never treated as closed (ADR-015).
+
 ### Curated program registry (Milestone 8, ADR-014)
 
 A built-in source (`curated_registry`, identifier `program-registry`) imports `backend/data/program_registry.json`: public facts about named programs (research, fellowships, summer programs), each with an official `source_url` and a `last_verified` date. It reads the file from disk and never touches the network. It can be disabled but not created, re-pointed, or filtered.

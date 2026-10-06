@@ -28,18 +28,21 @@ function DataAgeBanner() {
   }, [])
   if (!dataAge?.stale) return null
   return (
-    <div role="status" className="border-b border-amber-300 bg-amber-50 text-amber-900">
+    <aside
+      aria-label="Data freshness"
+      className="border-b border-amber-300 bg-amber-50 text-amber-900"
+    >
       <p className="mx-auto max-w-4xl p-2 text-sm">
         {dataAge.age_hours === null
           ? 'Sources have never synced successfully'
           : `Sources last synced ${age(dataAge.age_hours)} ago`}
-        {' � the scheduled sync may be paused. '}
+        {' — the scheduled sync may be paused. '}
         <Link to="/sources" className="underline">
           Check the Sources page
         </Link>
         .
       </p>
-    </div>
+    </aside>
   )
 }
 
