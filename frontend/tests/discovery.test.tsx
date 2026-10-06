@@ -169,12 +169,15 @@ describe('imported opportunity detail', () => {
   it('shows a closed posting with its kept tracking and curated edits', async () => {
     mockApi({
       ...loggedIn,
+      'GET /api/applications/app-1/events': () => ({ items: [] }),
       'GET /api/opportunities/opp-1': () =>
         detail({
           origin: 'imported',
           availability: 'closed',
           sources: [feedRecord({ is_active: false, closed_at: '2040-10-05T12:00:00Z' })],
           application: {
+            id: 'app-1',
+            opportunity_id: 'opp-1',
             status: 'applied',
             submitted_on: '2040-10-02',
             notes: 'Synthetic note.',

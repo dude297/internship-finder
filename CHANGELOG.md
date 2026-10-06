@@ -4,7 +4,16 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- Milestone 15: Home Dashboard and Application Engine v2 ([ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)). Migration `c9e2b7a4d1f8` (additive: `applications.applied_at`, `application_events`).
+  - Application history: meaningful changes (created, status, next action, follow-up date, interview scheduled/updated, note added, offer received) are recorded in the same transaction; no history is invented for existing applications. `applied_at` is stamped when an application first becomes applied and can be corrected.
+  - `GET /api/applications` (filters and sorts), `GET /api/applications/{id}/events`, and `GET /api/dashboard` (actions, pipeline counts, new high-fit, upcoming, discovery health, requirement suggestions, outcome funnel; rates only with at least 5 applications, medians only with at least 3 timed ones).
+  - **Dashboard** (`/dashboard`, now the default page after login) and **Applications** (`/applications`: List and Pipeline views, stage selector, quick actions) pages, a History timeline and **Applied at** on the application detail, and Dashboard/Applications navigation.
+
+### Changed
+
+- The post-login landing page and the unknown-route fallback are `/dashboard` instead of `/opportunities`. `InboxItem` gains an optional `kind`; `ApplicationResponse` gains `id`, `opportunity_id`, `applied_at`.
 
 ## Milestones 8.2, 9, 10, 10.1, and 11 (released 2026-10-06)
 

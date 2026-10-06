@@ -12,7 +12,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const from = (location.state as { from?: string } | null)?.from ?? '/opportunities'
+  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
   if (auth.status === 'authenticated') return <Navigate to={from} replace />
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

@@ -8,6 +8,7 @@ import {
 import { orNull } from '../lib/forms'
 import { applicationStatusLabels } from '../lib/labels'
 import { buttonClass, dangerButtonClass, inputClass } from '../lib/styles'
+import { ApplicationHistory } from './ApplicationHistory'
 import { ErrorMessage, Field, SuccessMessage } from './ui'
 
 // <input type="datetime-local"> works in local time without a zone; the API stores an instant.
@@ -37,6 +38,11 @@ export function ApplicationTracker({
   const [interviewAt, setInterviewAt] = useState(
     toLocalInput(application?.interview_at ?? null),
   )
+  const initialApplied = toLocalInput(application?.applied_at ?? null)
+  // null = untouched, so the server's own stamp (set when the status first becomes applied)
+  // is shown and never re-sent.
+  const [appliedEdit, setAppliedEdit] = useState<string | null>(null)
+  const appliedAt = appliedEdit ?? initialApplied
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -47,6 +53,7 @@ export function ApplicationTracker({
     setMessage(null)
     try {
       onChange(await action())
+      setAppliedEdit(null)
       setMessage(done)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save.')
@@ -66,6 +73,8 @@ export function ApplicationTracker({
           next_action: orNull(nextAction),
           next_action_due: orNull(nextActionDue),
           interview_at: toInstant(interviewAt),
+          // Only when the owner edited it: a manual value is never rewritten (ADR-025).
+          ...(appliedAt !== initialApplied && { applied_at: toInstant(appliedAt) }),
         }),
       'Application tracking saved.',
     )
@@ -157,6 +166,19 @@ export function ApplicationTracker({
               className={inputClass}
             />
           </Field>
+          <Field
+            id="application-applied-at"
+            label="Applied at"
+            hint="Set automatically when you mark it applied; correct it here (your local time)."
+          >
+            <input
+              id="application-applied-at"
+              type="datetime-local"
+              value={appliedAt}
+              onChange={(e) => setAppliedEdit(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
           <Field id="application-notes" label="Private notes">
             <textarea
               id="application-notes"
@@ -183,6 +205,7 @@ export function ApplicationTracker({
                   setNextAction('')
                   setNextActionDue('')
                   setInterviewAt('')
+                  setAppliedEdit(null)
                   return null
                 }, 'Stopped tracking this opportunity.')
               }
@@ -191,6 +214,12 @@ export function ApplicationTracker({
             </button>
           </div>
         </form>
+      )}
+      {application && (
+        <ApplicationHistory
+          applicationId={application.id}
+          refreshKey={application.updated_at}
+        />
       )}
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {message && <SuccessMessage>{message}</SuccessMessage>}

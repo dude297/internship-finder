@@ -1,6 +1,9 @@
 import { z } from 'zod'
 import {
+  applicationEventListSchema,
+  applicationPageSchema,
   applicationSchema,
+  dashboardSchema,
   catalogResponseSchema,
   discoveryAddResponseSchema,
   evaluationSchema,
@@ -23,6 +26,7 @@ import {
   sourceDiscoveryResponseSchema,
   sourceSchema,
   type ApplicationInput,
+  type ApplicationQuery,
   type DiscoverySelectionInput,
   type DismissReason,
   type MatchProfile,
@@ -176,6 +180,25 @@ export const api = {
 
   getDataAge: () => request('GET', '/status/freshness', dataAgeSchema),
   getInbox: () => request('GET', '/inbox', inboxSchema),
+  getDashboard: (today: string) =>
+    request('GET', `/dashboard?today=${encodeURIComponent(today)}`, dashboardSchema),
+  listApplications: (query: ApplicationQuery) => {
+    const params = new URLSearchParams({ today: query.today })
+    query.stage?.forEach((s) => params.append('stage', s))
+    if (query.company?.trim()) params.set('company', query.company.trim())
+    if (query.due_soon) params.set('due_soon', 'true')
+    if (query.follow_up_overdue) params.set('follow_up_overdue', 'true')
+    if (query.interview_upcoming) params.set('interview_upcoming', 'true')
+    if (query.sort) params.set('sort', query.sort)
+    params.set('limit', '200')
+    return request('GET', `/applications?${params}`, applicationPageSchema)
+  },
+  getApplicationEvents: (applicationId: string) =>
+    request(
+      'GET',
+      `/applications/${encodeURIComponent(applicationId)}/events`,
+      applicationEventListSchema,
+    ),
   listOpportunities: (query: OpportunityQuery) => {
     const params = new URLSearchParams()
     for (const [key, value] of Object.entries(query))

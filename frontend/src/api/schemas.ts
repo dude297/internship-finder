@@ -138,20 +138,98 @@ export const profileSaveSchema = z.object({
 })
 
 export const applicationSchema = z.object({
+  id: z.string(),
+  opportunity_id: z.string(),
   status: z.enum(applicationStatuses),
   submitted_on: nullableDate,
   notes: z.string().nullable(),
   next_action: z.string().nullable().default(null),
   next_action_due: nullableDate.default(null),
   interview_at: z.string().nullable().default(null),
+  // ADR-025: an instant (timestamptz). Day-only fields stay plain dates.
+  applied_at: z.string().nullable().default(null),
   created_at: z.string(),
   updated_at: z.string(),
 })
 export type Application = z.infer<typeof applicationSchema>
-export type ApplicationInput = Pick<
-  Application,
-  'status' | 'submitted_on' | 'notes' | 'next_action' | 'next_action_due' | 'interview_at'
->
+/** The API requires `status` and merges only the fields sent, so quick actions send a few. */
+export type ApplicationInput = Pick<Application, 'status'> &
+  Partial<
+    Pick<
+      Application,
+      | 'submitted_on'
+      | 'notes'
+      | 'next_action'
+      | 'next_action_due'
+      | 'interview_at'
+      | 'applied_at'
+    >
+  >
+
+// ADR-025: application history, newest last. Empty for applications older than the feature.
+export const applicationEventTypes = [
+  'created',
+  'status_changed',
+  'next_action_changed',
+  'interview_scheduled',
+  'interview_updated',
+  'note_added',
+  'deadline_changed',
+  'offer_received',
+] as const
+export const applicationEventSchema = z.object({
+  id: z.string(),
+  event_type: z.enum(applicationEventTypes),
+  occurred_at: z.string(),
+  from_status: z.enum(applicationStatuses).nullable(),
+  to_status: z.enum(applicationStatuses).nullable(),
+  metadata_json: z.record(z.string(), z.unknown()).default({}),
+})
+export type ApplicationEvent = z.infer<typeof applicationEventSchema>
+export const applicationEventListSchema = z.object({
+  items: z.array(applicationEventSchema),
+})
+
+export const applicationSorts = [
+  'next_action',
+  'newest',
+  'applied',
+  'interview',
+  'company',
+  'stage',
+] as const
+export type ApplicationSort = (typeof applicationSorts)[number]
+export const applicationListItemSchema = z.object({
+  id: z.string(),
+  opportunity_id: z.string(),
+  title: z.string(),
+  organization: z.string(),
+  application_url: z.string().nullable(),
+  application_deadline: nullableDate,
+  status: z.enum(applicationStatuses),
+  next_action: z.string().nullable(),
+  next_action_due: nullableDate,
+  interview_at: z.string().nullable(),
+  applied_at: z.string().nullable(),
+  updated_at: z.string(),
+  created_at: z.string(),
+  follow_up_overdue: z.boolean(),
+})
+export type ApplicationListItem = z.infer<typeof applicationListItemSchema>
+export const applicationPageSchema = z.object({
+  today: isoDate,
+  total: z.number().int(),
+  items: z.array(applicationListItemSchema),
+})
+export interface ApplicationQuery {
+  stage?: ApplicationStatus[]
+  company?: string
+  due_soon?: boolean
+  follow_up_overdue?: boolean
+  interview_upcoming?: boolean
+  sort?: ApplicationSort
+  today: string
+}
 
 // ADR-020: the Action Inbox. Minimal items: where to go, why, and the relevant date.
 export const inboxItemSchema = z.object({
@@ -160,6 +238,8 @@ export const inboxItemSchema = z.object({
   organization: z.string(),
   reason: z.string(),
   date: nullableDate,
+  // ADR-025: application items only: follow_up_overdue | follow_up_due | interview | stale.
+  kind: z.string().nullable().default(null),
 })
 export type InboxItem = z.infer<typeof inboxItemSchema>
 const inboxSectionSchema = z.object({
@@ -183,6 +263,73 @@ export const inboxSchema = z.object({
   applications: inboxSectionSchema,
 })
 export type Inbox = z.infer<typeof inboxSchema>
+
+// ADR-025: the home dashboard. Rates and medians are null when there is too little data; the UI
+// must render null as "not enough data", never as 0 or NaN.
+const rate = z.number().nullable()
+export const dashboardSchema = z.object({
+  today: isoDate,
+  actions: z.object({
+    closing_soon: inboxSectionSchema,
+    pending_requirement_review: inboxSectionSchema,
+    applications: inboxSectionSchema,
+    total: z.number().int(),
+  }),
+  pipeline: z.record(z.enum(applicationStatuses), z.number().int()),
+  high_fit_new: z.object({
+    total: z.number().int(),
+    items: z.array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        organization: z.string(),
+        eligibility_status: z.string(),
+        fit_score: z.number(),
+        first_seen: isoDate,
+      }),
+    ),
+  }),
+  upcoming: z.array(
+    z.object({
+      kind: z.enum(['deadline', 'follow_up', 'interview', 'verify_by']),
+      id: z.string(),
+      title: z.string(),
+      organization: z.string(),
+      date: isoDate,
+      at: z.string().nullable().default(null),
+    }),
+  ),
+  discovery: z.object({
+    open_opportunities: z.number().int(),
+    direct_sources: z.number().int(),
+    independent_percent: rate,
+    description_percent: rate,
+    feed_only: z.number().int(),
+    latest_successful_sync_at: z.string().nullable(),
+    sync_reason: z.enum(['ok', 'stale', 'never_synced', 'no_sources']),
+    sources_needing_attention: z.number().int(),
+  }),
+  requirements: z.object({
+    awaiting_review: z.number().int(),
+    accepted: z.number().int(),
+    rejected: z.number().int(),
+  }),
+  funnel: z.object({
+    applied: z.number().int(),
+    interviewed: z.number().int(),
+    offered: z.number().int(),
+    accepted: z.number().int(),
+    rejected_before_interview: z.number().int(),
+    withdrawn_before_interview: z.number().int(),
+    applied_to_interview_rate: rate,
+    interview_to_offer_rate: rate,
+    offer_to_accepted_rate: rate,
+    median_days_to_interview: rate,
+    median_days_to_rejection: rate,
+    median_days_to_offer: rate,
+  }),
+})
+export type Dashboard = z.infer<typeof dashboardSchema>
 
 export const requirementSchema = z.object({
   id: z.string(),

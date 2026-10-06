@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router'
 import { AuthProvider } from './auth/AuthProvider'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppShell } from './components/AppShell'
+import { ApplicationsPage } from './pages/ApplicationsPage'
+import { DashboardPage } from './pages/DashboardPage'
 import { InboxPage } from './pages/InboxPage'
 import { LoginPage } from './pages/LoginPage'
 import { MatchProfilePage } from './pages/MatchProfilePage'
@@ -19,6 +21,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/applications" element={<ApplicationsPage />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/match" element={<MatchProfilePage />} />
@@ -30,7 +34,7 @@ export default function App() {
             <Route path="/sources" element={<SourcesPage />} />
           </Route>
         </Route>
-        <Route path="*" element={<Navigate to="/opportunities" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AuthProvider>
   )

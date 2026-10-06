@@ -68,8 +68,14 @@ export function AppShell() {
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-4 p-4">
           <p className="text-lg font-semibold">Personal Internship Finder</p>
           <nav aria-label="Main" className="flex gap-2">
+            <NavLink to="/dashboard" className={linkClass}>
+              Dashboard
+            </NavLink>
             <NavLink to="/inbox" className={linkClass}>
               Inbox
+            </NavLink>
+            <NavLink to="/applications" className={linkClass}>
+              Applications
             </NavLink>
             <NavLink to="/profile" className={linkClass}>
               Profile
