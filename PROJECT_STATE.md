@@ -89,7 +89,9 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 None on `main`. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
-Open pull requests: none.
+In review on `chore/m17-least-privilege-sync-role` (not merged, **not activated**): a least-privilege `if_sync` database role for the scheduled sync ([ADR-027](docs/decisions/ADR-027-least-privilege-sync-role.md), Proposed; [`scripts/sql/sync_role_grants.sql`](scripts/sql/sync_role_grants.sql), grant-drift test, owner runbook in [operations.md](docs/operations.md#least-privilege-sync-role-owner-action-not-activated)). The workflow prefers `SYNC_DATABASE_URL` and falls back to `PRODUCTION_DATABASE_URL`, so production is unchanged until the owner acts.
+
+Open pull requests: the one above, once opened.
 
 ## Known Operational Issues
 
@@ -122,7 +124,7 @@ None open. Fixed during hosted validation (2026-09-29):
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
 - Title/organization search uses `ILIKE '%term%'` without a trigram index; measured < 0.5 s at 10,000 opportunities, trigram not worth it below ~50,000 ([scale audit](docs/operations.md#scale-audit-2026-10-06)).
 - Every opportunity update replaces every requirement row (new IDs; old rule results keep their text with `requirement_id` NULL).
-- The scheduled sync's `PRODUCTION_DATABASE_URL` uses the same Neon role as the app (full read/write, including auth and profile tables). Mitigated by the `main`-only `production` environment, SHA-pinned actions, and hash-locked dependencies; a least-privilege ingestion role and required reviewers on the environment are owner actions (security review 2026-10-06).
+- The scheduled sync's `PRODUCTION_DATABASE_URL` uses the same Neon role as the app (full read/write, including auth and profile tables). Mitigated by the `main`-only `production` environment, SHA-pinned actions, and hash-locked dependencies; a least-privilege ingestion role is implemented but **not activated** ([ADR-027](docs/decisions/ADR-027-least-privilege-sync-role.md), Proposed; owner runbook in [operations.md](docs/operations.md#least-privilege-sync-role-owner-action-not-activated)), and required reviewers on the environment remain an owner action (security review 2026-10-06). The weekly backup keeps the full-privilege secret.
 - Expired sessions are deleted only when that user logs in again; there's no periodic cleanup.
 - `profiles` is logically a singleton, but only the service enforces that.
 - Backend dependencies are hash-locked (`backend/requirements.lock`, `requirements-dev.lock`) for CI and the scheduled sync, but Render still builds with `pip install .` (range-resolved) until its build command is switched to the lock (owner action, [deployment.md](docs/deployment.md#render-internship-finder-api)).

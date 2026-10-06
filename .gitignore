@@ -29,3 +29,4 @@ frontend/playwright-report/
 # Local database dumps and exports (private data)
 *.sql
 *.dump
+!scripts/sql/*.sql
