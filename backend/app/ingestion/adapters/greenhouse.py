@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.enums import OpportunitySourceType
 from app.ingestion.adapters import Adapter, CollectRequest, SourceConfig, normalize_each, top_level
-from app.ingestion.http import FetchError, fetch_json
+from app.ingestion.http import FetchError, Fetched, fetch_json
 from app.ingestion.normalize import (
     GREENHOUSE,
     SLUG,
@@ -34,13 +34,16 @@ BOARD_HOSTS = frozenset({"boards.greenhouse.io", "job-boards.greenhouse.io"})
 # more than LARGE_BOARD_JOBS jobs is never fetched with content. Its complete snapshot is the
 # content-free list (~1 KiB/job); descriptions come from one small detail request per
 # internship-titled job (any scope: other titles stay description-less, they aren't scored).
-LARGE_BOARD_JOBS = 500  # at or below: one `?content=true` list as before (<= ~6 MiB observed)
+LARGE_BOARD_JOBS = 500  # stored jobs at or below: one conditional `?content=true` (<= ~6 MiB)
 MAX_JOBS = 10_000  # above: SnapshotError (a 10,000-job content-free list is ~10 MiB)
 MAX_DETAIL_FETCHES = 100  # detail requests per run; the rest keep stored text, retried next run
 MAX_DETAIL_BYTES = 1024 * 1024  # per detail response (observed ~10 KiB)
 MAX_DETAIL_TOTAL_BYTES = 8 * 1024 * 1024  # cumulative detail bytes per run
-MAX_DETAIL_SECONDS = 120.0  # wall clock for the whole detail phase
-MAX_CONSECUTIVE_DETAIL_FAILURES = 5  # a failing provider isn't hit 100 times
+# Deadline for the detail phase, enforced by fetch_json (a slow-drip response can still hold
+# one request open for up to the 20 s read timeout past it).
+MAX_DETAIL_SECONDS = 120.0
+MAX_DETAIL_FAILURES = 5  # total per run, never reset: a failing provider isn't hit 100 times
+STAMP = "_content_updated_at"  # stored with a job: the updated_at its `content` belongs to
 
 
 class _Location(BaseModel):
@@ -139,12 +142,19 @@ def _list_url(source: SourceConfig) -> str:
     return f"{API}/{quote(source.identifier, safe='')}/jobs"
 
 
-def _detail(job_id: int, request: CollectRequest) -> tuple[str, int]:
+def _detail(job_id: int, request: CollectRequest, deadline: float) -> tuple[str, int]:
     """One job's `content` and the bytes it cost. Raises FetchError or LookupError."""
     url = f"{_list_url(request.source)}/{job_id}"
-    fetched = fetch_json(url, transport=request.transport, max_bytes=MAX_DETAIL_BYTES)
+    fetched = fetch_json(
+        url, transport=request.transport, max_bytes=MAX_DETAIL_BYTES, deadline=deadline
+    )
     data = fetched.data
-    if not isinstance(data, dict) or cast(dict[str, Any], data).get("id") != job_id:
+    # `type(...) is int`: JSON true == 1 and 1.0 == 1 must not name job 1.
+    if (
+        not isinstance(data, dict)
+        or type(cast(dict[str, Any], data).get("id")) is not int
+        or data["id"] != job_id
+    ):
         raise LookupError("detail names another job")
     content = cast(dict[str, Any], data).get("content")
     if not isinstance(content, str):
@@ -152,11 +162,39 @@ def _detail(job_id: int, request: CollectRequest) -> tuple[str, int]:
     return content, fetched.size
 
 
-def collect(request: CollectRequest) -> Any:
-    """The complete snapshot is always the content-free list (checked against `meta.total`).
-    On a large board descriptions are best-effort enrichment and never affect completeness: a
-    job whose detail isn't fetched keeps its stored text (or has none) and is never closed."""
+def _small_board(request: CollectRequest) -> Fetched | None:
+    """One conditional `?content=true` request (the pre-ADR-022 behaviour, ETag and all), or None
+    when the board turns out to be large: the response was too big, or lists more than
+    LARGE_BOARD_JOBS jobs. Chosen from the stored job count, so a download that is too big
+    happens at most once per newly large board (afterwards `known` is large)."""
+    try:
+        fetched = fetch_json(
+            _url(request.source),
+            etag=request.etag,
+            last_modified=request.last_modified,
+            transport=request.transport,
+        )
+    except FetchError as error:
+        if error.code == "response_too_large":
+            return None
+        raise
+    jobs = fetched.data.get("jobs") if isinstance(fetched.data, dict) else None
+    if isinstance(jobs, list) and len(cast(list[Any], jobs)) > LARGE_BOARD_JOBS:
+        return None
+    return fetched  # includes 304 (data None) and malformed bodies, which parse reports
+
+
+def collect(request: CollectRequest) -> Fetched | dict[str, Any]:
+    """A board that is small by stored count is one conditional request (a `Fetched`, so the
+    pipeline can keep validators and record 304 as no_change). Otherwise the complete snapshot is
+    the content-free list (checked against `meta.total`) and descriptions are best-effort
+    enrichment that never affects completeness: a job whose detail isn't fetched keeps its stored
+    text (or has none) and is never closed."""
     source = request.source
+    if len(request.known) <= LARGE_BOARD_JOBS:
+        small = _small_board(request)
+        if small is not None:
+            return small
     board = top_level(
         _Board, fetch_json(_list_url(source), transport=request.transport).data, "Greenhouse board"
     )
@@ -168,7 +206,7 @@ def collect(request: CollectRequest) -> Any:
         )
     if len(jobs) > MAX_JOBS:
         raise SnapshotError("too_many_jobs", f"The board lists more than {MAX_JOBS} jobs.")
-    if len(jobs) <= LARGE_BOARD_JOBS:  # chosen by list size, never by catching a huge download
+    if len(jobs) <= LARGE_BOARD_JOBS:  # the board shrank, or the stored count was stale
         return fetch_json(_url(source), transport=request.transport).data
     if total is None:
         raise SnapshotError("incomplete_snapshot", "A large board didn't declare its job count.")
@@ -182,9 +220,10 @@ def collect(request: CollectRequest) -> Any:
             continue
         job = dict(cast(dict[str, Any], item))
         job.pop("content", None)
+        job.pop(STAMP, None)
         entries.append(job)
         job_id, title = job.get("id"), job.get("title")
-        if not isinstance(job_id, int) or isinstance(job_id, bool):
+        if type(job_id) is not int:
             continue  # parse reports it
         if job_id in seen:
             raise SnapshotError("inconsistent_listing", "A job was listed twice.")
@@ -192,30 +231,33 @@ def collect(request: CollectRequest) -> Any:
         stored = request.known.get(str(job_id))
         old = cast(dict[str, Any], stored) if isinstance(stored, dict) else {}
         if isinstance(old.get("content"), str):
-            job["content"] = old["content"]  # survives a failed or deferred refetch
-            if old.get("updated_at") == job.get("updated_at"):
+            # STAMP is the updated_at the stored content belongs to. It is carried forward with
+            # the content, so a failed or deferred refetch never makes old text look current.
+            stamp = old.get(STAMP, old.get("updated_at"))
+            job["content"], job[STAMP] = old["content"], stamp
+            if stamp == job.get("updated_at"):
                 continue
         if isinstance(title, str) and is_internship_title(title):
             pending.append((job_id, job))
 
-    started = time.monotonic()
-    fetches = spent = failures = 0
+    deadline = time.monotonic() + MAX_DETAIL_SECONDS
+    attempts = spent = failures = 0
     for job_id, job in pending:
         if (
-            fetches >= MAX_DETAIL_FETCHES
+            attempts >= MAX_DETAIL_FETCHES
             or spent >= MAX_DETAIL_TOTAL_BYTES
-            or failures >= MAX_CONSECUTIVE_DETAIL_FAILURES
-            or time.monotonic() - started > MAX_DETAIL_SECONDS
+            or failures >= MAX_DETAIL_FAILURES
+            or time.monotonic() >= deadline
         ):
             break
-        fetches += 1
+        attempts += 1  # every attempt counts, failed or not
         try:
-            job["content"], size = _detail(job_id, request)
+            job["content"], size = _detail(job_id, request, deadline)
         except (FetchError, LookupError):
-            failures += 1
+            failures += 1  # never reset: a provider that fails 5 times is left alone this run
             continue
-        failures = 0
-        spent += size
+        job[STAMP] = job.get("updated_at")
+        spent += size  # failed reads aren't counted (each is capped at MAX_DETAIL_BYTES)
     return {"jobs": entries, "meta": {"total": len(entries)}}
 
 

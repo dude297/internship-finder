@@ -7,10 +7,22 @@ All notable changes to this project are documented here.
 ### Added
 
 - Large-board Greenhouse sources ([ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md), Proposed; Milestone 12, no migration): the adapter reads the ~2.5 MB content-free `/jobs` list as the complete snapshot (`meta.total` checked, duplicate ids and more than 10,000 jobs refused), then `?content=true` for boards of at most 500 jobs as before, or one `/jobs/<id>` request per internship-titled job for larger ones (Anduril, SpaceX), with fixed bounds (100 detail requests, 1 MiB per detail, 8 MiB and 120 s of detail per run, stop after 5 consecutive failures) and reuse of stored text while `updated_at` is unchanged. A detail that isn't fetched never closes or fails anything. The 20 MiB per-request cap is unchanged; `fetch_json` gains a tightening-only `max_bytes` and `Fetched.size`. Tests: a compression bomb is capped on decoded bytes.
+- Direct Source Catalog: 26 more verified boards (64 to 90; Greenhouse 20, Ashby 5, Lever 1), mostly space, robotics, fusion/quantum, AI-hardware, and quant-with-hardware employers (e.g. Muon Space, K2 Space, General Matter, Graphcore, IMC, Virtu), each checked against its provider's documented API on 2026-10-06. None are enabled; enabling all would pass the 50-source cap. No migration.
+- `backend/scripts/feed_pareto.py`: read-only report of how much of the public community feed is not covered by a direct source (status, provider histogram, top organizations, unconfigured supported boards). Analysis: [feed-dependence-pareto-2026-10-06.md](docs/research/feed-dependence-pareto-2026-10-06.md) (68% of the feed's listings are Workday or Oracle HCM, which the app does not support).
 
 ### Changed
 
 - Greenhouse boards now make two requests (list, then content) and no longer use conditional requests, so an unchanged board syncs to `success` rather than `no_change`.
+
+### Documentation
+
+- Research note [m13-workday-oracle-provider-gate.md](docs/research/m13-workday-oracle-provider-gate.md): Workday (YELLOW: robots-advertised sitemap capped at 100 URLs plus JobPosting JSON-LD), Oracle Recruiting Cloud (RED), 14 ATS families (Personio and Teamtailor GREEN pending governance), and mega-cap career sites. No code or behavior change.
+
+### Security
+
+- CI: every `actions/checkout` now sets `persist-credentials: false` (the backend, e2e, and docs jobs kept the token in `.git/config`).
+- `scripts/backup_db.sh` passes the database password to `psql`/`pg_dump` through `PGPASSWORD` instead of the URL on the command line (argv is readable by other processes); an execution test checks argv on Linux.
+- Deferred: minimizing the PDF child's environment. Code execution inside the child could read `/proc/self/environ` anyway, so clearing `os.environ` adds little; a real fix means replacing the `multiprocessing` isolation with an `exec` that takes an explicit environment.
 
 ## Milestones 8.2, 9, 10, 10.1, and 11 (released 2026-10-06)
 

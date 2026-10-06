@@ -31,6 +31,9 @@ class CollectRequest:
     # external_id → this source's stored raw item (to reuse unchanged detail responses).
     known: Mapping[str, Any]
     transport: httpx2.BaseTransport | None
+    # Stored validators, for an adapter that makes one conditional request (ADR-022).
+    etag: str | None = None
+    last_modified: str | None = None
 
 
 @dataclass(frozen=True)

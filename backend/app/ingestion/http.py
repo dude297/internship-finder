@@ -151,9 +151,13 @@ def fetch_json(
     transport: httpx2.BaseTransport | None = None,
     sleep: Callable[[float], None] = time.sleep,
     max_bytes: int = MAX_BYTES,
+    deadline: float | None = None,
 ) -> Fetched:
     """GET a JSON document with conditional headers, bounded redirects/retries/size.
     `max_bytes` may only tighten the global MAX_BYTES cap (e.g. small per-job detail bodies).
+    `deadline` (a time.monotonic() value) is checked before every attempt, and a retry sleep that
+    would pass it is refused (FetchError "timeout"). It is not a hard wall: a server dripping
+    bytes can hold one attempt open while each read stays inside the 20 s read timeout.
 
     `transport` replaces the network (tests and the E2E fixture); DNS checks are skipped then,
     since nothing is resolved."""
@@ -173,6 +177,8 @@ def fetch_json(
         headers=headers,
     ) as client:
         for attempt in range(MAX_ATTEMPTS):
+            if deadline is not None and time.monotonic() >= deadline:
+                raise FetchError("timeout", "The time budget for this source ran out.")
             last = attempt == MAX_ATTEMPTS - 1
             response: httpx2.Response | None = None
             try:
@@ -224,6 +230,8 @@ def fetch_json(
             delay = _retry_delay(response, attempt)
             if delay > MAX_RETRY_AFTER_SECONDS:
                 raise FetchError("rate_limited", "The source asked us to wait too long; try later.")
+            if deadline is not None and time.monotonic() + delay >= deadline:
+                raise FetchError("timeout", "The time budget for this source ran out.")
             sleep(delay)
     raise AssertionError("unreachable")  # every attempt returns or raises
 

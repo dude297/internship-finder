@@ -195,7 +195,7 @@ Details are in [ENGINEERING_GUIDELINES.md §3](../ENGINEERING_GUIDELINES.md#3-re
 
 ## CI
 
-GitHub Actions, within included free usage only. No paid runners and no deployment workflows (Render and Vercel deploy from `main` themselves). The one scheduled workflow, [`sync-production.yml`](../.github/workflows/sync-production.yml), is the production source sync, not a check ([operations.md](operations.md)). Every action in both workflows is pinned to a full commit SHA (the tag in a trailing comment); update a pin by resolving the new tag with `gh api repos/<owner>/<action>/commits/<tag> -q .sha`.
+GitHub Actions, within included free usage only. No paid runners and no deployment workflows (Render and Vercel deploy from `main` themselves). The one scheduled workflow, [`sync-production.yml`](../.github/workflows/sync-production.yml), is the production source sync, not a check ([operations.md](operations.md)). Every action in both workflows is pinned to a full commit SHA (the tag in a trailing comment); update a pin by resolving the new tag with `gh api repos/<owner>/<action>/commits/<tag> -q .sha`. Every `actions/checkout` sets `persist-credentials: false`, so no job leaves the token in `.git/config`.
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on pushes to `main` and on every pull request:
 
