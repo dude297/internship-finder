@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | none |
+| **Current Development** | Milestone 8.2 on `feature/m8-2-feed-independence` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-05
@@ -82,7 +82,7 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-None in progress. The documentation governance change (`chore/docs-governance`) is tooling, not a milestone.
+Milestone 8.2 "True Feed Independence" (`feature/m8-2-feed-independence`, [ADR-016](docs/decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)), not released: `retire-source` (safe, atomic, dry-run-default source retirement through the normal closure and fallback path) and `bootstrap-sources` (feed-free setup of a new installation). No migration. Retiring the production feed is an owner-gated step not yet run.
 
 ## Known Operational Issues
 

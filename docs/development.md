@@ -69,6 +69,8 @@ These commands have all been run successfully in this repository.
 | Owner account | `python -m app.cli create-owner` / `set-password` | — |
 | Source sync | `python -m app.cli sync-sources` / `sync-source <id-or-key>` (live network) | — |
 | Requirement scan | `python -m app.cli scan-requirements` (refreshes requirement suggestions for stored opportunities; writes only suggestions, [ADR-012](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) | — |
+| Source retirement | `python -m app.cli retire-source <id-or-key> [--apply]` (dry run by default; counts only, [ADR-016](decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)) | — |
+| Feed-free bootstrap | `python -m app.cli bootstrap-sources [--tags ...] [--disable-feed] [--dry-run] [--sync]` | — |
 | Source coverage | `python -m app.cli source-coverage` (read-only; counts only, no network) | — |
 | Performance smoke | `PERF_DATABASE_URL=<disposable db> python scripts/perf_smoke.py` (manual; replaces that database's opportunities, profile, and profile sources; also times a résumé review batch) | — |
 | Source sync performance | `PERF_DATABASE_URL=<disposable db> python scripts/perf_sources.py` (manual; wipes that database's opportunities and non-built-in sources; times 10/25/50-board syncs, discovery, and the list query, [operations.md](operations.md#operational-source-cap)) | — |
@@ -144,6 +146,10 @@ The frontend has **no** build-time environment variables: it calls relative `/ap
 The example is `backend/.env.example`. Never commit `.env` files.
 
 Backend tests ignore `backend/.env` and any of these variables set in your shell (`backend/tests/conftest.py`), so they run against defaults. Tests that need a value set it explicitly.
+
+### First run without the community feed
+
+The migration still seeds the feed row (enabled). For a feed-free setup: `alembic upgrade head`, `create-owner`, then `python -m app.cli bootstrap-sources --tags <tag> --disable-feed` and `sync-sources`. Tests: `tests/test_source_retirement.py` (retirement dry run/apply/fallback/curated/idempotency/running-run/rollback, bootstrap, CLI) and the feed-retired and fresh-install cases in `tests/test_feed_off_resilience.py`.
 
 ### Syncing sources locally
 

@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Milestone 8.2 (true feed independence, [ADR-016](docs/decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)): `python -m app.cli retire-source SOURCE [--apply]` closes a source's records through the pipeline's normal closure and fallback path, then disables it (dry run by default, atomic, idempotent); `bootstrap-sources` sets up a new installation from the Direct Source Catalog without the community feed (cap 50, never syncs unless `--sync`). The pipeline's closure is extracted into `close_records`, unchanged. No migration.
+
 ### Changed
 
 - Documentation governance: [document authority map](docs/README.md), immutable [release records](docs/releases/) (history moved out of PROJECT_STATE.md, deployment.md, and operations.md), `docs/status.json` with generated status blocks, a Documentation Synchronization Contract (CLAUDE.md, ENGINEERING_GUIDELINES.md §14–§15), and `scripts/check_docs.py` enforced by a new CI `docs` job (links, anchors, status, research headers, changed-path guards). Docs and tooling only; no product change.
