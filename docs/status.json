@@ -1,13 +1,13 @@
 {
   "production": {
-    "milestone": "8.1",
-    "main_sha": "203a56206836b9848cb898ec082eb78e771b92d7",
-    "schema_revision": "b7e3d9f1a2c4",
-    "released_at": "2026-10-05",
-    "release_record": "docs/releases/2026-10-05-m8-1.md"
+    "milestone": "11",
+    "main_sha": "ca8ff77d7d6231fe4d0800ff5143325382a6095e",
+    "schema_revision": "a3c7e9b1d5f2",
+    "released_at": "2026-10-06",
+    "release_record": "docs/releases/2026-10-06-m9-m11.md"
   },
   "development": {
-    "milestone": "12",
-    "branch": "feature/m12-encrypted-backup"
+    "milestone": null,
+    "branch": null
   }
 }

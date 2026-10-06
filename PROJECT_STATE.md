@@ -5,15 +5,15 @@
 <!-- BEGIN GENERATED STATUS (scripts/check_docs.py --write-status) -->
 | | |
 |---|---|
-| **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
-| Production `main` | `203a562` |
-| Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | Milestone 12 on `feature/m12-encrypted-backup` |
+| **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
+| Production `main` | `ca8ff77` |
+| Production schema | `a3c7e9b1d5f2` |
+| **Current Development** | none |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
 
-Production: https://internship-finder-pi.vercel.app (Vercel → Render → Neon). Deploy IDs, smoke results, and counts for the running release: its [release record](docs/releases/2026-10-05-m8-1.md). Remote: https://github.com/dude297/internship-finder.
+Production: https://internship-finder-pi.vercel.app (Vercel → Render → Neon). Deploy IDs, smoke results, and counts for the running release: its [release record](docs/releases/2026-10-06-m9-m11.md). Remote: https://github.com/dude297/internship-finder.
 
 ## Repository Visibility
 
@@ -27,7 +27,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestone 8.1 is released (2026-10-05, [PR #25](https://github.com/dude297/internship-finder/pull/25)). Production shows derived listing freshness and Independent Discovery Coverage (732 / 1,749 open = 41.9% at release). Two owner-gated activation steps are pending: the `requirements-rules` v2 catalog scan (read-only estimate: 19 → ~244 pending suggestions) and adding Direct Source Catalog boards in batches (keep enabled direct sources ≤ 50 until re-measured).
+Milestones 8.2, 9, 10, 10.1, and 11 are released (2026-10-06, five deploys, [release record](docs/releases/2026-10-06-m9-m11.md)). Production runs fit scoring v2, Hide/Revert, the Action Inbox, and stale-sync/Posted-within visibility; 45 direct sources are enabled (cap 50) with 2,335 open opportunities, 56.5% independently discovered. The next steps are owner actions: review the 563 pending requirement suggestions (none accepted; hold the two false-positive families until extractor v3, [PR #45](https://github.com/dude297/internship-finder/pull/45), is released and rescanned) and activate the encrypted backup.
 
 ## Status Summary
 
@@ -40,9 +40,13 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
 | Opportunity ingestion | **Implemented and deployed** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`). Since Milestone 6: Ashby boards (no production Ashby source), a scheduled GitHub Actions sync (active since 2026-10-02), derived source health ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) |
-| Requirement suggestions and review | **Implemented and deployed** (`requirements-rules` v2 deployed 2026-10-05; the catalog re-scan hasn't run, so stored suggestions are still v1; v1 since migration `e6d1a4b8c2f9`, applied to Neon 2026-10-02; [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). Suggestions never affect eligibility until accepted |
-| Eligibility | **Implemented** v1 (rules version `v1`), evaluated automatically (only when inputs change) |
-| Fit scoring and ranking | **Implemented and deployed** (scoring `v1`, [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`, applied to Neon 2026-09-30) |
+| Requirement suggestions and review | **Implemented and deployed; v2 scanned** (`requirements-rules` v2 deployed 2026-10-05; catalog scan run 2026-10-06: all stored suggestions are v2, 563 pending, 0 accepted, 0 rejected, 0 canonical; [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). About 90% precision in the audit; two false-positive families await extractor v3 ([PR #45](https://github.com/dude297/internship-finder/pull/45), not merged). Suggestions never affect eligibility until accepted |
+| Eligibility | **Implemented** v1 (rules version `v1`; still v1, unchanged by the 2026-10-06 release train), evaluated automatically (only when inputs change). Every latest evaluation is `needs_verification` until requirements are accepted |
+| Fit scoring and ranking | **Implemented and deployed: scoring v2** (Milestone 11, [ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), no migration; `reevaluate` applied 2026-10-06, 2,451 evaluations, 10 scores changed all upward). v1 history rows kept ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`) |
+| Owner decisions: hide and revert | **Implemented and deployed** (Milestone 9, [ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md), migration `d4f8a1c6e2b9`): Hide/Unhide durable across syncs, Hidden filter, Revert to source (irreversible; confirmation in the UI) |
+| Action Inbox and follow-ups | **Implemented and deployed** (Milestone 10, [ADR-020](docs/decisions/ADR-020-action-inbox.md), migration `a3c7e9b1d5f2`): `GET /api/inbox`, Inbox page, Next action / due / Interview at on applications |
+| Data-age visibility | **Implemented and deployed** (Milestone 10.1, no migration): stale-sync banner (`/api/status/freshness`, 36 h) and the Posted-within filter |
+| Direct Source Catalog activation | **Activated 2026-10-06**: 19 catalog boards added, 26 → 45 enabled direct sources plus the feed and registry (cap 50); open 1,866 → 2,335, description coverage 45.1% → 56.7%, independent discovery 44.9% → 56.5%, feed-only 1,028 → 1,016. Anduril and SpaceX fail "response too large" (20 MiB cap); Anduril is disabled ([operations.md](docs/operations.md#milestone-9-11-release-train-measurements-2026-10-06)) |
 | Application tracking | **Implemented** |
 | Operating cost constraint | $0/month, no payment method required ([ADR-004](docs/decisions/ADR-004-technology-stack.md#zero-cost--no-payment-constraint)) |
 | Current user education state | High-school senior (expected to become an undergraduate after graduation) |
@@ -77,33 +81,29 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 - Milestone 7 / 7.1: Provider Enrichment and Source Authority; Volunteer Type ([PR #17](https://github.com/dude297/internship-finder/pull/17), [PR #19](https://github.com/dude297/internship-finder/pull/19)).
 - Milestone 8: Structured Source Expansion + Curated Program Registry ([PR #23](https://github.com/dude297/internship-finder/pull/23)).
 - Milestone 8.1: Listing Freshness, Requirement Extraction v2, Independent Discovery ([PR #25](https://github.com/dude297/internship-finder/pull/25)).
+- Milestone 8.2 feed independence and security hardening ([PR #30](https://github.com/dude297/internship-finder/pull/30), [PR #35](https://github.com/dude297/internship-finder/pull/35), [PR #36](https://github.com/dude297/internship-finder/pull/36)); Milestone 9 owner decisions ([PR #33](https://github.com/dude297/internship-finder/pull/33)); Milestone 10 Action Inbox ([PR #38](https://github.com/dude297/internship-finder/pull/38)); Milestone 10.1 freshness visibility ([PR #42](https://github.com/dude297/internship-finder/pull/42)); Milestone 11 fit scoring v2 ([PR #37](https://github.com/dude297/internship-finder/pull/37)). All released 2026-10-06.
 
 Per-milestone implementation and release detail: [docs/releases/](docs/releases/).
 
 ## Current Development
 
-Merged to `main` since the Milestone 8.1 release, **not deployed** (Render/Vercel still run `203a562`; the scheduled sync runs `main`'s code against Neon, so ingestion-side changes apply there):
+None on `main`. Merged and live in production: everything through Milestone 11 (`main` `ca8ff77`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
-- Milestone 8.2 "True Feed Independence" ([PR #30](https://github.com/dude297/internship-finder/pull/30), [ADR-016](docs/decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)): `retire-source` (dry-run-default, atomic retirement through the normal closure and fallback path) and `bootstrap-sources` (feed-free setup of a new installation); the scheduled sync skips a source disabled mid-run. No migration. Retiring the production feed is an owner decision, not planned.
-- Eligibility re-evaluation ([PR #29](https://github.com/dude297/internship-finder/pull/29), [ADR-018](docs/decisions/ADR-018-evaluation-staleness.md)): `python -m app.cli reevaluate [--dry-run]` as a release step after a rules/scoring version bump. Work-authorization evaluation is design only ([note](docs/research/work-authorization-eligibility-design.md)).
-- Data: Curated Program Registry 13 → 24 ([PR #31](https://github.com/dude297/internship-finder/pull/31); the 11 new programs were created in production by the scheduled sync of 2026-10-06 07:32 UTC on `main` `9fb5122`: 28 sources, 0 failed, 118.5 s); Direct Source Catalog 36 → 64 ([PR #32](https://github.com/dude297/internship-finder/pull/32), nothing activated); backend dependency lock ([PR #28](https://github.com/dude297/internship-finder/pull/28)).
-- Security hardening ([PR #35](https://github.com/dude297/internship-finder/pull/35): linear sentence splitting, traceback-free CLI logs, SHA-pinned CI; [PR #36](https://github.com/dude297/internship-finder/pull/36): CSP + Permissions-Policy, effective on the next Vercel deploy).
-- Encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)): skipped until the owner sets the `BACKUP_AGE_RECIPIENT` repository variable.
-- Scale audit ([PR #41](https://github.com/dude297/internship-finder/pull/41), [operations.md](docs/operations.md#scale-audit-2026-10-06)).
+Open pull requests (not merged):
 
-In review, release-gated (each needs a production window; see each PR):
-
-- Milestone 9 owner decisions, Hide/Unhide and Revert to source ([PR #33](https://github.com/dude297/internship-finder/pull/33), [ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md); migration `d4f8a1c6e2b9`). Merging requires migrating Neon in the same window, because the scheduled sync refuses a schema behind `main`.
-- Milestone 10 Action Inbox and application follow-ups ([PR #38](https://github.com/dude297/internship-finder/pull/38), stacked on #33, ADR-020; migration `a3c7e9b1d5f2`) and freshness visibility, a stale-sync banner and a Posted-within filter ([PR #42](https://github.com/dude297/internship-finder/pull/42), stacked on #38; no migration).
-- Fit scoring v2 ([PR #37](https://github.com/dude297/internship-finder/pull/37), ADR-019): needs `reevaluate` right after deploy.
-
-In development on `feature/m10-action-inbox` (stacked on Milestone 9, unreleased): Milestone 10 Action Inbox ([ADR-020](docs/decisions/ADR-020-action-inbox.md); migration `a3c7e9b1d5f2`): `GET /api/inbox` and an **Inbox** page (new high fit, closing soon, requirements to review, source warnings, program dates to re-check, applications needing attention), plus Next action / Next action due / Interview at on application tracking. It also needs Neon migrated before the scheduled sync runs the new code.
+- [PR #45](https://github.com/dude297/internship-finder/pull/45): requirements extractor v3 (fixes the deemed-export and "U.S. Person required ... no sponsorship" false positives). Needs review; after release, rescan (`scan-requirements`).
+- [PR #46](https://github.com/dude297/internship-finder/pull/46): registry re-verification (SULI opens 2026-10-14, Tech Interactive dates, MIT PRIMES).
 
 ## Known Operational Issues
 
-- SmartRecruiters `boschgroup` cleared its detail backlog on 2026-10-05 (first complete `success` run, 5 closed); its postings move from **Verification incomplete** to **ATS verified** as of that run.
-- Scheduled-sync wall time is dominated by GitHub runner queueing/setup (14 min for a 205 s sync on 2026-10-05). A dispatch fired seconds after re-enabling the workflow sat queued with no job for 36 min; re-dispatching fixed it (latest sync 147.1 s).
-- Owner-gated, not yet run: the `requirements-rules` v2 catalog re-scan (stored suggestions are still v1) and Direct Source Catalog activation.
+- Direct sources: 45 enabled (cap 50). `greenhouse:andurilindustries` fails ("The source response is too large": 2,457 jobs exceed the 20 MiB `MAX_BYTES` cap) and is disabled; SpaceX fails the same way in a disposable-database test. Both stay in the catalog as failing entries until a size-tolerant adapter exists.
+- 563 requirement suggestions are pending, none accepted. Do not accept the deemed-export "U.S. person ... or eligible for deemed export licensing" group (21 at audit) or the "U.S. Person required ... does not provide sponsorship" group (8) until extractor v3 ([PR #45](https://github.com/dude297/internship-finder/pull/45)) is released and rescanned.
+- Backup is not active: no backup beyond Neon Free's short restore window until the owner installs `age`, generates a key pair into private storage, sets `BACKUP_AGE_RECIPIENT`, dispatches once, and runs a restore drill.
+- Render still builds with `pip install .`; switch the build command to `pip install -r requirements.lock && pip install --no-deps .` (owner action).
+- Production feed not retired. Feed-free readiness passed on disposable databases (technically GO), conditional on losing about 1,016 feed-only postings (about 800 on Workday/Oracle, which have no adapter).
+- GitHub Actions: dispatch [37443083684](https://github.com/dude297/internship-finder/actions/runs/37443083684) sat "waiting" 30+ minutes with no job and was cancelled; run 37387224375 still shows queued and cannot be cancelled. Re-dispatching works (latest sync, 97.5 s ingestion for 47 sources).
+- Fit v2 known gaps: multi-city locations and "United States of America" miss the Bay Area region; Foster City, San Carlos and Livermore are not in the region table; no RTL/FPGA/VLSI/PyTorch aliases; empty availability dates mean the schedule never contributes.
+- Security review (2026-10-06): no BLOCKER or HIGH. MEDIUM: the login throttle shares the proxy bucket (an attacker can lock the owner out for 15 minutes; availability only). MEDIUM: Revert to source is irreversible (UI confirmation exists). LOW: the PDF child inherits the environment; backup scripts pass the database URL on the command line; CI checkout should set `persist-credentials: false`.
 
 ## Known Bugs
 
@@ -116,11 +116,11 @@ None open. Fixed during hosted validation (2026-09-29):
 
 - The login throttle is in memory in one process ([ADR-009 §6](docs/decisions/ADR-009-hosted-deployment-architecture.md#6-login-rate-limiting-behind-the-proxy)): a deploy or restart resets it, and it needs shared state if the backend ever runs more than one worker or instance. All logins through the site share one bucket, so anyone's 10 failed attempts block new logins for up to 15 minutes (accepted; no trustworthy per-browser address exists behind Vercel's rewrite).
 - Catalog re-evaluation (profile or Match Profile save) is synchronous in the request. Milestone 4 batches it and skips unchanged pairs (~2 s for 1,100 opportunities locally when everything changes; hosted, measured 2026-09-29 against 1,055 real opportunities: 6.36 s scoring everything, 2.0 s when nothing changed — see [operations.md](docs/operations.md#evaluation-history-and-re-evaluation-implemented-not-scheduled)). A much larger catalog would need background re-evaluation: the 2026-10-06 scale audit measured 42 s locally for a whole-catalog change at 10,000 opportunities, so the hosted proxy limit is reached around 3,000–5,000 ([scale audit](docs/operations.md#scale-audit-2026-10-06)).
-- Fit is lexical: synonyms outside the alias and related tables don't match. Development adds scoring v2 ([ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), unreleased), whose guard rejects ordinary-word uses of `Go`/`C`/`R`/`Rust` at some recall cost; production still runs v1, where they can match unrelated text. Location matching is plain text plus a Bay Area region table (v2). Activities and experience don't score ([scoring.md](docs/scoring.md#known-limitations)).
+- Fit is lexical: synonyms outside the alias and related tables don't match. Scoring v2 ([ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), in production since 2026-10-06) rejects ordinary-word uses of `Go`/`C`/`R`/`Rust` at some recall cost (no such false positives in production samples). Location matching is plain text plus a Bay Area region table (v2). Activities and experience don't score ([scoring.md](docs/scoring.md#known-limitations)).
 - Every current evaluation is `needs_verification`: no imported requirement has been accepted yet, so eligibility can't be decided. Cross-bucket dominance is covered by deterministic tests, not production data.
 - Source sync runs inside the HTTP request (the first discovery-feed sync takes ~20 s locally) behind Vercel's external-rewrite timeout. A timed-out proxy request may still have committed; refresh before retrying.
 - Render Free cold starts take about 1–3 minutes (measured 73 s and ~3 min); Vercel either holds the request or returns `502`, which the UI shows as the waking state. Sessions survive the restart.
-- Database backups: an encrypted weekly backup workflow and a restore script are implemented ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md), Proposed, unreleased) but **not activated**: until the owner sets `BACKUP_AGE_RECIPIENT`, there is no backup beyond Neon Free's short restore window. The private key is the owner's alone; losing it loses every backup.
+- Database backups: an encrypted weekly backup workflow and a restore script are implemented ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md), Proposed; merged to `main` and inert) but **not activated**: until the owner sets `BACKUP_AGE_RECIPIENT`, there is no backup beyond Neon Free's short restore window. The private key is the owner's alone; losing it loses every backup.
 - Board scope is title-based: internships titled without intern/co-op/apprentice words are filtered, and titles such as "Internship Program Manager" are kept. Greenhouse postings are typed by title from Milestone 6 (still `other` in production until released). Boards added before Milestone 4 were migrated to **All postings**.
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
 - Title/organization search uses `ILIKE '%term%'` without a trigram index; measured < 0.5 s at 10,000 opportunities, trigram not worth it below ~50,000 ([scale audit](docs/operations.md#scale-audit-2026-10-06)).
@@ -129,7 +129,7 @@ None open. Fixed during hosted validation (2026-09-29):
 - Expired sessions are deleted only when that user logs in again; there's no periodic cleanup.
 - `profiles` is logically a singleton, but only the service enforces that.
 - Backend dependencies are hash-locked (`backend/requirements.lock`, `requirements-dev.lock`) for CI and the scheduled sync, but Render still builds with `pip install .` (range-resolved) until its build command is switched to the lock (owner action, [deployment.md](docs/deployment.md#render-internship-finder-api)).
-- Nothing runs the catalog pass automatically after a rules/scoring version bump: run `python -m app.cli reevaluate` as a release step ([ADR-018](docs/decisions/ADR-018-evaluation-staleness.md); unreleased). The earlier "time passes a graduation/enrollment date" debt is resolved by analysis: rules resolve status at each requirement's reference date and never read today, so time cannot make an evaluation stale.
+- Nothing runs the catalog pass automatically after a rules/scoring version bump: run `python -m app.cli reevaluate` as a release step ([ADR-018](docs/decisions/ADR-018-evaluation-staleness.md); used for the Milestone 11 release on 2026-10-06). The earlier "time passes a graduation/enrollment date" debt is resolved by analysis: rules resolve status at each requirement's reference date and never read today, so time cannot make an evaluation stale.
 - `work_authorization` requirements are stored but not evaluated (always `needs_verification`, ELIG-REQ-001). A design for a safe profile representation and rules exists ([research note](docs/research/work-authorization-eligibility-design.md)); nothing is implemented.
 - Milestone 8: a large SmartRecruiters internship board (> 100 postings needing detail) takes several partial runs to fill, during which Source Health shows a warning and nothing closes; a SmartRecruiters company that renames its identifier closes its postings (the API answers 200 with zero postings for an unknown company); registry dates are only as current as the file (`verify_by` surfaces staleness); extractor v1 proposes a work-authorization suggestion for "citizens or permanent residents" wording (pending only; see the recall analysis); a SmartRecruiters posting whose detail fails on every run keeps its source partial, so removed postings stay open until it resolves; the list's "Needs date verification" uses the client's date and the detail page the server's UTC date (can differ near midnight); an owner edit of a registry opportunity can't clear `verify_by`/typical windows, so the badge can persist after the owner enters a confirmed deadline; `collect` sources load the source's stored raw payloads per run (bounded by the 5,000-posting cap).
 - Milestone 7: a database error while applying an ADR-013 §5 fallback fails that source's whole run (the stored item already normalized once, so unlikely); the abandoned-run threshold (15 min) is shorter than the scheduled workflow timeout (20 min), so keep enabled ATS sources at or under the measured cap of 50.
@@ -147,22 +147,22 @@ None open. Fixed during hosted validation (2026-09-29):
 
 ## Database State
 
-Current (2026-10-05, at the Milestone 8.1 release): migration `b7e3d9f1a2c4`; 1,847 opportunities (1,749 open); 1,955 source records; 28 ingestion sources; 7,257 evaluations, every latest `needs_verification`; 0 canonical requirements; 19 pending candidates (all v1); 0 applications; 34 MB. Earlier snapshots: [archive](docs/releases/archive-project-state-2026-10-05.md).
+Current (2026-10-06, after the Milestone 11 release; aggregates from the release record): migration `a3c7e9b1d5f2`; 2,451 opportunities evaluated (2,335 open at the final catalog count); 47 sources run per sync (45 enabled direct sources plus the feed and the registry); every latest evaluation is scoring v2 and `needs_verification`, with 5,771 v1 history rows kept; 0 canonical requirements; 563 pending candidates (all v2), 0 accepted, 0 rejected. Size and application counts were not re-measured. At the Milestone 8.1 release (2026-10-05): 1,847 opportunities, 28 sources, 19 pending candidates, 0 applications, 34 MB. Earlier snapshots: [archive](docs/releases/archive-project-state-2026-10-05.md).
 
 ## Current Scoring Version
 
-`v1`, in production since the Milestone 4 release (2026-09-29): [docs/scoring.md](docs/scoring.md), [ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md). Current Development (`feature/m11-fit-scoring-v2`) implements `v2` ([ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), unreleased, same weights); releasing it requires `python -m app.cli reevaluate --dry-run`, then `reevaluate` ([deployment.md](docs/deployment.md#release-procedure)).
+`v2`, in production since 2026-10-06 (Milestone 11, [ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), same weights as v1): [docs/scoring.md](docs/scoring.md). `reevaluate` ran the same day (2,451 evaluated, 10 scores changed, all +5 to +8). v1 ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md)) ran from the Milestone 4 release (2026-09-29); its history rows are kept. A future version bump needs `python -m app.cli reevaluate --dry-run`, then `reevaluate` ([deployment.md](docs/deployment.md#release-procedure)).
 
 ## Current Eligibility Rules Version
 
-`v1`, implemented 2026-09-25 ([docs/eligibility.md](docs/eligibility.md)). Unchanged by Milestones 2 and 3 (only when evaluations run changed).
+`v1`, implemented 2026-09-25 ([docs/eligibility.md](docs/eligibility.md)). Unchanged by the 2026-10-06 release train: eligibility digests were identical before and after the requirement scan and the scoring v2 `reevaluate`.
 
 ## Active Opportunity Sources
 
 - Tech Internship Discovery Feed (zshah101 public JSON API) — built in, optional and supplemental; synced with the others.
-- SmartRecruiters companies — 6 in production since 2026-10-05 (Internships only), and the built-in Curated Program Registry (13 programs in production; the file on `main` adds 11 more for the 2027 cycle, synced on the next registry sync after deploy, [research](docs/research/curated-program-expansion-2027.md)) ([docs/sources.md](docs/releases/2026-10-05-m8.md)).
+- SmartRecruiters companies — 6 in production since 2026-10-05 (Internships only), and the built-in Curated Program Registry (24 programs in production since the 2026-10-06 registry sync; [research](docs/research/curated-program-expansion-2027.md)) ([docs/sources.md](docs/releases/2026-10-05-m8.md)).
 - Greenhouse boards, Lever sites, and Ashby boards — 20 in production since 2026-10-04 (suggested from the feed, Internships only; [docs/sources.md](docs/releases/2026-10-04-m7.md)). Synced twice daily with the feed.
-- Workable and Pinpoint: adapters available since Milestone 8.1; none configured. The Direct Source Catalog lists 64 verified boards on `main` (36 at the M8.1 release, 28 added 2026-10-06) (3 configured: Waymo, Lyft, Coinbase) for owner-approved activation ([docs/sources.md](docs/sources.md#direct-source-catalog-milestone-81-adr-015-6)).
+- Workable and Pinpoint: adapters since Milestone 8.1 (Pinpoint: `impulsespace`, activated 2026-10-06). 45 direct sources enabled in total (cap 50): 19 catalog boards activated 2026-10-06 (batches in the [release record](docs/releases/2026-10-06-m9-m11.md)), `andurilindustries` disabled (response over the 20 MiB cap). The Direct Source Catalog lists 64 verified boards (SpaceX also fails with "response too large"; [operations.md](docs/operations.md#milestone-9-11-release-train-measurements-2026-10-06)); the Curated Program Registry holds 24 programs ([docs/sources.md](docs/sources.md#direct-source-catalog-milestone-81-adr-015-6)).
 - Manual entry.
 - Excluded: `SuryaHarikrishnan/2027-internship-tracker` listing data (licensing unclear).
 
@@ -181,18 +181,19 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 ## Next Planned Task
 
-Milestone 8.1 is released. Pending, owner-approved only:
+Milestones 8.2 through 11 are released and the 2026-10-06 activation is done. Next, in order:
 
-1. Run the `requirements-rules` v2 catalog scan (`python -m app.cli scan-requirements`; read-only estimate 19 → ~244 pending suggestions, nothing auto-accepted).
-2. Add Direct Source Catalog boards from **Verified Direct Sources** in batches, keeping enabled direct sources ≤ 50 until a scheduled run is re-measured.
-
-Also watch Bosch's backlog (98 deferred at 2026-10-05 21:07 UTC) clear and its Source Health return to healthy. Recommended next milestone: a source-retirement command and a feed-free first run ([ADR-015 §11](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)).
+1. Owner: review the 563 pending requirement suggestions. Do not accept the deemed-export and "U.S. Person required ... no sponsorship" groups until extractor v3 ([PR #45](https://github.com/dude297/internship-finder/pull/45)) is reviewed, released, and followed by `scan-requirements`.
+2. Owner: activate the encrypted backup (install `age`, `age-keygen` into private storage, `gh variable set BACKUP_AGE_RECIPIENT`, dispatch once, restore drill) and switch Render's build command to the lock install ([deployment.md](docs/deployment.md#render-internship-finder-api)).
+3. Review and merge [PR #46](https://github.com/dude297/internship-finder/pull/46) (registry re-verification; SULI opens 2026-10-14).
+4. Recommended next milestone: close the large-response gap (Anduril, SpaceX over the 20 MiB cap) or add Workday/Oracle coverage, which also decides whether the feed (about 1,016 feed-only postings, about 800 on Workday/Oracle) can ever be retired.
 
 ## Recent Important Decisions
 
 - 2026-10-05: Milestone 8.1 released. PR #25 merged (merge commit) as `main` `203a562`; Neon migrated to `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`, Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`; hosted smoke 14/14. v2 scan and catalog activation deferred to the owner.
-- 2026-10-06: ADR-020 accepted on `feature/m10-action-inbox` (unreleased): a read-only, bounded, set-based Action Inbox derived on read; three nullable follow-up columns on `applications`; fit threshold 70; hidden opportunities excluded everywhere. Migration `a3c7e9b1d5f2`.
-- 2026-10-06: ADR-017 accepted on `feature/m9-owner-decisions` (unreleased): hiding is two nullable columns that sync never touches (hidden excluded by default); Revert to source reuses the ADR-013 owner-record and fallback code and the fingerprinted evaluation. Migration `d4f8a1c6e2b9`.
+- 2026-10-06: Release train: `f6210e9` (M8.2/security/CSP), M9 `4f419e5` (migration `d4f8a1c6e2b9`), M10 `1dbb86f` (migration `a3c7e9b1d5f2`), M10.1 `1d270d6`, M11 `ca8ff77`; five Render deploys, four Vercel deploys; hosted smokes all passed; v2 requirement scan and catalog activation (26 → 45 sources) run with owner authorization. [Release record](docs/releases/2026-10-06-m9-m11.md).
+- 2026-10-06: ADR-020 accepted (Milestone 10, released): a read-only, bounded, set-based Action Inbox derived on read; three nullable follow-up columns on `applications`; fit threshold 70; hidden opportunities excluded everywhere. Migration `a3c7e9b1d5f2`.
+- 2026-10-06: ADR-017 accepted (Milestone 9, released): hiding is two nullable columns that sync never touches (hidden excluded by default); Revert to source reuses the ADR-013 owner-record and fallback code and the fingerprinted evaluation. Migration `d4f8a1c6e2b9`.
 - 2026-10-05: ADR-015 accepted: derived listing freshness (never stored), first-seen "New", live-link pings rejected, `requirements-rules` v2, Independent Discovery Coverage, the Direct Source Catalog, Workable and Pinpoint adapters, an empty-snapshot closure guard; no first-party company adapter yet. Migration `b7e3d9f1a2c4`.
 - 2026-10-05: Milestone 8 released. PR #23 → `main` `9263860`; Neon migrated to `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`, Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13); 6 SmartRecruiters companies activated; coverage 22.4% → 38.7%. Runbook rule added: sync the feed on new code before adding sources whose feed identity that release introduces.
 - 2026-10-04: ADR-014 accepted (on the Milestone 8 branch): SmartRecruiters public Posting API as an ATS source with bounded detail fetching and partial-run semantics; a multi-request `collect` adapter hook; the curated program registry as a built-in automated source (own `curated_registry` provenance, so it can update its own entries while owner edits still win); verified vs typical dates and `verify_by`. Migration `a8c3e5f7b9d1`. Oracle, Workday, USAJOBS excluded from M8.
