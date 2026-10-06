@@ -84,6 +84,23 @@ Same harness, on the M8.1 branch: 50 ATS boards + feed — first sync 122.2 s (2
 
 Activating the whole Direct Source Catalog would bring production to 26 + 33 = 59 direct sources, above the measured cap of 50. Activate in batches (largest-internship boards first), watch the scheduled run's elapsed time after each batch, and re-measure before passing 50.
 
+### Milestone 9-11 release train measurements (2026-10-06)
+
+Production measurements after the catalog activation (details: [release record](releases/2026-10-06-m9-m11.md)).
+
+| Measurement | Value |
+|---|---|
+| Enabled direct sources | **45**, plus the discovery feed and the registry (47 sources run per sync); cap 50 |
+| Full local CLI sync | 47 run, 0 failed, 0 skipped, **201.9 s** ingestion (wall 211 s); previous 118.5 s at 28 sources |
+| Scheduled-style dispatch, run [37449515159](https://github.com/dude297/internship-finder/actions/runs/37449515159) | 47 run, 0 failed, 0 skipped, **97.5 s** ingestion, queue about 7 s, job 10:24:03–10:26:02 |
+| Open opportunities | 1,866 → 2,335; description coverage 45.1% → 56.7%; independent discovery 56.5% (1,319 / 2,335); feed-only 1,016 |
+| `reevaluate` (scoring v2) | dry run 16 s, real run 28 s, 2,451 evaluations |
+| `scan-requirements` | 1,980 scanned in 3 m 30 s (0 failed) |
+
+At 45 direct sources the enabled count is 5 below the cap of 50; re-measure the next scheduled run before going past 50. The first sync of a new board added 3-96 postings (one-time creation and evaluation).
+
+**Failing catalog entries (response too large):** the provider response must stay under the 20 MiB `MAX_BYTES` cap. `greenhouse:andurilindustries` (2,457 jobs) failed with "The source response is too large" in production and is disabled (Sources toggle); `spacex` fails the same way in the disposable-database test. Both remain in the catalog but should not be activated; there is no size-tolerant adapter yet.
+
 ## Source Activation Procedure
 
 Adding production sources after a release (new boards, a catalog batch, a new provider) is an owner-approved step, done in bounded batches:
