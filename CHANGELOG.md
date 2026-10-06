@@ -4,7 +4,11 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
-Nothing yet.
+### Security
+
+- CI: every `actions/checkout` now sets `persist-credentials: false` (the backend, e2e, and docs jobs kept the token in `.git/config`).
+- `scripts/backup_db.sh` passes the database password to `psql`/`pg_dump` through `PGPASSWORD` instead of the URL on the command line (argv is readable by other processes); an execution test checks argv on Linux.
+- Deferred: minimizing the PDF child's environment. Code execution inside the child could read `/proc/self/environ` anyway, so clearing `os.environ` adds little; a real fix means replacing the `multiprocessing` isolation with an `exec` that takes an explicit environment.
 
 ## Milestones 8.2, 9, 10, 10.1, and 11 (released 2026-10-06)
 
