@@ -10,7 +10,12 @@ from app.core.config import get_settings
 @lru_cache
 def get_engine() -> Engine:
     """Created lazily so the app starts (and /api/health works) without DATABASE_URL."""
-    return create_engine(get_settings().database_url_for_driver(), pool_pre_ping=True)
+    return create_engine(
+        get_settings().database_url_for_driver(),
+        pool_pre_ping=True,
+        # Never render bound parameters (profile-derived values) into error messages or logs.
+        hide_parameters=True,
+    )
 
 
 def get_session() -> Iterator[Session]:
