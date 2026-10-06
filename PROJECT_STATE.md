@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | Milestone 11 on `feature/m11-fit-scoring-v2` |
+| **Current Development** | Milestone 10 on `feature/m10-action-inbox` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-05
