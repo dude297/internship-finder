@@ -57,6 +57,27 @@ Real network fetches add roughly 1–3 s per board, so a scheduled run with 50 b
 
 Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: **50** (the largest size measured). The extrapolated ceiling is around 200. Before going past 50, re-measure the elapsed time of a real scheduled run ([source activation](#source-activation-procedure), step 6). Real measurement, 2026-10-04: 20 ATS boards + the feed, a scheduled-style run of 24.6 s ([run 37234279820](https://github.com/dude297/internship-finder/actions/runs/37234279820)); first syncs of new boards took 7.6–53.6 s each (one-time creation and evaluation).
 
+### Scale audit (2026-10-06)
+
+Synthetic catalogs of 2,500 / 5,000 / 10,000 opportunities (≈50% feed-only, ≈45% ATS-backed with 3–6 KB descriptions; local Docker PostgreSQL 18, Windows; harness adapted from `scripts/perf_smoke.py` and `perf_sources.py`):
+
+| Operation | 2,500 | 5,000 | 10,000 | SQL statements |
+|---|---|---|---|---|
+| Opportunity list, page 50 (newest / recommended) | 0.13 s | 0.17 s | 0.50–0.55 s | 9 (constant) |
+| List with freshness / discovered / search filters | — | — | 0.18–0.43 s | 9 |
+| `discover()` (Source Coverage) | 0.36 s | 0.84 s | 4.0 s | 5 (constant) |
+| Catalog evaluation, nothing changed | 1.4 s | 2.2 s | 4.4 s | 31 / 55 / 105 |
+| Catalog evaluation, everything changed | 12 s | 20 s | 42 s | 59 / 107 / 207 |
+| Requirement scan, cold / rerun | 48 s / 1.4 s | 98 s / 3.3 s | 203 s / 6.7 s | ~1.1 per opportunity |
+| 50-board unchanged re-sync | 6–9 s | 6–9 s | 6–9 s | 970 |
+
+No N+1 anywhere and no missing index (existing indexes are used in every plan). Thresholds to act on, none reached at production's ~2,000 opportunities:
+
+- **Synchronous catalog evaluation** (profile / Match Profile save, résumé review) is Python CPU (text matching, serialization), not SQL. Hosted runs ~3× local, so a whole-catalog change approaches the proxy timeout around 3,000–5,000 opportunities. Then: move the pass to the `reevaluate` CLI / scheduled workflow, or evaluate open opportunities only.
+- **`discover()` at 10,000** spends ~2 s of ~2.9 s in PostgreSQL JIT compilation (12 correlated `EXISTS` subplans cross the JIT cost threshold). `SET LOCAL jit = off` in that query measured 2.2 s → 0.65 s (list −20–40%). Apply when Source Coverage becomes slow; `SET LOCAL` rather than a connection option, because the scheduled sync connects through Neon's transaction pooler.
+- **Requirement scan** is CLI-only (~20 ms/opportunity: regex ~66%, per-row flush ~32%); batch the flush if it ever runs routinely.
+- **Search:** `ILIKE` stays under 0.5 s at 10,000; a `pg_trgm` GIN index cut the predicate 38 ms → 1–4 ms but end-to-end latency barely moved, so it's not worth adding below ~50,000 rows.
+
 ### Milestone 8.1 measurements (2026-10-05)
 
 Same harness, on the M8.1 branch: 50 ATS boards + feed — first sync 122.2 s (21,366 SQL statements; slower than the 2026-10-04 run on a busier machine), unchanged re-sync 5.7 s (918), failure + close re-sync 9.0 s (920); `discover()` 5 statements; **opportunity list 9 statements at 1,456 and 1,931 opportunities** (freshness adds 3 set-based statements, independent of page size; `test_list_statement_count_is_constant`). Mixed fleet 20 ATS + 10 SmartRecruiters + feed: first sync 78.7 s (612 detail requests, ≤ 100 per source), unchanged re-sync 4.2 s with zero detail requests. Workable and Pinpoint cost one request per source per run, like Greenhouse. (The harness's last assertion, on SmartRecruiters retry sleep order, fails because the harness doesn't stub M8's rotating detail refresh; it's a harness issue, not a product one.)
