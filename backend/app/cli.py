@@ -45,6 +45,17 @@ Derived on read; zero network calls, nothing stored. Prints aggregate counts onl
 metrics, provider distribution, and how many proven suggestions by kind are and aren't already
 configured. Never a title, company name, payload, URL, or the database URL. Exits 2 on a
 database error, like the other commands.
+
+Source retirement and feed-free bootstrap (ADR-016):
+
+    python -m app.cli retire-source SOURCE [--apply]
+    python -m app.cli bootstrap-sources [--tags TAG ...] [--disable-feed] [--dry-run] [--sync]
+
+retire-source is a dry run unless --apply: it closes the source's open records through the
+pipeline's normal closure path (canonical content falls back to the next source), then disables
+the source, in one transaction. bootstrap-sources adds Direct Source Catalog entries for a new
+installation (never more than 50 enabled direct sources) and syncs only with --sync. Both print
+counts only. Exit 1 on a refusal (running sync, unknown source/tag, cap), 2 on a database error.
 """
 
 import argparse
@@ -68,7 +79,7 @@ from app.ingestion.http import configured_transport
 from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_source
 from app.models import AuthUser, IngestionRun, IngestionSource
 from app.repositories import CATALOG_BATCH_SIZE, evaluate_catalog, evaluation_context
-from app.services import auth, source_discovery
+from app.services import auth, source_bootstrap, source_discovery, source_retirement
 from app.services.requirement_candidates import CATALOG_SCAN_BATCH_SIZE, scan_catalog
 
 # Never the exception text or the URL it may embed (ADR-009 §9): a connection failure or a
@@ -157,6 +168,7 @@ def schema_is_current(connection: Connection) -> bool:
 def _sync_sources(*, scheduled: bool) -> int:
     started = time.monotonic()
     skipped: list[str] = []
+    disabled: list[str] = []
     try:
         with Session(get_engine(), expire_on_commit=False) as db:
             if scheduled and not schema_is_current(db.connection()):
@@ -166,6 +178,7 @@ def _sync_sources(*, scheduled: bool) -> int:
                 db,
                 transport=configured_transport(),
                 on_skip=lambda source: skipped.append(source.key),
+                on_disabled=lambda source: disabled.append(source.key),
             )
     except (OperationalError, ArgumentError, RuntimeError):
         print(DB_ERROR_MESSAGE, file=sys.stderr)
@@ -174,6 +187,8 @@ def _sync_sources(*, scheduled: bool) -> int:
         print(_summary(run))
     for key in skipped:
         print(f"{key}: skipped (already syncing)")
+    for key in disabled:
+        print(f"{key}: skipped (disabled since the run started)")
     failed = sum(1 for r in runs if r.status is IngestionRunStatus.FAILED)
     label = "scheduled sync" if scheduled else "sync"
     print(
@@ -250,6 +265,79 @@ def _source_coverage() -> int:
     return 0
 
 
+def _retire_source(reference: str, *, apply: bool) -> int:
+    try:
+        with Session(get_engine(), expire_on_commit=False) as db:
+            source = _find_source(db, reference)
+            if source is None:
+                print(f"error: no source {reference!r}", file=sys.stderr)
+                return 1
+            try:
+                result = source_retirement.retire_source(db, source, apply=apply)
+            except source_retirement.RetireRefused as error:
+                db.rollback()
+                print(f"error: {error}", file=sys.stderr)
+                return 1
+            except BaseException:
+                db.rollback()
+                raise
+            if apply:
+                db.commit()
+            else:
+                db.rollback()
+            key = source.key
+    except (OperationalError, ArgumentError, RuntimeError):
+        print(DB_ERROR_MESSAGE, file=sys.stderr)
+        return 2
+    print(
+        f"retire {key} ({'applied' if apply else 'dry run, nothing changed; use --apply'}): "
+        f"records_closed {result.records_closed}, "
+        f"opportunities_closed {result.opportunities_closed}, "
+        f"stayed_open_via_other_source {result.stayed_open}, "
+        f"fallbacks_applied {result.fallbacks}, "
+        f"curated_preserved {result.curated_preserved}, "
+        f"source_disabled {result.source_disabled}"
+    )
+    return 0
+
+
+def _bootstrap_sources(tags: list[str], *, disable_feed: bool, dry_run: bool, sync: bool) -> int:
+    try:
+        with Session(get_engine(), expire_on_commit=False) as db:
+            try:
+                result = source_bootstrap.bootstrap_sources(
+                    db, tags=tags, disable_feed=disable_feed, dry_run=dry_run
+                )
+            except source_bootstrap.BootstrapRefused as error:
+                db.rollback()
+                print(f"error: {error}", file=sys.stderr)
+                return 1
+            except (ValueError, source_discovery.SourceDiscoveryConflict):
+                db.rollback()  # fixed text: never the exception (it may carry SQL parameters)
+                print(
+                    "error: couldn't add the catalog sources (conflict or invalid entry).",
+                    file=sys.stderr,
+                )
+                return 1
+            except BaseException:
+                db.rollback()
+                raise
+            if dry_run:
+                db.rollback()
+            else:
+                db.commit()
+    except (OperationalError, ArgumentError, RuntimeError):
+        print(DB_ERROR_MESSAGE, file=sys.stderr)
+        return 2
+    print(
+        f"bootstrap ({'dry run, nothing changed' if dry_run else 'applied'}): "
+        f"catalog_selected {result.selected}, added {result.added}, "
+        f"already_configured {result.already_configured}, "
+        f"registry_created {result.registry_created}, feed_disabled {result.feed_disabled}"
+    )
+    return _sync_sources(scheduled=False) if sync and not dry_run else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m app.cli", description="Owner account and source administration."
@@ -287,6 +375,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands.add_parser(
         "source-coverage", help="print ATS source coverage and discovery counts (ADR-013)"
     )
+    retire = commands.add_parser(
+        "retire-source", help="close a source's records safely, then disable it (ADR-016)"
+    )
+    retire.add_argument(
+        "source", help="source ID or key, e.g. community_feed:zshah-tech-internships"
+    )
+    retire.add_argument("--apply", action="store_true", help="make the change (default: dry run)")
+    boot = commands.add_parser(
+        "bootstrap-sources", help="add Direct Source Catalog entries for a new install (ADR-016)"
+    )
+    boot.add_argument("--tags", nargs="+", default=[], help="catalog tags; default every entry")
+    boot.add_argument("--disable-feed", action="store_true", help="disable the community feed")
+    boot.add_argument("--dry-run", action="store_true", help="report only; change nothing")
+    boot.add_argument("--sync", action="store_true", help="then sync every enabled source")
     args = parser.parse_args(argv)
 
     if args.command == "sync-sources":
@@ -299,6 +401,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _reevaluate(args.batch_size, args.dry_run)
     if args.command == "source-coverage":
         return _source_coverage()
+    if args.command == "retire-source":
+        return _retire_source(args.source, apply=args.apply)
+    if args.command == "bootstrap-sources":
+        return _bootstrap_sources(
+            args.tags, disable_feed=args.disable_feed, dry_run=args.dry_run, sync=args.sync
+        )
 
     action: Callable[[Session, str, str], AuthUser] = (
         auth.create_owner if args.command == "create-owner" else auth.set_password

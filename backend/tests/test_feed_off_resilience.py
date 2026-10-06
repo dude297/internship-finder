@@ -25,7 +25,8 @@ from app.ingestion.adapters import program_registry, smartrecruiters
 from app.ingestion.adapters.workable import API as WORKABLE_API
 from app.ingestion.http import fetch_json
 from app.ingestion.pipeline import sync_enabled_sources
-from app.models import IngestionRun, Opportunity, OpportunityRequirement
+from app.models import IngestionRun, IngestionSource, Opportunity, OpportunityRequirement
+from app.services import direct_catalog, source_bootstrap, source_retirement
 from tests.ingestion_fixtures import (
     ASHBY_URL,
     FEED_URL,
@@ -233,3 +234,85 @@ def test_feed_enabled_but_down_direct_sources_unaffected(
     assert len(items) == 8  # 7 direct/registry + the feed-only posting; none closed
     assert items["Feed Only Intern"]["freshness"] == "source_warning"
     assert items[GH_TITLE]["freshness"] == "direct_verified"
+
+
+def test_feed_retired_direct_backed_stay_open_and_feed_only_close(
+    db: Session, client: TestClient, registry_file: None
+) -> None:
+    web = Web()
+    put_profile(client)
+    put_match(client)
+    _setup_direct_sources(client)
+    web.feed_mode = "ok"
+    web.feed_jobs = [
+        feed_job("workday:example:/job/Feed-Only_R9", title="Feed Only Intern"),
+        feed_job(
+            "greenhouse:examplerobotics:1001",
+            title="Feed Copy Of Board Intern",
+            url="https://careers.example.com/robotics?gh_jid=1001",
+        ),
+    ]
+    sync_enabled_sources(db, transport=web.transport)
+    assert "Feed Only Intern" in _items(client)
+    feed_source = db.scalars(
+        select(IngestionSource).where(IngestionSource.kind == IngestionSourceKind.COMMUNITY_FEED)
+    ).one()
+    before = len(_items(client))
+
+    dry = source_retirement.retire_source(db, feed_source, apply=False)
+    assert dry.opportunities_closed == 1 and dry.stayed_open == 1
+    assert len(_items(client)) == before
+
+    result = source_retirement.retire_source(db, feed_source, apply=True)
+    db.commit()
+    assert (result.opportunities_closed, result.stayed_open) == (1, 1)
+
+    web.feed_mode = "forbidden"  # the retired feed is never requested again
+    runs = sync_enabled_sources(db, transport=web.transport)
+    assert web.feed_requests == 1 and IngestionSourceKind.COMMUNITY_FEED not in _by_kind(runs)
+    items = _items(client)
+    assert "Feed Only Intern" not in items and len(items) == before - 1
+    assert items[GH_TITLE]["freshness"] == "direct_verified"
+
+
+def test_fresh_install_without_feed_bootstrap_sync_rank_evaluate_track(
+    db: Session, client: TestClient, registry_file: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entries = tuple(
+        direct_catalog.CatalogEntry.model_validate(
+            {
+                "organization": name,
+                "kind": kind,
+                "identifier": identifier,
+                "careers_url": "https://example.com/careers",
+                "evidence": "synthetic",
+                "verified_at": "2040-01-01",
+                "tags": ["robotics"],
+            }
+        )
+        for name, kind, identifier in [
+            ("Example Robotics", "greenhouse", "examplerobotics"),
+            ("Example Board", "ashby", "example-board"),
+        ]
+    )
+    monkeypatch.setattr(direct_catalog, "catalog", lambda: entries)
+    web = Web()
+    put_profile(client)
+    put_match(client)
+
+    result = source_bootstrap.bootstrap_sources(db, tags=["robotics"], disable_feed=True)
+    db.commit()
+    assert (result.added, result.feed_disabled, result.registry_created) == (2, True, False)
+
+    runs = sync_enabled_sources(db, transport=web.transport)  # feed would fail the test
+    assert web.feed_requests == 0
+    assert all(r.status is IngestionRunStatus.SUCCESS for r in runs), [r.status for r in runs]
+    items = _items(client)
+    assert len(items) == 4  # 2 Greenhouse + 1 Ashby + the registry program
+    assert all(i["fit_score"] is not None for i in items.values())
+    ranked = list(_items(client))
+    assert len(ranked) == 4
+    gh = db.scalars(select(Opportunity).where(Opportunity.title == GH_TITLE)).one()
+    assert client.post(f"/api/opportunities/{gh.id}/evaluate").status_code == 201
+    tracked = client.put(f"/api/opportunities/{gh.id}/application", json={"status": "saved"})
+    assert tracked.status_code == 200, tracked.text
