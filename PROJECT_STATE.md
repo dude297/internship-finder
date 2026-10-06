@@ -86,11 +86,16 @@ Merged to `main` since the Milestone 8.1 release, **not deployed** (Render/Verce
 
 - Milestone 8.2 "True Feed Independence" ([PR #30](https://github.com/dude297/internship-finder/pull/30), [ADR-016](docs/decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)): `retire-source` (dry-run-default, atomic retirement through the normal closure and fallback path) and `bootstrap-sources` (feed-free setup of a new installation); the scheduled sync skips a source disabled mid-run. No migration. Retiring the production feed is an owner decision, not planned.
 - Eligibility re-evaluation ([PR #29](https://github.com/dude297/internship-finder/pull/29), [ADR-018](docs/decisions/ADR-018-evaluation-staleness.md)): `python -m app.cli reevaluate [--dry-run]` as a release step after a rules/scoring version bump. Work-authorization evaluation is design only ([note](docs/research/work-authorization-eligibility-design.md)).
-- Data: Curated Program Registry 13 → 24 ([PR #31](https://github.com/dude297/internship-finder/pull/31)); Direct Source Catalog 36 → 64 ([PR #32](https://github.com/dude297/internship-finder/pull/32)); backend dependency lock ([PR #28](https://github.com/dude297/internship-finder/pull/28)).
+- Data: Curated Program Registry 13 → 24 ([PR #31](https://github.com/dude297/internship-finder/pull/31); the 11 new programs were created in production by the scheduled sync of 2026-10-06 07:32 UTC on `main` `9fb5122`: 28 sources, 0 failed, 118.5 s); Direct Source Catalog 36 → 64 ([PR #32](https://github.com/dude297/internship-finder/pull/32), nothing activated); backend dependency lock ([PR #28](https://github.com/dude297/internship-finder/pull/28)).
+- Security hardening ([PR #35](https://github.com/dude297/internship-finder/pull/35): linear sentence splitting, traceback-free CLI logs, SHA-pinned CI; [PR #36](https://github.com/dude297/internship-finder/pull/36): CSP + Permissions-Policy, effective on the next Vercel deploy).
+- Encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)): skipped until the owner sets the `BACKUP_AGE_RECIPIENT` repository variable.
+- Scale audit ([PR #41](https://github.com/dude297/internship-finder/pull/41), [operations.md](docs/operations.md#scale-audit-2026-10-06)).
 
-In review (not merged): encrypted weekly database backup and a restore script on `feature/m12-encrypted-backup` ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md)). No migration; inert until the owner sets the `BACKUP_AGE_RECIPIENT` variable.
+In review, release-gated (each needs a production window; see each PR):
 
-In review, release-gated: Milestone 9 owner decisions, Hide/Unhide and Revert to source ([PR #33](https://github.com/dude297/internship-finder/pull/33), ADR-017 on that branch; migration `d4f8a1c6e2b9`). Merging it requires migrating Neon in the same window, because the scheduled sync refuses a schema behind `main`.
+- Milestone 9 owner decisions, Hide/Unhide and Revert to source ([PR #33](https://github.com/dude297/internship-finder/pull/33), ADR-017; migration `d4f8a1c6e2b9`). Merging requires migrating Neon in the same window, because the scheduled sync refuses a schema behind `main`.
+- Milestone 10 Action Inbox and application follow-ups ([PR #38](https://github.com/dude297/internship-finder/pull/38), stacked on #33, ADR-020; migration `a3c7e9b1d5f2`) and freshness visibility, a stale-sync banner and a Posted-within filter ([PR #42](https://github.com/dude297/internship-finder/pull/42), stacked on #38; no migration).
+- Fit scoring v2 ([PR #37](https://github.com/dude297/internship-finder/pull/37), ADR-019): needs `reevaluate` right after deploy.
 
 ## Known Operational Issues
 
