@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   backup:
-    if: github.repository == 'dude297/internship-finder' && github.ref == 'refs/heads/main'
+    if: github.repository == 'dude297/internship-finder' && github.ref == 'refs/heads/main' && vars.BACKUP_AGE_RECIPIENT != ''
     # Pinned image (not -latest): the PGDG apt line below names this release's codename (noble).
     runs-on: ubuntu-24.04
     timeout-minutes: 20
