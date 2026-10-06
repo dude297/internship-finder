@@ -146,7 +146,13 @@ Every row since Milestone 4 carries eligibility and fit. Rows from before have N
 
 The Milestone 3 path (a forced row per opportunity, one flush each) took ~4 s locally and ~10 s hosted for the same size. Batch size barely changes the time (50 to 1,100 all within noise) but bounds memory (traced peak ~9 MB at 50, ~13 MB at 200, ~33 MB unbatched), so 200 is kept. Hosted timings (Render Free/Neon, cold network hop plus Vercel's proxy) run a few times the local ones, well under the proxy timeout; if a much larger catalog approaches it, background re-evaluation becomes a later-milestone requirement (no queue exists). Re-run with `PERF_DATABASE_URL=<disposable db> python scripts/perf_smoke.py` in `backend/`. History still grows with every real input change; pruning is TBD.
 
-Still not automatic: re-evaluation when the eligibility rules version changes, and when time passes an expected graduation or enrollment date (see Future Scheduled Jobs).
+**Staleness and `reevaluate`** ([ADR-018](decisions/ADR-018-evaluation-staleness.md)). The rules and scoring versions are part of the fingerprints, so bumping `RULES_VERSION` or `SCORING_VERSION` makes every opportunity stale. Time passing never makes an evaluation stale: the education status and age are resolved at each requirement's reference date, never at today. Nothing runs the pass by itself after a version bump; it runs on a profile or Match Profile save, or:
+
+```
+python -m app.cli reevaluate [--stale-only] [--dry-run] [--batch-size 200]
+```
+
+It runs the same batched catalog pass for the owner's profile (keyset batches, one transaction), appends a row only for stale opportunities, prints counts only (`evaluated N, unchanged M`; `would evaluate` with `--dry-run`), and exits `2` on a database error. `--stale-only` is accepted and is the only mode. Run `--dry-run`, then the real command, after deploying a release that bumps a version ([deployment.md](deployment.md#release-procedure)); it appends one row per opportunity (about 2,000 at current size, a few seconds, like a changed Match Profile save above). Exit `1` means an unexpected failure (the class name is printed, never the message). It is not scheduled and the sync workflow is unchanged.
 
 ## Migrations
 
@@ -163,7 +169,6 @@ For a single-user tool, the minimum is to detect the failure (run summary or err
 ## Future Scheduled Jobs (planned)
 
 - Alerting on repeated `failed`/`partial` runs (scheduled sync and derived source health exist since Milestone 6; nothing alerts yet)
-- Re-evaluation when eligibility rules or scoring version change, or when the user's projected education status crosses a date (graduation, enrollment)
 - In-app alerts/digests (no email/SMS services initially)
 
 Scheduler: GitHub Actions scheduled workflows (the source sync workflow exists since Milestone 6), or later a self-hosted runner. No paid scheduler. Workflows only orchestrate Python commands. If free-tier limits (Actions minutes, Neon compute, Render hours) are reached, jobs defer or fail visibly rather than incur charges ([ADR-004](decisions/ADR-004-technology-stack.md)).

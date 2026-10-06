@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Evaluation staleness ([ADR-018](docs/decisions/ADR-018-evaluation-staleness.md)): `python -m app.cli reevaluate [--stale-only] [--dry-run] [--batch-size N]` (a release step after a rules/scoring version bump) and tests that both version bumps re-evaluate every opportunity. Time-triggered re-evaluation is unnecessary (rules never read today). No fingerprint change, no migration. Research: [work-authorization eligibility design](docs/research/work-authorization-eligibility-design.md) (design only).
+
 ### Changed
 
 - Backend dependency lock: `backend/requirements.lock` and `backend/requirements-dev.lock` (transitive, SHA-256 hashed, universal for Python 3.12, generated with `uv pip compile`). CI, the E2E job, and the scheduled production sync install from them; Render's build command switch is an owner action ([development.md](docs/development.md#dependency-lock)). No product change.

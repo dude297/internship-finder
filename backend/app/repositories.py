@@ -263,11 +263,15 @@ CATALOG_BATCH_SIZE = 200
 
 
 def evaluate_catalog(
-    session: Session, context: EvaluationContext, batch_size: int = CATALOG_BATCH_SIZE
+    session: Session,
+    context: EvaluationContext,
+    batch_size: int = CATALOG_BATCH_SIZE,
+    dry_run: bool = False,
 ) -> CatalogEvaluation:
     """Automatic evaluation of every opportunity in one pass (ADR-010 §9). The latest
     fingerprints come from one query; opportunities are read in keyset batches (bounded memory);
-    unchanged pairs are skipped; new rows are flushed once per batch. The caller commits."""
+    unchanged pairs are skipped; new rows are flushed once per batch. The caller commits. With
+    `dry_run`, counts what would be evaluated and writes nothing."""
     latest = {
         opportunity_id: (eligibility, fit)
         for opportunity_id, eligibility, fit in session.execute(
@@ -304,7 +308,8 @@ def evaluate_catalog(
             if latest.get(opportunity.id) == inputs.fingerprints:
                 unchanged += 1
             else:
-                _save(session, context, opportunity, inputs)
+                if not dry_run:
+                    _save(session, context, opportunity, inputs)
                 evaluated += 1
         session.flush()
         after = batch[-1].id
