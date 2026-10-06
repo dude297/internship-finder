@@ -22,6 +22,10 @@ All notable changes to this project are documented here.
 - Direct Source Catalog: 26 more verified boards (64 to 90; Greenhouse 20, Ashby 5, Lever 1), mostly space, robotics, fusion/quantum, AI-hardware, and quant-with-hardware employers (e.g. Muon Space, K2 Space, General Matter, Graphcore, IMC, Virtu), each checked against its provider's documented API on 2026-10-06. None are enabled; enabling all would pass the 50-source cap. No migration.
 - `backend/scripts/feed_pareto.py`: read-only report of how much of the public community feed is not covered by a direct source (status, provider histogram, top organizations, unconfigured supported boards). Analysis: [feed-dependence-pareto-2026-10-06.md](docs/research/feed-dependence-pareto-2026-10-06.md) (68% of the feed's listings are Workday or Oracle HCM, which the app does not support).
 
+### Changed
+
+- Frontend performance and test reliability (chore, no API or migration change): authenticated pages are code-split with `React.lazy` (entry chunk 485 kB / 141 kB gzip to 392 kB / 119 kB gzip; landing and login stay in the entry chunk). Vitest flakes under parallel load fixed at the root: `findBy`/`waitFor` default raised to 10 s in `tests/setup.ts`, real timers restored after each test, and the source-scope test no longer indexes `listitem` before the list is complete or reads `calls.at(-1)`. Conventions in [development.md](docs/development.md#test-boundary-unit-vs-postgresql-vs-end-to-end).
+
 ### Documentation
 
 - Research note [m13-workday-oracle-provider-gate.md](docs/research/m13-workday-oracle-provider-gate.md): Workday (YELLOW: robots-advertised sitemap capped at 100 URLs plus JobPosting JSON-LD), Oracle Recruiting Cloud (RED), 14 ATS families (Personio and Teamtailor GREEN pending governance), and mega-cap career sites. No code or behavior change.
