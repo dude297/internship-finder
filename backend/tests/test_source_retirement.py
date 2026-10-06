@@ -1,7 +1,8 @@
 """Source retirement and feed-free bootstrap (ADR-016). Synthetic payloads only."""
 
 import hashlib
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import select
@@ -14,8 +15,9 @@ from app.enums import (
     IngestionSourceKind,
     SourceScope,
 )
+from app.ingestion import pipeline
 from app.ingestion.adapters.community_feed import BUILTIN_IDENTIFIER
-from app.ingestion.pipeline import sync_source
+from app.ingestion.pipeline import ABANDONED_AFTER, sync_source
 from app.models import (
     Application,
     IngestionRun,
@@ -24,6 +26,7 @@ from app.models import (
     OpportunitySourceRecord,
 )
 from app.services import direct_catalog, source_bootstrap, source_retirement
+from app.services.source_discovery import SourceDiscoveryConflict
 from tests.ingestion_fixtures import (
     ASHBY_BOARD,
     ASHBY_URL,
@@ -261,7 +264,7 @@ def test_a_running_sync_refuses_retirement_and_changes_nothing(
     assert _digest(db) == before and feed_source.enabled
 
 
-def test_failure_leaves_source_enabled_and_nothing_closed(
+def test_failure_after_the_closing_update_rolls_everything_back(
     db: Session,
     web: FakeSource,
     feed_source: IngestionSource,
@@ -269,17 +272,92 @@ def test_failure_leaves_source_enabled_and_nothing_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _world(db, web, feed_source, gh_source)
+    gh_source.etag = '"keep-me"'
+    db.commit()
     before = _digest(db)
 
     def boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(source_retirement, "close_records", boom)
+    # Raised by the fallback, i.e. after the records were already marked closed.
+    monkeypatch.setattr(pipeline, "_apply_fallback", boom)
     with pytest.raises(RuntimeError):
-        source_retirement.retire_source(db, feed_source, apply=True)
+        source_retirement.retire_source(db, gh_source, apply=True)
+    assert not any(r.is_active for r in gh_source_records(db, gh_source))  # really closed in-tx
     db.rollback()  # what the CLI does
 
-    assert _digest(db) == before and feed_source.enabled
+    assert _digest(db) == before
+    assert gh_source.enabled and gh_source.etag == '"keep-me"'
+    assert all(r.is_active for r in gh_source_records(db, gh_source))
+
+
+def gh_source_records(db: Session, source: IngestionSource) -> list[OpportunitySourceRecord]:
+    db.expire_all()
+    return list(
+        db.scalars(
+            select(OpportunitySourceRecord).where(
+                OpportunitySourceRecord.ingestion_source_id == source.id
+            )
+        )
+    )
+
+
+def test_a_stale_running_run_does_not_block_retirement(
+    db: Session, web: FakeSource, feed_source: IngestionSource, gh_source: IngestionSource
+) -> None:
+    _world(db, web, feed_source, gh_source)
+    db.add(
+        IngestionRun(
+            source_id=feed_source.id,
+            status=IngestionRunStatus.RUNNING,
+            started_at=datetime.now(UTC) - ABANDONED_AFTER - timedelta(minutes=1),
+        )
+    )
+    db.commit()
+
+    result = source_retirement.retire_source(db, feed_source, apply=True)
+
+    assert result.records_closed == 2 and not feed_source.enabled
+
+
+def test_source_retired_mid_run_is_not_synced_from_a_stale_list(
+    db: Session,
+    web: FakeSource,
+    feed_source: IngestionSource,
+    gh_source: IngestionSource,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _world(db, web, feed_source, gh_source)
+    real = pipeline.sync_source
+
+    def sync_then_retire_feed(db: Session, source: IngestionSource, **kwargs: Any) -> IngestionRun:
+        run = real(db, source, **kwargs)
+        if source.kind is IngestionSourceKind.GREENHOUSE:  # the feed's turn comes next
+            source_retirement.retire_source(db, feed_source, apply=True)
+            db.commit()
+        return run
+
+    monkeypatch.setattr(pipeline, "sync_source", sync_then_retire_feed)
+    web.requests.clear()
+    skipped: list[str] = []
+    runs = pipeline.sync_enabled_sources(
+        db, transport=web.transport(), on_disabled=lambda s: skipped.append(s.key)
+    )
+
+    assert [r.source.kind for r in runs] == [IngestionSourceKind.GREENHOUSE]
+    assert skipped == [feed_source.key]
+    assert all(FEED_URL not in str(r.url) for r in web.requests)
+    assert not any(r.is_active for r in gh_source_records(db, feed_source))
+
+
+def test_explicit_sync_of_a_disabled_source_still_works(
+    db: Session, web: FakeSource, feed_source: IngestionSource, gh_source: IngestionSource
+) -> None:
+    _world(db, web, feed_source, gh_source)
+    source_retirement.retire_source(db, feed_source, apply=True)
+    db.commit()
+    run = sync_source(db, feed_source, transport=web.transport())
+    assert run.status is IngestionRunStatus.SUCCESS and run.reactivated_count == 2
 
 
 def test_rollback_reenable_and_next_sync_reopens(
@@ -432,3 +510,46 @@ def test_bootstrap_cli(
         select(IngestionSource).where(IngestionSource.kind == IngestionSourceKind.COMMUNITY_FEED)
     ).one()
     assert not feed.enabled
+
+
+def test_bootstrap_cli_empty_tags_is_a_usage_error_not_all(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _catalog(monkeypatch, 4, ["ai"])
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["bootstrap-sources", "--tags"])
+    assert exit_info.value.code == 2
+    assert (
+        db.scalar(select(IngestionSource.id).where(IngestionSource.display_name == "Example 0"))
+        is None
+    )
+
+
+def test_bootstrap_cli_conflict_prints_a_fixed_error(
+    db: Session, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _catalog(monkeypatch, 2, ["ai"])
+
+    def conflict(*_args: object, **_kwargs: object) -> None:
+        raise SourceDiscoveryConflict("INSERT ... parameters {'identifier': 'secret'}")
+
+    monkeypatch.setattr(direct_catalog, "add_from_catalog", conflict)
+    capsys.readouterr()
+    assert cli.main(["bootstrap-sources"]) == 1
+    err = capsys.readouterr().err
+    assert "secret" not in err and "INSERT" not in err and err.startswith("error:")
+
+
+def test_bootstrap_does_not_reenable_a_configured_disabled_entry(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _catalog(monkeypatch, 2, ["ai"])
+    source_bootstrap.bootstrap_sources(db)
+    first = db.scalars(
+        select(IngestionSource).where(IngestionSource.identifier == "example0")
+    ).one()
+    first.enabled = False
+    db.commit()
+    again = source_bootstrap.bootstrap_sources(db)
+    db.refresh(first)
+    assert again.added == 0 and not first.enabled

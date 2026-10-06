@@ -20,12 +20,12 @@ The closure and ADR-013 §5 fallback that ran inline when a complete snapshot no
 
 `python -m app.cli retire-source SOURCE [--apply]` (SOURCE is an ID or key). Dry run by default. With `--apply`, in one transaction and under a row lock on the source:
 
-1. refuse if the source has a `running` run younger than the abandonment window (exit 1);
+1. refuse if the source has a `running` run younger than 15 minutes (exit 1); an older one is treated as dead, as the sync's own guard does;
 2. close all the source's active records via `close_records`, so canonical content falls back to the next remaining automated source and opportunities with another active record stay open;
 3. clear the source's HTTP validators, then set `enabled = false`;
 4. commit. Any failure rolls the whole transaction back: the source stays enabled and nothing is closed.
 
-It prints counts only: records closed, opportunities closed (no active record left), opportunities that stayed open via another source, fallbacks applied, owner-curated preserved, and whether the source is (would be) disabled. It never deletes a row, never rewrites a curated opportunity (the existing fallback already excludes them), and never touches manual opportunities (they have no source records) or application tracking. A second run closes nothing. It works for any source, built-in ones included (they can be disabled; there is no delete path). No API endpoint: the owner-run CLI is the supported path.
+It prints counts only: records closed, opportunities closed (no active record left), opportunities that stayed open via another source, fallbacks applied, owner-curated preserved, and whether the source is (would be) disabled. It never deletes a row, never rewrites a curated opportunity (content is preserved; the opportunity closes if no active source remains), and never touches manual opportunities (they have no source records) or application tracking. A second run closes nothing. It works for any source, built-in ones included (they can be disabled; there is no delete path). No API endpoint: the owner-run CLI is the supported path.
 
 **Rollback:** re-enable the source and sync it. The validators were cleared, so the sync is a full snapshot (not a `304`) and the normal reactivation path reopens its records. Content the fallback moved is re-derived by the usual ADR-013 rules.
 
@@ -35,11 +35,16 @@ It prints counts only: records closed, opportunities closed (no active record le
 
 - adds Direct Source Catalog entries (optionally filtered by tag) through `direct_catalog.add_from_catalog`, the same validation and creation path as `POST /api/sources/catalog/add`, in 25-entry batches inside one transaction, scope `internships_only`;
 - refuses (exit 1, nothing written) an unknown tag, or when enabled direct sources would exceed 50;
+- skips entries already configured, even if disabled (it never re-enables anything);
 - ensures the curated registry source exists (the migration seeds it; this only repairs a database without it);
 - `--disable-feed` disables the feed only when it has no open postings; otherwise it refuses and points to `retire-source`;
 - never syncs unless `--sync` is given.
 
 No migration: the feed row stays seeded (existing deployments and tests rely on it); a feed-free installation is the bootstrap's result, not a different schema.
+
+### 4. Sync skips a source retired mid-run
+
+`sync_enabled_sources` reads the enabled list once, so it now re-reads each source right before syncing it and skips one disabled in the meantime (printed as `skipped (disabled since the run started)`). An explicit `sync-source` still works on a disabled source (that is the rollback path). `close_records` also locks the affected opportunity rows (`FOR UPDATE`, ordered by ID) so it waits out a concurrent takeover.
 
 ## Consequences
 

@@ -473,6 +473,15 @@ def close_records(
     # ADR-013 §5 fallback: which affected, non-curated opportunities currently have one of
     # these about-to-close records as their canonical owner (looked up before closing, while
     # `is_active` still reflects it).
+    if (
+        opportunity_ids
+    ):  # wait out a concurrent sync's takeover (same lock as _owns_canonical_fields)
+        db.execute(
+            select(Opportunity.id)
+            .where(Opportunity.id.in_(opportunity_ids))
+            .order_by(Opportunity.id)
+            .with_for_update()
+        )
     owners_before = _owners(db, list(opportunity_ids))
     falling = [
         opportunity_id for opportunity_id, owner in owners_before.items() if owner.id in record_ids
@@ -711,6 +720,7 @@ def sync_enabled_sources(
     *,
     transport: httpx2.BaseTransport | None = None,
     on_skip: Callable[[IngestionSource], None] | None = None,
+    on_disabled: Callable[[IngestionSource], None] | None = None,
 ) -> list[IngestionRun]:
     """Sync every enabled source in turn. One source failing doesn't stop the others; a source
     that is already syncing is skipped (reported through `on_skip`, when given).
@@ -727,6 +737,13 @@ def sync_enabled_sources(
         .order_by(tier, IngestionSource.created_at, IngestionSource.id)
     ).all()
     for source in sources:
+        # The list was read once; a source retired (ADR-016) since then must not be synced from
+        # this stale object, which would reopen everything it just closed.
+        db.refresh(source)
+        if not source.enabled:
+            if on_disabled is not None:
+                on_disabled(source)
+            continue
         try:
             runs.append(sync_source(db, source, transport=transport))
         except SyncInProgress:

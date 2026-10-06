@@ -82,12 +82,12 @@ Disabling a source alone leaves its records active (its postings stay open as `s
 
 1. `python -m app.cli source-coverage` (read-only) for the before numbers.
 2. `python -m app.cli retire-source <key-or-id>` (dry run; changes nothing). Read the counts: records closed, opportunities closed, stayed open via another source, fallbacks, curated preserved. Production runs are owner-approved.
-3. `python -m app.cli retire-source <key-or-id> --apply`. It refuses (exit 1) while the source is syncing; wait and retry. A failure leaves the source enabled and nothing closed. Re-running is a no-op.
+3. `python -m app.cli retire-source <key-or-id> --apply`. It refuses (exit 1) while the source is syncing (a `running` run older than 15 minutes is treated as dead); wait and retry. A scheduled sync that started before the retirement skips the source on its turn. A failure leaves the source enabled and nothing closed. Re-running is a no-op.
 4. `source-coverage` after; the opportunities closed should match the dry run.
 
 **Rollback:** re-enable the source (Sources page) and sync it. Validators were cleared, so the sync is a full snapshot and reopens the records. Nothing was deleted.
 
-**New installation without the feed:** after `alembic upgrade head` and `create-owner`, run `python -m app.cli bootstrap-sources --tags <tag> --disable-feed --dry-run`, then without `--dry-run`, then `sync-sources` (or pass `--sync`). It adds catalog boards through the same path as the catalog add API, refuses beyond 50 enabled direct sources, and never syncs unless `--sync`. On an installation whose feed already has open postings, use `retire-source` instead of `--disable-feed`.
+**New installation without the feed:** after `alembic upgrade head` and `create-owner`, run `python -m app.cli bootstrap-sources --tags <tag> --disable-feed --dry-run`, then without `--dry-run`, then `sync-sources` (or pass `--sync`). It adds catalog boards through the same path as the catalog add API, refuses beyond 50 enabled direct sources, and never syncs unless `--sync`. It does not re-enable a configured but disabled entry. Curated opportunities keep their content; one closes if no active source remains. On an installation whose feed already has open postings, use `retire-source` instead of `--disable-feed`.
 
 ## Source Health (implemented, Milestone 6)
 

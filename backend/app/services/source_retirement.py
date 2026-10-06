@@ -41,6 +41,7 @@ def retire_source(
     now = now or datetime.now(UTC)
     # Serializes with a sync's start (which updates this row) and a second retirement.
     db.execute(select(IngestionSource.id).where(IngestionSource.id == source.id).with_for_update())
+    db.refresh(source)  # re-read under the lock (another process may have just retired it)
     running = db.scalars(
         select(IngestionRun.started_at).where(
             IngestionRun.source_id == source.id, IngestionRun.status == IngestionRunStatus.RUNNING

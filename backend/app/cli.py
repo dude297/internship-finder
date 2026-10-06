@@ -157,6 +157,7 @@ def schema_is_current(connection: Connection) -> bool:
 def _sync_sources(*, scheduled: bool) -> int:
     started = time.monotonic()
     skipped: list[str] = []
+    disabled: list[str] = []
     try:
         with Session(get_engine(), expire_on_commit=False) as db:
             if scheduled and not schema_is_current(db.connection()):
@@ -166,6 +167,7 @@ def _sync_sources(*, scheduled: bool) -> int:
                 db,
                 transport=configured_transport(),
                 on_skip=lambda source: skipped.append(source.key),
+                on_disabled=lambda source: disabled.append(source.key),
             )
     except (OperationalError, ArgumentError, RuntimeError):
         print(DB_ERROR_MESSAGE, file=sys.stderr)
@@ -174,6 +176,8 @@ def _sync_sources(*, scheduled: bool) -> int:
         print(_summary(run))
     for key in skipped:
         print(f"{key}: skipped (already syncing)")
+    for key in disabled:
+        print(f"{key}: skipped (disabled since the run started)")
     failed = sum(1 for r in runs if r.status is IngestionRunStatus.FAILED)
     label = "scheduled sync" if scheduled else "sync"
     print(
@@ -277,6 +281,13 @@ def _bootstrap_sources(tags: list[str], *, disable_feed: bool, dry_run: bool, sy
                 db.rollback()
                 print(f"error: {error}", file=sys.stderr)
                 return 1
+            except (ValueError, source_discovery.SourceDiscoveryConflict):
+                db.rollback()  # fixed text: never the exception (it may carry SQL parameters)
+                print(
+                    "error: couldn't add the catalog sources (conflict or invalid entry).",
+                    file=sys.stderr,
+                )
+                return 1
             except BaseException:
                 db.rollback()
                 raise
@@ -337,7 +348,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     boot = commands.add_parser(
         "bootstrap-sources", help="add Direct Source Catalog entries for a new install (ADR-016)"
     )
-    boot.add_argument("--tags", nargs="*", default=[], help="catalog tags; default every entry")
+    boot.add_argument("--tags", nargs="+", default=[], help="catalog tags; default every entry")
     boot.add_argument("--disable-feed", action="store_true", help="disable the community feed")
     boot.add_argument("--dry-run", action="store_true", help="report only; change nothing")
     boot.add_argument("--sync", action="store_true", help="then sync every enabled source")
