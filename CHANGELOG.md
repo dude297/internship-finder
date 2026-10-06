@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Curated Program Registry: 11 programs for the 2027 cycle usable by a high-school senior or incoming first-year (NIH SIP, Navy SEAP, NIST SHIP, Microsoft Discovery, Jane Street WiSE, CRA-WP DREU, Google Summer of Code, NASA Space Apps, BNL User Facility Summer School, NSF REU sites directory, FIRST volunteering); verified dates only where the official page prints them, otherwise typical windows with `verify_by` ([research](docs/research/curated-program-expansion-2027.md)).
+
 ### Changed
 
 - Backend dependency lock: `backend/requirements.lock` and `backend/requirements-dev.lock` (transitive, SHA-256 hashed, universal for Python 3.12, generated with `uv pip compile`). CI, the E2E job, and the scheduled production sync install from them; Render's build command switch is an owner action ([development.md](docs/development.md#dependency-lock)). No product change.

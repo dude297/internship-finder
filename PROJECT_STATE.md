@@ -145,7 +145,7 @@ Current (2026-10-05, at the Milestone 8.1 release): migration `b7e3d9f1a2c4`; 1,
 ## Active Opportunity Sources
 
 - Tech Internship Discovery Feed (zshah101 public JSON API) — built in, optional and supplemental; synced with the others.
-- SmartRecruiters companies — 6 in production since 2026-10-05 (Internships only), and the built-in Curated Program Registry (13 programs) ([docs/sources.md](docs/releases/2026-10-05-m8.md)).
+- SmartRecruiters companies — 6 in production since 2026-10-05 (Internships only), and the built-in Curated Program Registry (13 programs in production; the file on `main` adds 11 more for the 2027 cycle, synced on the next registry sync after deploy, [research](docs/research/curated-program-expansion-2027.md)) ([docs/sources.md](docs/releases/2026-10-05-m8.md)).
 - Greenhouse boards, Lever sites, and Ashby boards — 20 in production since 2026-10-04 (suggested from the feed, Internships only; [docs/sources.md](docs/releases/2026-10-04-m7.md)). Synced twice daily with the feed.
 - Workable and Pinpoint: adapters available since Milestone 8.1; none configured. The Direct Source Catalog lists 36 verified boards (3 configured: Waymo, Lyft, Coinbase) for owner-approved activation ([docs/sources.md](docs/sources.md#direct-source-catalog-milestone-81-adr-015-6)).
 - Manual entry.
