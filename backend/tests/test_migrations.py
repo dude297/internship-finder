@@ -42,6 +42,7 @@ MILESTONE_5_REVISION = "c5a1e0f3d7b2"
 MILESTONE_6_REVISION = "e6d1a4b8c2f9"
 MILESTONE_7_1_REVISION = "f2a7c9d4e1b3"
 MILESTONE_8_1_REVISION = "b7e3d9f1a2c4"
+MILESTONE_9_REVISION = "d4f8a1c6e2b9"
 GRADUATION_CHECK = "ck_profiles_graduation_after_status_as_of"
 MILESTONE_3_REVISION = "726372d627b8"
 RUNNING_INDEX = "uq_ingestion_runs_one_running_per_source"
@@ -837,3 +838,17 @@ def test_milestone_9_owner_decision_columns_round_trip(pg_engine: Engine, pg_url
         assert not {"dismissed_at", "dismissed_reason"} & columns(pg_engine, "opportunities")
     finally:
         command.upgrade(config, "head")
+
+
+def test_milestone_10_follow_up_columns_round_trip(pg_engine: Engine, pg_url: str) -> None:
+    """ADR-020: additive nullable follow-up columns on applications; downgrade drops them."""
+    config = alembic_config(pg_url)
+    new = {"next_action", "next_action_due", "interview_at"}
+    try:
+        assert new <= columns(pg_engine, "applications")
+        command.downgrade(config, MILESTONE_9_REVISION)
+        assert not new & columns(pg_engine, "applications")
+        assert {"notes", "submitted_on"} <= columns(pg_engine, "applications")
+    finally:
+        command.upgrade(config, "head")
+    assert new <= columns(pg_engine, "applications")

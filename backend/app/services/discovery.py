@@ -103,6 +103,8 @@ _automated = select(_record.id).where(
     _record.opportunity_id == Opportunity.id, _record.ingestion_source_id.is_not(None)
 )
 _active = _automated.where(_record.is_active)
+# The "open" availability: an active automated record, or managed by hand (also used by the inbox).
+is_open = or_(exists(_active), ~exists(_automated))
 
 
 def _like(term: str) -> str:

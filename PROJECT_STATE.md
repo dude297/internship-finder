@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | Milestone 10 on `feature/m10-action-inbox` |
+| **Current Development** | Milestone 10.1 on `feature/m10-1-freshness-visibility` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-05
@@ -96,6 +96,8 @@ In review, release-gated (each needs a production window; see each PR):
 - Milestone 9 owner decisions, Hide/Unhide and Revert to source ([PR #33](https://github.com/dude297/internship-finder/pull/33), [ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md); migration `d4f8a1c6e2b9`). Merging requires migrating Neon in the same window, because the scheduled sync refuses a schema behind `main`.
 - Milestone 10 Action Inbox and application follow-ups ([PR #38](https://github.com/dude297/internship-finder/pull/38), stacked on #33, ADR-020; migration `a3c7e9b1d5f2`) and freshness visibility, a stale-sync banner and a Posted-within filter ([PR #42](https://github.com/dude297/internship-finder/pull/42), stacked on #38; no migration).
 - Fit scoring v2 ([PR #37](https://github.com/dude297/internship-finder/pull/37), ADR-019): needs `reevaluate` right after deploy.
+
+In development on `feature/m10-action-inbox` (stacked on Milestone 9, unreleased): Milestone 10 Action Inbox ([ADR-020](docs/decisions/ADR-020-action-inbox.md); migration `a3c7e9b1d5f2`): `GET /api/inbox` and an **Inbox** page (new high fit, closing soon, requirements to review, source warnings, program dates to re-check, applications needing attention), plus Next action / Next action due / Interview at on application tracking. It also needs Neon migrated before the scheduled sync runs the new code.
 
 ## Known Operational Issues
 
@@ -189,6 +191,7 @@ Also watch Bosch's backlog (98 deferred at 2026-10-05 21:07 UTC) clear and its S
 ## Recent Important Decisions
 
 - 2026-10-05: Milestone 8.1 released. PR #25 merged (merge commit) as `main` `203a562`; Neon migrated to `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`, Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`; hosted smoke 14/14. v2 scan and catalog activation deferred to the owner.
+- 2026-10-06: ADR-020 accepted on `feature/m10-action-inbox` (unreleased): a read-only, bounded, set-based Action Inbox derived on read; three nullable follow-up columns on `applications`; fit threshold 70; hidden opportunities excluded everywhere. Migration `a3c7e9b1d5f2`.
 - 2026-10-06: ADR-017 accepted on `feature/m9-owner-decisions` (unreleased): hiding is two nullable columns that sync never touches (hidden excluded by default); Revert to source reuses the ADR-013 owner-record and fallback code and the fingerprinted evaluation. Migration `d4f8a1c6e2b9`.
 - 2026-10-05: ADR-015 accepted: derived listing freshness (never stored), first-seen "New", live-link pings rejected, `requirements-rules` v2, Independent Discovery Coverage, the Direct Source Catalog, Workable and Pinpoint adapters, an empty-snapshot closure guard; no first-party company adapter yet. Migration `b7e3d9f1a2c4`.
 - 2026-10-05: Milestone 8 released. PR #23 → `main` `9263860`; Neon migrated to `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`, Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13); 6 SmartRecruiters companies activated; coverage 22.4% → 38.7%. Runbook rule added: sync the feed on new code before adding sources whose feed identity that release introduces.
