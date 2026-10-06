@@ -184,15 +184,15 @@ export function ApplicationsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Applications</h1>
         <p className="text-sm text-slate-600">
-          Your workspace for tracked applications. The{' '}
+          Your workspace for tracked applications. See the{' '}
           <Link to="/dashboard" className="underline">
-            Dashboard
+            overview
           </Link>{' '}
-          is the overview and the{' '}
+          and the{' '}
           <Link to="/inbox" className="underline">
-            Inbox
+            action queue
           </Link>{' '}
-          is the action queue.
+          are separate pages.
         </p>
       </div>
 

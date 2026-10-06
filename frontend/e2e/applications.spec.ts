@@ -100,6 +100,17 @@ test('dashboard shows a due follow-up and never a hidden opportunity', async ({
   const hidden = `E2E Dashboard Hidden ${stamp}`
   await login(page)
 
+  // Start from no tracked applications, so the bounded Action list can't be crowded out by
+  // leftovers from other scenarios or earlier runs on the same database.
+  const session = await (await page.request.get('/api/auth/session')).json()
+  const headers = { 'X-CSRF-Token': session.csrf_token as string }
+  const existing = await (await page.request.get('/api/applications?limit=200')).json()
+  for (const item of existing.items as { opportunity_id: string }[]) {
+    await page.request.delete(`/api/opportunities/${item.opportunity_id}/application`, {
+      headers,
+    })
+  }
+
   const track = async (title: string) => {
     const url = await addOpportunity(page, title, `Dashboard Org ${stamp}`)
     await page.getByRole('button', { name: 'Track this opportunity' }).click()

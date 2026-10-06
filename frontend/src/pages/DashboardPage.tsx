@@ -396,15 +396,15 @@ export function DashboardPage() {
       <header>
         <h1 className="text-2xl font-semibold">{greeting(new Date().getHours())}</h1>
         <p className="text-slate-600">
-          {systemNote} This is your overview; the{' '}
+          {systemNote} This is your overview. Your{' '}
           <Link to="/inbox" className="underline">
-            Inbox
+            action queue
           </Link>{' '}
-          is the action queue and{' '}
+          and{' '}
           <Link to="/applications" className="underline">
-            Applications
+            application workspace
           </Link>{' '}
-          is where you work.
+          are one click away.
         </p>
       </header>
       <div className="divide-y divide-slate-200 rounded-lg border border-slate-200">
