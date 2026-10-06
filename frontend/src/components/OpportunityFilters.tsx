@@ -38,7 +38,19 @@ interface Props {
   values: Record<FilterName, string>
   sources: Source[]
   onChange: (name: FilterName, value: string) => void
+  onClear: () => void
 }
+
+// Filters most reviews use stay visible; the rest sit under "More filters" (open when active).
+const MORE: FilterName[] = [
+  'remote_mode',
+  'requirements_assessment_status',
+  'needs_date_verification',
+  'freshness',
+  'discovered_within',
+  'posted_within',
+  'hidden',
+]
 
 function Select({
   id,
@@ -75,7 +87,7 @@ function Select({
 }
 
 /** Server-side filters. The page keeps them in the URL, so they survive reloads and links. */
-export function OpportunityFilters({ values, sources, onChange }: Props) {
+export function OpportunityFilters({ values, sources, onChange, onClear }: Props) {
   const [search, setSearch] = useState(values.q)
 
   function submit(event: FormEvent) {
@@ -83,8 +95,16 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
     onChange('q', search.trim())
   }
 
+  const moreActive = MORE.filter((name) => values[name]).length
+  const filtered =
+    values.availability !== 'open' ||
+    values.sort !== 'recommended' ||
+    Object.entries(values).some(
+      ([name, value]) => name !== 'availability' && name !== 'sort' && value,
+    )
+
   return (
-    <div className="space-y-3 rounded border border-slate-200 p-3">
+    <div className="space-y-3 rounded-card border border-slate-200 p-3">
       <form role="search" onSubmit={submit} className="flex items-end gap-2">
         <div className="grow">
           <label htmlFor="filter-q" className="block text-sm font-medium">
@@ -103,7 +123,7 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
           Search
         </button>
       </form>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <Select
           id="filter-sort"
           label="Sort"
@@ -168,16 +188,6 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
           ]}
         />
         <Select
-          id="filter-remote"
-          label="Work mode"
-          value={values.remote_mode}
-          onChange={(v) => onChange('remote_mode', v)}
-          options={[
-            ['', 'Any'],
-            ...remoteModes.map((m): [string, string] => [m, remoteModeLabels[m]]),
-          ]}
-        />
-        <Select
           id="filter-type"
           label="Type"
           value={values.opportunity_type}
@@ -188,16 +198,6 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
               t,
               opportunityTypeLabels[t],
             ]),
-          ]}
-        />
-        <Select
-          id="filter-requirements"
-          label="Requirements"
-          value={values.requirements_assessment_status}
-          onChange={(v) => onChange('requirements_assessment_status', v)}
-          options={[
-            ['', 'Any'],
-            ...assessmentStatuses.map((s): [string, string] => [s, assessmentLabels[s]]),
           ]}
         />
         <Select
@@ -225,62 +225,104 @@ export function OpportunityFilters({ values, sources, onChange }: Props) {
             ['has_deadline', 'Has a deadline'],
           ]}
         />
-        <Select
-          id="filter-date-verification"
-          label="Date verification"
-          value={values.needs_date_verification}
-          onChange={(v) => onChange('needs_date_verification', v)}
-          options={[
-            ['', 'Any'],
-            ['true', 'Needs date verification'],
-          ]}
-        />
-        <Select
-          id="filter-freshness"
-          label="Freshness"
-          value={values.freshness}
-          onChange={(v) => onChange('freshness', v)}
-          options={[
-            ['', 'Any'],
-            ['direct_verified', 'Direct ATS verified'],
-            ['needs_review', 'Needs freshness review'],
-          ]}
-        />
-        <Select
-          id="filter-discovered"
-          label="Discovered"
-          value={values.discovered_within}
-          onChange={(v) => onChange('discovered_within', v)}
-          options={[
-            ['', 'Any'],
-            ['1', 'New today'],
-            ['7', 'New this week'],
-          ]}
-        />
-        <Select
-          id="filter-posted"
-          label="Posted"
-          value={values.posted_within}
-          onChange={(v) => onChange('posted_within', v)}
-          options={[
-            ['', 'Any'],
-            ['7', 'Last 7 days'],
-            ['30', 'Last 30 days'],
-            ['90', 'Last 90 days'],
-          ]}
-        />
-        <Select
-          id="filter-hidden"
-          label="Hidden"
-          value={values.hidden}
-          onChange={(v) => onChange('hidden', v)}
-          options={[
-            ['', 'Not hidden'],
-            ['include', 'Include hidden'],
-            ['only', 'Only hidden'],
-          ]}
-        />
       </div>
+      <details key={String(moreActive > 0)} open={moreActive > 0}>
+        <summary className="cursor-pointer text-sm font-medium">
+          More filters{moreActive > 0 && ` (${moreActive} active)`}
+        </summary>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Select
+            id="filter-remote"
+            label="Work mode"
+            value={values.remote_mode}
+            onChange={(v) => onChange('remote_mode', v)}
+            options={[
+              ['', 'Any'],
+              ...remoteModes.map((m): [string, string] => [m, remoteModeLabels[m]]),
+            ]}
+          />
+          <Select
+            id="filter-requirements"
+            label="Requirements"
+            value={values.requirements_assessment_status}
+            onChange={(v) => onChange('requirements_assessment_status', v)}
+            options={[
+              ['', 'Any'],
+              ...assessmentStatuses.map((s): [string, string] => [
+                s,
+                assessmentLabels[s],
+              ]),
+            ]}
+          />
+          <Select
+            id="filter-date-verification"
+            label="Date verification"
+            value={values.needs_date_verification}
+            onChange={(v) => onChange('needs_date_verification', v)}
+            options={[
+              ['', 'Any'],
+              ['true', 'Needs date verification'],
+            ]}
+          />
+          <Select
+            id="filter-freshness"
+            label="Freshness"
+            value={values.freshness}
+            onChange={(v) => onChange('freshness', v)}
+            options={[
+              ['', 'Any'],
+              ['direct_verified', 'Direct ATS verified'],
+              ['needs_review', 'Needs freshness review'],
+            ]}
+          />
+          <Select
+            id="filter-discovered"
+            label="Discovered"
+            value={values.discovered_within}
+            onChange={(v) => onChange('discovered_within', v)}
+            options={[
+              ['', 'Any'],
+              ['1', 'New today'],
+              ['7', 'New this week'],
+            ]}
+          />
+          <Select
+            id="filter-posted"
+            label="Posted"
+            value={values.posted_within}
+            onChange={(v) => onChange('posted_within', v)}
+            options={[
+              ['', 'Any'],
+              ['7', 'Last 7 days'],
+              ['30', 'Last 30 days'],
+              ['90', 'Last 90 days'],
+            ]}
+          />
+          <Select
+            id="filter-hidden"
+            label="Hidden"
+            value={values.hidden}
+            onChange={(v) => onChange('hidden', v)}
+            options={[
+              ['', 'Not hidden'],
+              ['include', 'Include hidden'],
+              ['only', 'Only hidden'],
+            ]}
+          />
+        </div>
+      </details>
+      {filtered && (
+        <button
+          type="button"
+          className={secondaryButtonClass}
+          onClick={() => {
+            setSearch('')
+            onClear()
+          }}
+        >
+          Clear filters
+        </button>
+      )}
     </div>
   )
 }

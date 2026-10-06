@@ -93,7 +93,7 @@ export function InboxPage() {
           <section
             key={section.key}
             aria-labelledby={`inbox-${section.key}`}
-            className="space-y-2 rounded border p-4"
+            className="space-y-2 rounded-card border p-4"
           >
             <h2 id={`inbox-${section.key}`} className="text-lg font-semibold">
               {section.title} ({total})

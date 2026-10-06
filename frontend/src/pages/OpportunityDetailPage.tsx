@@ -193,6 +193,12 @@ export function OpportunityDetailPage() {
 
       <EligibilityPanel opportunity={o} />
 
+      <ApplicationTracker
+        opportunityId={o.id}
+        application={o.application}
+        onChange={(application) => setOpportunity({ ...o, application })}
+      />
+
       <WhyThisMatch breakdown={o.latest_evaluation?.score_breakdown ?? null} />
 
       <section aria-labelledby="details-heading" className="space-y-2">
@@ -283,12 +289,6 @@ export function OpportunityDetailPage() {
       <FreshnessSection opportunity={o} />
 
       <SourceProvenance opportunity={o} />
-
-      <ApplicationTracker
-        opportunityId={o.id}
-        application={o.application}
-        onChange={(application) => setOpportunity({ ...o, application })}
-      />
     </article>
   )
 }
