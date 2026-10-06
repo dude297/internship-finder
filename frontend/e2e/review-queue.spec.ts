@@ -61,7 +61,10 @@ test('review queue: accept, reject, edit, skip, and batch reject', async ({ page
   }
 
   // The Inbox links into the queue.
-  await page.getByRole('link', { name: 'Inbox', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Inbox', exact: true })
+    .click()
   await page.getByRole('link', { name: 'Review requirement suggestions' }).click()
   await expect(page).toHaveURL(/\/requirements$/)
   await expect(page.getByRole('heading', { name: 'Review', level: 1 })).toBeVisible()

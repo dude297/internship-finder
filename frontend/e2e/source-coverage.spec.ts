@@ -113,7 +113,10 @@ test('source coverage: discovery suggests an Ashby board, and adding it enriches
 
   // Sync the discovery feed: creates one feed-only opportunity whose ID proves an Ashby board.
   publishFeedOnly()
-  await page.getByRole('link', { name: 'Sources', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Sources', exact: true })
+    .click()
   await page.getByRole('button', { name: `Sync ${feedDisplayName} now` }).click()
   await expect(page.getByText(`${feedDisplayName}: sync finished.`)).toBeVisible()
 
@@ -144,7 +147,10 @@ test('source coverage: discovery suggests an Ashby board, and adding it enriches
   await page.getByRole('button', { name: `Sync ${company} now` }).click()
   await expect(page.getByText(`${company}: sync finished.`)).toBeVisible()
 
-  await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
   await page.getByRole('link', { name: feedTitle }).click()
@@ -168,7 +174,10 @@ test('source coverage: discovery suggests an Ashby board, and adding it enriches
   ).toBeVisible()
 
   // Coverage now counts this opportunity as ATS-backed instead of feed-only.
-  await page.getByRole('link', { name: 'Sources', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Sources', exact: true })
+    .click()
   await expect(
     page.getByRole('heading', { name: 'Source Coverage' }).locator('..'),
   ).toContainText('Direct ATS-backed')

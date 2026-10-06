@@ -316,6 +316,14 @@ export const dashboardSchema = z.object({
     latest_successful_sync_at: z.string().nullable(),
     sync_reason: z.enum(['ok', 'stale', 'never_synced', 'no_sources']),
     sources_needing_attention: z.number().int(),
+    new_today: z.number().int(),
+    new_this_week: z.number().int(),
+    new_this_week_independent: z.number().int(),
+    new_this_week_by_provider: z.array(
+      z.object({ provider: z.string(), count: z.number().int() }),
+    ),
+    weekly_new: z.array(z.object({ week_start: z.string(), count: z.number().int() })),
+    closing_soon: z.number().int(),
   }),
   requirements: z.object({
     awaiting_review: z.number().int(),

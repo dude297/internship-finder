@@ -37,7 +37,10 @@ test('owner can add, find, evaluate, and track a volunteer opportunity', async (
   const opportunityUrl = page.url()
 
   // List: the Type filter finds it (and excludes it under another type); labelled Volunteer.
-  await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Search title or organization').fill(title)
   await page.getByRole('button', { name: 'Search' }).click()
   const row = page.getByRole('listitem').filter({ hasText: title })

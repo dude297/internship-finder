@@ -60,10 +60,17 @@ jobs:
       - name: Check the database secret is configured
         env:
           DATABASE_URL: ${{ secrets.SYNC_DATABASE_URL || secrets.PRODUCTION_DATABASE_URL }}
+          SYNC_URL_SET: ${{ secrets.SYNC_DATABASE_URL != '' }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "::error::neither SYNC_DATABASE_URL nor PRODUCTION_DATABASE_URL is set; configure one on the production environment."
             exit 1
+          fi
+          # ADR-027: say which credential runs the sync (names only), so a silent fallback shows.
+          if [ "$SYNC_URL_SET" = "true" ]; then
+            echo "::notice::sync runs as the least-privilege role (SYNC_DATABASE_URL)."
+          else
+            echo "::warning::sync falls back to PRODUCTION_DATABASE_URL (full privileges)."
           fi
 
       - name: Sync every enabled source

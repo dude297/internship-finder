@@ -1,5 +1,10 @@
 import type { OpportunityDetail } from '../api/schemas'
-import { availabilityLabels, formatDateTime, formatDay } from '../lib/labels'
+import {
+  availabilityLabels,
+  formatDateTime,
+  formatDay,
+  sourceHealthLabels,
+} from '../lib/labels'
 
 /** Where the opportunity was seen. Only safe fields; raw source payloads never reach the UI. */
 export function SourceProvenance({ opportunity }: { opportunity: OpportunityDetail }) {
@@ -39,6 +44,18 @@ export function SourceProvenance({ opportunity }: { opportunity: OpportunityDeta
               {formatDay(record.last_seen_at)}
               {record.closed_at && ` · Closed ${formatDay(record.closed_at)}`}
             </p>
+            {record.automated && (
+              <p className="text-slate-600">
+                Sync health:{' '}
+                {record.source_health
+                  ? sourceHealthLabels[record.source_health]
+                  : 'Unknown'}
+                {' · Last successful sync: '}
+                {record.source_last_success_at
+                  ? formatDateTime(record.source_last_success_at)
+                  : 'never'}
+              </p>
+            )}
             {record.source_url && (
               <a
                 href={record.source_url}

@@ -38,14 +38,20 @@ function publish(...jobs: ReturnType<typeof job>[]) {
 }
 
 async function syncBoard(page: Page) {
-  await page.getByRole('link', { name: 'Sources', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Sources', exact: true })
+    .click()
   await page.getByRole('button', { name: `Sync ${organization} now` }).click()
   await expect(page.getByText(`${organization}: sync finished.`)).toBeVisible()
   return page.getByRole('listitem').filter({ hasText: board })
 }
 
 async function openOpportunity(page: Page, title: string, show = 'open') {
-  await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Show').selectOption(show)
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
@@ -65,7 +71,10 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   await expect(page).not.toHaveURL(/\/login$/)
 
   // A profile, so imported opportunities are evaluated.
-  await page.getByRole('link', { name: 'Profile', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Profile', exact: true })
+    .click()
   await page.getByLabel('Current level').selectOption('high_school')
   await page.getByLabel('Status as of').fill('2040-09-01')
   await page.getByLabel('Expected graduation').fill('2041-06-10')
@@ -76,7 +85,10 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   await expect(page.getByRole('status')).toContainText('Profile saved.')
 
   // Add a Greenhouse board by its public link; the built-in feed is already listed.
-  await page.getByRole('link', { name: 'Sources', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Sources', exact: true })
+    .click()
   await expect(page.getByText('Tech Internship Discovery Feed')).toBeVisible()
   await page.getByLabel('Organization name').fill(organization)
   await page
@@ -100,7 +112,10 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
   await expect(card).toContainText('Unchanged: 2')
   await expect(card).toContainText('Created: 0')
 
-  await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
   await expect(page.getByRole('status')).toHaveText('Showing 1–2 of 2')
@@ -153,7 +168,10 @@ test('ingestion workflow: sync, dedupe, review, curation, closure, tracking', as
     page.getByText(/^Assessment: All hard requirements reviewed/).first(),
   ).toBeVisible()
 
-  await page.getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
   await expect(page.getByRole('status')).toHaveText('Showing 1–1 of 1')
@@ -192,7 +210,10 @@ test('board scope: switching to all postings imports the full-time posting, and 
   await page.getByLabel('Password').fill(owner.password)
   await page.getByRole('button', { name: 'Log in' }).click()
   await expect(page).not.toHaveURL(/\/login$/)
-  await page.getByRole('link', { name: 'Sources', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Sources', exact: true })
+    .click()
   await page.getByLabel('Organization name').fill(name)
   await page.getByLabel('Job board link or name').fill(scopeBoard)
   await page.getByRole('button', { name: 'Add source' }).click()

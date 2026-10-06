@@ -40,3 +40,16 @@ export function ageText(iso: string | null, now: Date): string | null {
   if (hours < 48) return `${Math.round(hours)} hours ago`
   return `${Math.floor(hours / 24)} days ago`
 }
+
+/** Bar heights (0-100) for the weekly trend, scaled to the largest week; all zeros, never NaN. */
+export function barHeights(counts: number[]): number[] {
+  const max = Math.max(0, ...counts.filter(Number.isFinite))
+  return counts.map((n) => (max > 0 && Number.isFinite(n) ? (n / max) * 100 : 0))
+}
+
+/** Text equivalent of the trend chart. */
+export function trendSummary(weeks: { week_start: string; count: number }[]): string {
+  return weeks.length === 0
+    ? 'No weekly data'
+    : `New opportunities per week, oldest first: ${weeks.map((w) => `${w.week_start}: ${w.count}`).join('; ')}`
+}

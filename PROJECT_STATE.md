@@ -87,7 +87,7 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-Merged to `main` (`919f2e8`), **not deployed**. Production still runs Milestone 11 (`cf1ad43`, schema `a3c7e9b1d5f2`).
+Merged to `main`, **not deployed**. Production still runs Milestone 11 (`cf1ad43`, schema `a3c7e9b1d5f2`).
 
 | Milestone | PR | Migration | Notes |
 |---|---|---|---|
@@ -98,6 +98,13 @@ Merged to `main` (`919f2e8`), **not deployed**. Production still runs Milestone 
 | 16 Dashboard and Application Engine v2 | [#57](https://github.com/dude297/internship-finder/pull/57) | `c9e2b7a4d1f8` | [ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md); `/dashboard` default, `/applications`, event history |
 | 17 Operational finish | [#48](https://github.com/dude297/internship-finder/pull/48), [#54](https://github.com/dude297/internship-finder/pull/54) | none | CI token, backup argv; least-privilege `if_sync` role ([ADR-027](docs/decisions/ADR-027-least-privilege-sync-role.md), **not activated**) |
 | 19 UX | [#51](https://github.com/dude297/internship-finder/pull/51), [#56](https://github.com/dude297/internship-finder/pull/56) | none | landing, login states, design tokens; Sources page |
+| 19 UX (Inbox and Opportunities) | [#59](https://github.com/dude297/internship-finder/pull/59) | none | filter disclosure and Clear filters, tracker above the score breakdown |
+| 19 UX (Freshness wording and Inbox dates) | [#63](https://github.com/dude297/internship-finder/pull/63) | none | plain-language freshness labels, one authoritative Freshness section, human Inbox dates, two-row list badges; not merged |
+| 18 Discovery quality | [#61](https://github.com/dude297/internship-finder/pull/61) | none | dashboard New supply: new today/this week, independent, by provider, 8-week trend ([ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md) amendment) |
+| 17 Pre-release hardening | [#64](https://github.com/dude297/internship-finder/pull/64) | none | security review of `cf1ad43..main`: safe to release |
+| 19 UX (accessibility, responsive, nav) | [#62](https://github.com/dude297/internship-finder/pull/62) | none | axe-core e2e on every route (0 serious/critical), overflow checks at 5 widths, nav on its own row, pipeline columns |
+
+
 | 19 UX final pass (a11y, responsive) | this PR (`feature/m19-ux-a11y`) | none | axe e2e on every route, nav and pipeline layout; unmerged |
 
 Deferred: Milestone 16 in the original roadmap (Target Company Intelligence; the feed Pareto and catalog cover gap finding for now) and Milestone 18 beyond what the dashboard shows. Merged but **not activated**: the encrypted weekly backup ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
