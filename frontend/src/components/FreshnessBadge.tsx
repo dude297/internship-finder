@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FreshnessState, OpportunityDetail } from '../api/schemas'
 import { isNewlyFound, relativeAge } from '../lib/freshness'
-import { formatDate, formatDateTime, formatDay, sourceHealthLabels } from '../lib/labels'
+import { formatDate, formatDateTime, formatDay } from '../lib/labels'
 
 // Freshness (M8.1): derived by the backend from source evidence. Text labels, never color
 // alone. Wording says what was checked, never that a posting is guaranteed open.
@@ -35,7 +35,7 @@ function ageSuffix(o: FreshnessFields, now: number): string {
 function freshnessLabel(o: FreshnessFields, now: number): string | null {
   switch (o.freshness) {
     case 'direct_verified':
-      return `ATS verified${ageSuffix(o, now)}`
+      return `Confirmed on company board${ageSuffix(o, now)}`
     case 'program_listed': {
       const parts = [
         o.program_last_verified &&
@@ -47,9 +47,9 @@ function freshnessLabel(o: FreshnessFields, now: number): string | null {
     case 'program_recheck':
       return 'Program info needs re-check'
     case 'feed_current':
-      return `Feed current${ageSuffix(o, now)}`
+      return `Seen in community feed only${ageSuffix(o, now)}`
     case 'source_warning':
-      return 'Verification incomplete'
+      return 'Company board check pending'
     case 'manual':
       return 'Added manually'
     case 'closed':
@@ -62,7 +62,7 @@ function freshnessExplanation(o: FreshnessFields, now: number): string | null {
   switch (o.freshness) {
     case 'direct_verified':
       return (
-        "Verified on the company's own job board (ATS) in its latest complete sync" +
+        "Confirmed on the company's own job board in its latest complete sync" +
         (age ? `, ${age}.` : '.')
       )
     case 'program_listed':
@@ -74,7 +74,7 @@ function freshnessExplanation(o: FreshnessFields, now: number): string | null {
     case 'feed_current':
       return "Listed in the community discovery feed in its latest sync. The company's own posting wasn't checked directly."
     case 'source_warning':
-      return 'Source verification incomplete: the latest sync of its source(s) was partial, failed, or is out of date, so a closed posting may still appear open.'
+      return 'Company board check pending: the latest sync of its source(s) was partial, failed, or is out of date, so a closed posting may still appear open.'
     case 'manual':
       return 'You manage this opportunity by hand.'
     case 'closed':
@@ -128,7 +128,7 @@ export function NewBadge({
   )
 }
 
-/** Detail-page evidence: state wording plus per-source health and last successful sync. */
+/** Detail-page verdict (the one authoritative place; per-source sync lives on the Source cards). */
 export function FreshnessSection({
   opportunity,
   now: nowProp,
@@ -141,7 +141,6 @@ export function FreshnessSection({
   const explanation =
     freshnessExplanation(o, now) ??
     'No source lists this posting anymore, so there is no freshness to report.'
-  const automated = o.sources.filter((r) => r.automated)
   return (
     <section aria-labelledby="freshness-heading" className="space-y-2">
       <h2 id="freshness-heading" className="text-lg font-semibold">
@@ -152,21 +151,6 @@ export function FreshnessSection({
         <p className="text-sm text-slate-600">
           Last confirmed {formatDateTime(o.freshness_checked_at)}
         </p>
-      )}
-      {automated.length > 0 && (
-        <ul className="space-y-1 text-sm">
-          {automated.map((r, index) => (
-            <li key={index}>
-              <span className="font-medium">{r.source_name}</span>
-              {': '}
-              {r.source_health ? sourceHealthLabels[r.source_health] : 'Unknown'}
-              {' · Last successful sync: '}
-              {r.source_last_success_at
-                ? formatDateTime(r.source_last_success_at)
-                : 'never'}
-            </li>
-          ))}
-        </ul>
       )}
     </section>
   )

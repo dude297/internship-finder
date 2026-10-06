@@ -6,6 +6,7 @@ import {
   FreshnessSection,
   NewBadge,
 } from '../src/components/FreshnessBadge'
+import { SourceProvenance } from '../src/components/SourceProvenance'
 import { isNewlyFound, relativeAge } from '../src/lib/freshness'
 import {
   coverageMetrics,
@@ -74,7 +75,7 @@ describe('New badge boundary', () => {
 describe('freshness badge', () => {
   it('direct_verified shows ATS wording with relative age and a tooltip', () => {
     badgeText('direct_verified')
-    const badge = screen.getByText('ATS verified · 3h ago')
+    const badge = screen.getByText('Confirmed on company board · 3h ago')
     expect(badge).toHaveAttribute(
       'title',
       expect.stringContaining("company's own job board"),
@@ -99,9 +100,9 @@ describe('freshness badge', () => {
     badgeText('program_recheck')
     expect(screen.getByText('Program info needs re-check')).toBeInTheDocument()
     badgeText('feed_current')
-    expect(screen.getByText('Feed current · 3h ago')).toBeInTheDocument()
+    expect(screen.getByText('Seen in community feed only · 3h ago')).toBeInTheDocument()
     badgeText('source_warning')
-    const warn = screen.getByText('Verification incomplete')
+    const warn = screen.getByText('Company board check pending')
     expect(warn).toHaveAttribute(
       'title',
       expect.stringContaining('may still appear open'),
@@ -153,14 +154,19 @@ describe('freshness section', () => {
         }),
       ],
     })
-    render(<FreshnessSection opportunity={d as never} now={NOW} />)
+    render(
+      <>
+        <FreshnessSection opportunity={d as never} now={NOW} />
+        <SourceProvenance opportunity={d as never} />
+      </>,
+    )
     expect(screen.getByRole('heading', { name: 'Freshness' })).toBeInTheDocument()
     expect(
-      screen.getByText(/Verified on the company's own job board/),
+      screen.getByText(/Confirmed on the company's own job board/),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Example Board/).parentElement).toHaveTextContent('Healthy')
-    expect(screen.getByText(/Old Board/).parentElement).toHaveTextContent(
-      'Stale · Last successful sync: never',
+    expect(screen.getByText(/Sync health: Healthy/)).toBeInTheDocument()
+    expect(screen.getByText(/Sync health: Stale/)).toHaveTextContent(
+      'Last successful sync: never',
     )
   })
 })
@@ -182,7 +188,7 @@ describe('list and detail pages', () => {
     })
     renderAt('/opportunities')
     expect(await screen.findByText('New')).toBeInTheDocument()
-    expect(screen.getByText(/^Feed current/)).toBeInTheDocument()
+    expect(screen.getByText(/^Seen in community feed only/)).toBeInTheDocument()
   })
 
   it('detail header and Freshness section render', async () => {
@@ -200,7 +206,7 @@ describe('list and detail pages', () => {
         }),
     })
     renderAt('/opportunities/opp-1')
-    expect(await screen.findByText('Verification incomplete')).toBeInTheDocument()
+    expect(await screen.findByText('Company board check pending')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Freshness' })).toBeInTheDocument()
   })
 })
