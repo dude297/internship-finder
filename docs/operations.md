@@ -168,6 +168,44 @@ Switching a Greenhouse/Lever board between **Internships only** and **All postin
 
 When a complete successful sync no longer lists a posting, its source record is marked closed (`is_active = false`, `closed_at`). Nothing is deleted: the opportunity, its evaluations, and its application tracking stay. An opportunity is shown as **closed** when all of its automated source records are closed; the default list view hides closed postings, and **Show → Closed postings / Everything** finds them. If the posting reappears, the record reopens. There's no age-based "stale" rule.
 
+## Least-Privilege Sync Role (OWNER ACTION, NOT ACTIVATED)
+
+[ADR-027](decisions/ADR-027-least-privilege-sync-role.md) (Proposed). Today the scheduled sync uses the owner role. The code is merged-ready, but nothing changes until the owner does the steps below: the workflow prefers the environment secret `SYNC_DATABASE_URL` and falls back to `PRODUCTION_DATABASE_URL` while it is unset. The weekly backup keeps `PRODUCTION_DATABASE_URL` (`pg_dump` needs full read access). Nothing here has been run against Neon; the grants are proven by `backend/tests/test_sync_role.py` against a disposable local PostgreSQL 18.
+
+**What the role can do** (`scripts/sql/sync_role_grants.sql`, the single source of truth): read `alembic_version`, `profiles`, `profile_facts`, `opportunity_requirements`; write the catalog, run bookkeeping, candidates and evaluations (exact matrix in the ADR). It has **no** access to `auth_users`, `auth_sessions`, `profile_sources`, `profile_source_artifacts` or `applications`, cannot create or alter objects, and cannot write the profile.
+
+**Create it with SQL, not the console or `neonctl roles create`.** Roles made through the console, CLI or API are members of `neon_superuser` (read and write on all data, `BYPASSRLS`, `CREATEROLE`) ([Neon docs, accessed 2026-10-06](https://neon.com/docs/manage/roles)). The script also removes that membership if a console-made `if_sync` already exists.
+
+Run from `backend/`'s parent (the repository root), in a trusted local shell, as the owner. Never paste a URL or password into a command line, a file, or chat.
+
+```bash
+# 1. Direct (non-pooled) owner URL, kept in the shell only (psql wants postgresql://, not +psycopg).
+export OWNER_URL="$(neonctl connection-string --project-id <project-id> --database-name <db>)"
+
+# 2. Create the role and grants (idempotent; no password in the file).
+psql "$OWNER_URL" -v ON_ERROR_STOP=1 -f scripts/sql/sync_role_grants.sql
+
+# 3. Set its password interactively (>= 60 bits of entropy, URL-safe: letters and digits; ~16 random
+#    characters from a password manager). psql keeps it out of argv and history.
+psql "$OWNER_URL" -c '\password if_sync'
+
+# 4. Store the pooled URL as a NEW environment secret, from stdin (printf is a shell builtin, so
+#    nothing appears in argv). <pooled-host> is the owner URL's host with -pooler after the endpoint id.
+read -rsp 'if_sync password: ' SYNC_PW; echo
+printf 'postgresql+psycopg://if_sync:%s@<pooled-host>/<db>?sslmode=require' "$SYNC_PW"   | gh secret set SYNC_DATABASE_URL --env production --repo dude297/internship-finder
+unset SYNC_PW OWNER_URL
+
+# 5. Dispatch one sync and watch it.
+gh workflow run sync-production.yml --repo dude297/internship-finder --ref main
+gh run watch --repo dude297/internship-finder
+```
+
+**Verify.** The run must be green and print the usual per-source lines. Source Health (or `select s.key, r.status, r.started_at from ingestion_runs r join ingestion_sources s on s.id = r.source_id order by r.started_at desc limit 10`, run as the owner) must show fresh `success`/`no_change` runs. Optionally confirm the denial: connecting as `if_sync` (prompted password) and running `select 1 from auth_users` must fail with `permission denied`. A run that fails with `permission denied for table X` means the code started using a table the grants don't cover; do not widen the grant casually, follow the ADR.
+
+**Rollback.** Delete the new secret and the workflow falls back to the unchanged `PRODUCTION_DATABASE_URL` on the next run: `gh secret delete SYNC_DATABASE_URL --env production --repo dude297/internship-finder`. To retire the role entirely: `DROP OWNED BY if_sync; DROP ROLE if_sync;` as the owner.
+
+**Every release with a migration that adds a table.** `test_sync_role.py` fails the PR until the table is granted or excluded in the SQL file. After merging, re-run step 2 on production as part of the migration step, before the next scheduled sync (otherwise that run goes red with `permission denied`, not silent). Credential rotation: repeat steps 3 and 4.
+
 ## Database Backup (implemented; not activated until the owner configures it)
 
 [ADR-021](decisions/ADR-021-encrypted-backups.md). `.github/workflows/backup-production.yml` runs weekly (Sundays 09:43 UTC) and on manual dispatch, only on `main` of `dude297/internship-finder`, in the `production` environment. It runs `scripts/backup_db.sh`, which streams `pg_dump --format=custom | age -r <public key>` into a file (no plaintext on disk or in logs) and uploads it as the artifact `db-backup-<run id>` with **14-day retention**. The workflow holds only the *public* age key; the private key stays with the owner.
