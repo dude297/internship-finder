@@ -100,7 +100,7 @@ Open pull requests: none.
 - Production feed not retired. Feed-free readiness passed on disposable databases (technically GO), conditional on losing about 1,016 feed-only postings (about 800 on Workday/Oracle, which have no adapter).
 - GitHub Actions: dispatch [37443083684](https://github.com/dude297/internship-finder/actions/runs/37443083684) sat "waiting" 30+ minutes with no job and was cancelled; run 37387224375 still shows queued and cannot be cancelled. Re-dispatching works (latest sync, 97.5 s ingestion for 47 sources).
 - Fit v2 known gaps: multi-city locations and "United States of America" miss the Bay Area region; Foster City, San Carlos and Livermore are not in the region table; no RTL/FPGA/VLSI/PyTorch aliases; empty availability dates mean the schedule never contributes.
-- Security review (2026-10-06): no BLOCKER or HIGH. MEDIUM: the login throttle shares the proxy bucket (an attacker can lock the owner out for 15 minutes; availability only). MEDIUM: Revert to source is irreversible (UI confirmation exists). LOW: the PDF child inherits the environment; backup scripts pass the database URL on the command line; CI checkout should set `persist-credentials: false`.
+- Security review (2026-10-06): no BLOCKER or HIGH. MEDIUM: the login throttle shares the proxy bucket (an attacker can lock the owner out for 15 minutes; availability only). MEDIUM: Revert to source is irreversible (UI confirmation exists). LOW: the PDF child inherits the environment (deferred: see CHANGELOG Unreleased). Fixed in development: backup password via `PGPASSWORD`, CI checkout `persist-credentials: false`.
 
 ## Known Bugs
 
