@@ -67,28 +67,49 @@ class Rule:
 
 RULES = (
     Rule("migration", (f"{MIGRATIONS}/",), "docs/data-model.md"),
-    Rule("models", ("backend/app/models/",), "docs/data-model.md"),
+    Rule("models", ("backend/app/models/", "backend/app/enums.py"), "docs/data-model.md"),
     Rule(
         "eligibility",
-        ("backend/app/opportunities/eligibility/", "backend/app/opportunities/requirements/"),
+        (
+            "backend/app/opportunities/eligibility/",
+            "backend/app/opportunities/requirements/",
+            "backend/app/services/requirement_candidates.py",
+            "backend/app/services/requirement_review.py",
+        ),
         "docs/eligibility.md",
     ),
     Rule("scoring", ("backend/app/opportunities/scoring/",), "docs/scoring.md"),
     Rule(
         "ingestion",
-        ("backend/app/ingestion/", "backend/data/direct_source_catalog.json"),
+        (
+            "backend/app/ingestion/",
+            "backend/data/direct_source_catalog.json",
+            "backend/data/program_registry.json",
+            "backend/app/services/direct_catalog.py",
+            "backend/app/services/discovery.py",
+            "backend/app/services/source_discovery.py",
+            "backend/app/services/sources.py",
+        ),
         "docs/sources.md",
     ),
     Rule(
         "scheduling",
-        (".github/workflows/sync-production.yml", "backend/app/services/source_health.py"),
+        (
+            ".github/workflows/sync-production.yml",
+            "backend/app/services/source_health.py",
+            "backend/app/services/freshness.py",
+            "backend/app/cli.py",
+        ),
         "docs/operations.md",
     ),
+    Rule("config", ("backend/app/core/config.py",), "docs/deployment.md"),
+    Rule("ci", (".github/workflows/ci.yml",), "docs/development.md"),
     Rule("hosting", ("frontend/vercel.json",), "docs/deployment.md"),
 )
 RULE_NAMES = {rule.name for rule in RULES} | {"milestone"}
 WAIVER = re.compile(r"^Docs-Impact-Waiver:\s*([a-z-]+)\s*:\s*(\S.{9,})$", re.MULTILINE)
-MILESTONE_DOCS = ("PROJECT_STATE.md", "CHANGELOG.md")
+MILESTONE_DOCS = ("PROJECT_STATE.md", "CHANGELOG.md", STATUS_FILE)
+RELEASES_DIR = "docs/releases/"
 
 SHA = re.compile(r"[0-9a-f]{40}")
 REVISION = re.compile(r"[0-9a-f]{12}")
@@ -99,6 +120,7 @@ MILESTONE = re.compile(r"\d+(\.\d+)?")
 
 FENCE = re.compile(r"^\s*(```|~~~)")
 HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
+REFDEF = re.compile(r"^ {0,3}\[[^\]]+\]:\s*<?([^\s>]+)")  # [ref]: target
 LINK = re.compile(r"(?<!!)\[(?:[^\]\[]|\[[^\]]*\])*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 INLINE_CODE = re.compile(r"`[^`]*`")
 
@@ -207,6 +229,16 @@ def validate_status(status: object, root: Path) -> list[str]:
     return errors
 
 
+def check_sha_in_history(root: Path, status: dict[str, object] | None) -> list[str]:
+    """In a git checkout with history, production.main_sha must be a real commit."""
+    production = status.get("production") if isinstance(status, dict) else None
+    sha = production.get("main_sha") if isinstance(production, dict) else None
+    if not (root / ".git").exists() or not isinstance(sha, str) or not SHA.fullmatch(sha):
+        return []
+    found = subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=root, capture_output=True)
+    return [] if found.returncode == 0 else [f"{STATUS_FILE}: production.main_sha {sha[:7]} is not a commit in this repository"]
+
+
 def render_status(status: dict[str, dict[str, str | None]]) -> str:
     production, development = status["production"], status["development"]
     sha = str(production["main_sha"])
@@ -260,6 +292,22 @@ def check_status_blocks(root: Path, status: dict[str, object] | None, write: boo
     return errors
 
 
+def exists_exact_case(path: Path, root: Path) -> bool:
+    """exists(), but case-sensitive like Linux CI (Windows/macOS filesystems are not)."""
+    if not path.exists():
+        return False
+    try:
+        parts = path.relative_to(root).parts
+    except ValueError:
+        return True
+    current = root
+    for part in parts:
+        if part not in os.listdir(current):
+            return False
+        current = current / part
+    return True
+
+
 def check_links(root: Path) -> list[str]:
     errors: list[str] = []
     cache: dict[Path, set[str]] = {}
@@ -267,12 +315,12 @@ def check_links(root: Path) -> list[str]:
         rel = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8")
         for number, line in prose_lines(text):
-            for target in LINK.findall(line):
+            for target in LINK.findall(line) + REFDEF.findall(line):
                 if re.match(r"[a-z]+:", target) or target.startswith("//"):
                     continue  # external (http, https, mailto)
                 file_part, _, anchor = target.partition("#")
-                resolved = path if not file_part else (path.parent / file_part).resolve()
-                if not resolved.exists():
+                resolved = path if not file_part else Path(os.path.normpath(path.parent / file_part))
+                if not exists_exact_case(resolved, root):
                     errors.append(f"{rel}:{number}: broken link {target}")
                     continue
                 if anchor and resolved.suffix == ".md":
@@ -345,15 +393,54 @@ def git(root: Path, *args: str) -> str:
     ).stdout
 
 
+def status_release_failures(old: object, new: object, changed: Sequence[str]) -> list[str]:
+    """Production status may only change together with a release record (a new file, or a dated
+    note appended to an existing one)."""
+    if not (isinstance(old, dict) and isinstance(new, dict)) or old.get("production") == new.get("production"):
+        return []
+    if any(p.startswith(RELEASES_DIR) for p in changed):
+        return []
+    return [f"[release] {STATUS_FILE} production changed without a docs/releases/ record in the same range"]
+
+
+def release_rewrite_failures(numstat: str) -> list[str]:
+    """Release records are immutable: only additions (new files, appended notes) are allowed."""
+    errors = []
+    for line in numstat.splitlines():
+        _, deleted, path = line.split("\t", 2)
+        if deleted != "0":
+            errors.append(f"[release] {path}: release records are immutable (append a dated note instead)")
+    return errors
+
+
 def check_paths(root: Path, base: str, branch: str | None) -> list[str]:
-    changed = [p for p in git(root, "diff", "--name-only", f"{base}...HEAD").splitlines() if p]
-    messages = git(root, "log", "--format=%B", f"{base}..HEAD")
-    return path_guard_failures(changed, waivers(messages), branch)
+    span = f"{base}...HEAD"
+    try:
+        # --no-renames: a moved file is delete + add, so the old path still triggers its rule
+        changed = [p for p in git(root, "diff", "--name-only", "--no-renames", span).splitlines() if p]
+        messages = git(root, "log", "--format=%B", f"{base}..HEAD")
+        # a whitespace-only edit does not count as updating a document
+        for doc in [p for p in changed if p.endswith(".md")]:
+            if not git(root, "diff", "-w", "--ignore-blank-lines", "--numstat", span, "--", doc).strip():
+                changed.remove(doc)
+        releases = git(root, "diff", "--numstat", "--no-renames", span, "--", RELEASES_DIR)
+    except subprocess.CalledProcessError as error:
+        return [f"cannot diff against base '{base}' ({(error.stderr or '').strip()[:200]}); is the history fetched?"]
+    errors = path_guard_failures(changed, waivers(messages), branch) + release_rewrite_failures(releases)
+    if STATUS_FILE in changed:
+        try:
+            old = json.loads(git(root, "show", f"{base}:{STATUS_FILE}"))
+            new = json.loads((root / STATUS_FILE).read_text(encoding="utf-8"))
+        except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
+            old = new = None  # invalid JSON is reported by the repository checks
+        errors += status_release_failures(old, new, changed)
+    return errors
 
 
 def run(root: Path, base: str | None = None, branch: str | None = None, write: bool = False) -> list[str]:
     status, errors = load_status(root)
     errors = check_canonical(root) + errors
+    errors += check_sha_in_history(root, status)
     errors += check_status_blocks(root, status, write)
     errors += check_links(root)
     errors += check_duplicate_headings(root)
