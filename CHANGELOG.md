@@ -6,6 +6,16 @@ All notable changes to this project are documented here.
 
 - Frontend: design tokens, public landing page at `/` for logged-out visitors, redesigned login with waking-server, rate-limit and unavailable states, `IF` mark and favicon, light AppShell nav pass. No backend or API changes.
 
+### Documentation
+
+- Research note [m13-workday-oracle-provider-gate.md](docs/research/m13-workday-oracle-provider-gate.md): Workday (YELLOW: robots-advertised sitemap capped at 100 URLs plus JobPosting JSON-LD), Oracle Recruiting Cloud (RED), 14 ATS families (Personio and Teamtailor GREEN pending governance), and mega-cap career sites. No code or behavior change.
+
+### Security
+
+- CI: every `actions/checkout` now sets `persist-credentials: false` (the backend, e2e, and docs jobs kept the token in `.git/config`).
+- `scripts/backup_db.sh` passes the database password to `psql`/`pg_dump` through `PGPASSWORD` instead of the URL on the command line (argv is readable by other processes); an execution test checks argv on Linux.
+- Deferred: minimizing the PDF child's environment. Code execution inside the child could read `/proc/self/environ` anyway, so clearing `os.environ` adds little; a real fix means replacing the `multiprocessing` isolation with an `exec` that takes an explicit environment.
+
 ## Milestones 8.2, 9, 10, 10.1, and 11 (released 2026-10-06)
 
 Released 2026-10-06 in five deploys: `main` `f6210e9` (Milestone 8.2, security hardening, CSP, registry and catalog data; post-merge CI `37435960967`); Milestone 9 [PR #33](https://github.com/dude297/internship-finder/pull/33) `4f419e5` (Neon `b7e3d9f1a2c4` → `d4f8a1c6e2b9`); Milestone 10 [PR #38](https://github.com/dude297/internship-finder/pull/38) `1dbb86f` (→ `a3c7e9b1d5f2`); Milestone 10.1 [PR #42](https://github.com/dude297/internship-finder/pull/42) `1d270d6`; Milestone 11 fit scoring v2 [PR #37](https://github.com/dude297/internship-finder/pull/37) `ca8ff77` (post-merge CI `37450518492`), followed by `reevaluate` (2,451 evaluations). Activation: requirements v2 scan (563 pending, none accepted) and 19 catalog boards (26 → 45 direct sources). The encrypted backup code is merged but inert until the owner configures it. Record: [2026-10-06-m9-m11.md](docs/releases/2026-10-06-m9-m11.md).

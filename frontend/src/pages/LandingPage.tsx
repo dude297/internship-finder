@@ -314,13 +314,15 @@ export function LandingPage() {
             </h2>
             <ol className="mt-8 grid gap-px overflow-hidden rounded-card border border-lab-border bg-lab-border md:grid-cols-2 lg:grid-cols-3">
               {CAPABILITIES.map((c) => (
-                <li key={c.n} className="bg-lab-bg p-5">
+                <li
+                  key={c.n}
+                  className="bg-lab-bg p-5 md:last:col-span-2 lg:last:col-span-2"
+                >
                   <p className="font-mono text-sm text-lab-accent">{c.n}</p>
                   <h3 className="mt-2 text-lg font-semibold">{c.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-lab-muted">{c.body}</p>
                 </li>
               ))}
-              <li aria-hidden="true" className="hidden bg-lab-bg md:block" />
             </ol>
           </div>
         </section>

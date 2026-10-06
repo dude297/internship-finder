@@ -2,7 +2,11 @@
 Text-based, standard library only:  python -m unittest discover -s scripts/tests
 """
 
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -67,6 +71,47 @@ class BackupWorkflowInvariants(unittest.TestCase):
 
     def test_dump_streams_into_age(self) -> None:
         self.assertRegex(SCRIPT, r"--format=custom[^\n]*\\\n\s*\| \$\{AGE:-age\} -r")
+
+
+@unittest.skipIf(os.name == "nt" or not shutil.which("bash"), "needs a POSIX bash (CI runs Linux)")
+class BackupScriptRun(unittest.TestCase):
+    def test_password_reaches_libpq_by_env_not_argv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp, "argv.log")
+            # Stubs record argv and PGPASSWORD; the fake dump is large enough to pass the size check.
+            stub = Path(tmp, "stub.sh")
+            stub.write_text(
+                "#!/usr/bin/env bash\n"
+                f'echo "$0|$*|$PGPASSWORD" >> "{log.as_posix()}"\n'
+                'case "$0" in *psql) echo 42;; *dump) head -c 9000 /dev/zero;;'
+                ' *age) cat >/dev/null; printf "age-encryption.org/v1"; head -c 9000 /dev/zero;; esac\n',
+                encoding="utf-8",
+            )
+            for name in ("psql", "dump", "age"):
+                shutil.copy(stub, Path(tmp, name))
+            env = {
+                **os.environ,
+                "DATABASE_URL": "postgresql+psycopg://role:s3cr%40t@ep-x-pooler.neon.tech/db",
+                "BACKUP_AGE_RECIPIENT": "age1" + "q" * 58,
+                "PSQL": f"bash {Path(tmp, 'psql').as_posix()}",
+                "PG_DUMP": f"bash {Path(tmp, 'dump').as_posix()}",
+                "AGE": f"bash {Path(tmp, 'age').as_posix()}",
+            }
+            env.pop("GITHUB_ACTIONS", None)
+            out = Path(tmp, "b.age").as_posix()
+            run = subprocess.run(
+                ["bash", (ROOT / "scripts/backup_db.sh").as_posix(), out],
+                env=env, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            lines = log.read_text(encoding="utf-8").splitlines()
+            self.assertGreaterEqual(len(lines), 2)
+            for line in lines:
+                argv, password = line.rsplit("|", 1)
+                self.assertNotIn("s3cr", argv)
+                if "age" not in argv.split("|")[0]:
+                    self.assertEqual(password, "s3cr@t")
+                    self.assertIn("role@ep-x.neon.tech/db", argv)
 
 
 if __name__ == "__main__":
