@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | none |
+| **Current Development** | Milestone 9 on `feature/m9-eligibility-reevaluation` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-05
