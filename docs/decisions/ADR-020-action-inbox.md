@@ -14,7 +14,7 @@ This is a personal tool, not a CRM: the goal is one small page of things to act 
 
 ### 1. Three nullable follow-up columns on `applications`
 
-`next_action` (varchar(200)), `next_action_due` (date), `interview_at` (timestamptz). One additive migration (`a3c7e9b1d5f2`, after `d4f8a1c6e2b9`); no data change; downgrade drops the columns. They ride on the existing `PUT /api/opportunities/{id}/application` (which, like `notes`, replaces the whole record: omitted fields are cleared) and the existing tracking form. Private runtime data; never read by eligibility or fit. No status history: the app does not need one yet (`updated_at` is the only "last touched" signal, and it is what the stale rule uses).
+`next_action` (varchar(200)), `next_action_due` (date), `interview_at` (timestamptz). One additive migration (`a3c7e9b1d5f2`, after `d4f8a1c6e2b9`); no data change; downgrade drops the columns. They ride on the existing `PUT /api/opportunities/{id}/application` (an update applies only the fields the request sends, so an older client that omits the follow-up fields preserves them, while an explicit `null` clears one; creation uses the full body) and the existing tracking form. Private runtime data; never read by eligibility or fit. No status history: the app does not need one yet (`updated_at` is the only "last touched" signal, and it is what the stale rule uses).
 
 ### 2. `GET /api/inbox` is read-only, owner-only, derived on read
 
@@ -39,11 +39,11 @@ One statement per section (window `count() OVER ()` gives `total` with the bound
 
 ### 4. One clock
 
-`build_inbox(db, today=None, now=None)` reads the server's UTC date once. `GET /api/inbox?today=YYYY-MM-DD` (bounded 2000-2999, like the list's `today`) exists so tests pin the date. Date-time windows use UTC midnights.
+`build_inbox(db, today=None, now=None)` reads the server's UTC date once. `GET /api/inbox?today=YYYY-MM-DD` (bounded 2000-2999, like the list's `today`) exists so tests pin the date. Date-time windows are half-open UTC ranges (`>=` start, `<` end) and `interview_at` is converted to a UTC date before ordering. The `today` parameter is a test and inspection aid (owner-only, bounded), not a product feature.
 
 ### 5. UI
 
-An **Inbox** page at `/inbox` and a nav item. The post-login landing page stays `/opportunities` (changing it would change established e2e and login expectations); the nav item is first. Each section has an explicit empty state and links to the opportunity (or `/sources`), plus an "all" link into the filtered list when more exist than shown. The tracking form gains Next action, Next action due and Interview at.
+An **Inbox** page at `/inbox` and a nav item. The post-login landing page stays `/opportunities` (changing it would change established e2e and login expectations); the nav item is first. Each section has an explicit empty state and links to the opportunity (or `/sources`), plus an "all" link into the filtered list when more exist than shown. The link counts its total only where the list filter matches the section exactly (closing soon, requirements to review); for new high fit (the list has no fit-threshold filter) and program dates (the list filter also matches non-registry rows) it is labelled honestly and shows no count. The tracking form gains Next action, Next action due and Interview at.
 
 ## Consequences
 

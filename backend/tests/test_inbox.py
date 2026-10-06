@@ -453,8 +453,16 @@ def test_application_follow_up_fields_round_trip_and_validate(
         "Send thank-you note"
     )
 
-    # Blank clears; a PUT replaces the whole record, so omitted fields are cleared too.
-    cleared = client.put(path, json={"status": "applied", "next_action": "   "}).json()
+    # Blank clears; explicit nulls clear (omitted fields are preserved, see below).
+    cleared = client.put(
+        path,
+        json={
+            "status": "applied",
+            "next_action": "   ",
+            "next_action_due": None,
+            "interview_at": None,
+        },
+    ).json()
     assert cleared["next_action"] is None
     assert cleared["next_action_due"] is None
     assert cleared["interview_at"] is None
@@ -478,3 +486,45 @@ def test_application_edit_requires_csrf_and_auth(
     assert client.put(path, json=body, headers=headers).status_code == 403
     anon_client.cookies.clear()
     assert anon_client.put(path, json=body).status_code == 401
+
+
+def test_interview_window_is_half_open(client: TestClient, db: Session) -> None:
+    track(client, db, "Last included", status="interview", interview_at=at(days(8), 0).isoformat())
+    track(client, db, "Excluded", status="interview", interview_at=at(days(9), 0).isoformat())
+    last = datetime(2041, 3, 17, 23, 59, tzinfo=UTC).isoformat()
+    track(client, db, "Just inside", status="interview", interview_at=last)
+    track(
+        client,
+        db,
+        "Boundary",
+        status="interview",
+        interview_at=datetime(2041, 3, 18, tzinfo=UTC).isoformat(),
+    )
+    assert titles(inbox(client)["applications"]) == ["Just inside"]
+
+
+def test_application_put_preserves_omitted_follow_up_fields(client: TestClient) -> None:
+    oid = make(client, "Preserve")
+    path = f"/api/opportunities/{oid}/application"
+    full = {
+        "status": "applied",
+        "next_action": "Call",
+        "next_action_due": "2041-03-12",
+        "interview_at": "2041-03-14T15:30:00Z",
+    }
+    assert client.put(path, json=full).status_code == 200
+    older = client.put(path, json={"status": "interview", "notes": "n"}).json()  # older client
+    assert older["status"] == "interview"
+    assert older["next_action"] == "Call"
+    assert older["next_action_due"] == "2041-03-12"
+    assert older["interview_at"].startswith("2041-03-14T15:30")
+    nulls = {
+        "status": "interview",
+        "next_action": None,
+        "next_action_due": None,
+        "interview_at": None,
+    }
+    cleared = client.put(path, json=nulls).json()
+    assert cleared["next_action"] is None
+    assert cleared["next_action_due"] is None
+    assert cleared["interview_at"] is None

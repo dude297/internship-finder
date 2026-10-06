@@ -10,7 +10,7 @@ const sections: {
   title: string
   empty: string
   to: (item: InboxItem) => string
-  all?: { label: string; to: string }
+  all?: { label: string; to: string; exact?: boolean }
 }[] = [
   {
     key: 'applications',
@@ -30,7 +30,11 @@ const sections: {
     title: 'New high-fit opportunities',
     empty: 'Nothing new and high-fit in the last 7 days.',
     to: (i) => `/opportunities/${i.id}`,
-    all: { label: 'All new', to: '/opportunities?discovered_within=7&sort=recommended' },
+    all: {
+      label: 'All new this week',
+      exact: false,
+      to: '/opportunities?discovered_within=7&sort=recommended',
+    },
   },
   {
     key: 'pending_requirement_review',
@@ -44,7 +48,11 @@ const sections: {
     title: 'Program dates to re-check',
     empty: 'No program dates need re-checking.',
     to: (i) => `/opportunities/${i.id}`,
-    all: { label: 'All', to: '/opportunities?needs_date_verification=true' },
+    all: {
+      label: 'All needing date verification',
+      exact: false,
+      to: '/opportunities?needs_date_verification=true',
+    },
   },
   {
     key: 'source_warnings',
@@ -68,7 +76,12 @@ export function InboxPage() {
   }, [])
 
   if (error) return <ErrorMessage>{error}</ErrorMessage>
-  if (!inbox) return <p>Loading…</p>
+  if (!inbox)
+    return (
+      <p role="status" aria-live="polite">
+        Loading…
+      </p>
+    )
 
   return (
     <div className="space-y-6">
@@ -106,7 +119,8 @@ export function InboxPage() {
             {section.all && total > items.length && (
               <p>
                 <Link to={section.all.to} className="text-blue-800 underline">
-                  {section.all.label} ({total})
+                  {section.all.label}
+                  {section.all.exact !== false && ` (${total})`}
                 </Link>
               </p>
             )}

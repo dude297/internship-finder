@@ -158,7 +158,9 @@ def save_application(db: Session, opportunity: Opportunity, body: ApplicationBod
     if opportunity.application is None:
         opportunity.application = Application(**body.model_dump())
     else:
-        for name, value in body.model_dump().items():
+        # Only fields the client sent: an older client that omits the follow-up fields keeps
+        # them; an explicit null clears (ADR-020 §1).
+        for name, value in body.model_dump(exclude_unset=True).items():
             setattr(opportunity.application, name, value)
     db.flush()
     return opportunity.application

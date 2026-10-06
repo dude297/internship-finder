@@ -163,7 +163,7 @@ def _source_warnings(db: Session, now: datetime) -> InboxSection:
             enabled=source.enabled,
             latest_finished_status=statuses.get(source.id),
             last_success_at=source.last_success_at,
-            consecutive_failures=0,
+            consecutive_failures=0,  # health status doesn't read it
             now=now,
         )
         if health.health not in _UNHEALTHY:
@@ -223,11 +223,15 @@ def _applications(db: Session, today: date) -> InboxSection:
     interview_to = _midnight(today + timedelta(days=INTERVIEW_DAYS + 1))
     stale_before = _midnight(today - timedelta(days=STALE_DAYS))
     due = Application.next_action_due <= today + timedelta(days=ACTION_DUE_DAYS)
-    interview = Application.interview_at.between(interview_from, interview_to)
+    interview = (Application.interview_at >= interview_from) & (
+        Application.interview_at < interview_to
+    )
     stale = Application.status.in_((ApplicationStatus.SAVED, ApplicationStatus.APPLYING)) & (
         Application.updated_at < stale_before
     )
-    soonest = func.least(Application.next_action_due, cast(Application.interview_at, Date))
+    soonest = func.least(
+        Application.next_action_due, cast(func.timezone("UTC", Application.interview_at), Date)
+    )
     rows = _section(
         db,
         select(Application, Opportunity, _total())
