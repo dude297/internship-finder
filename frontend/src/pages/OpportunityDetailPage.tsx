@@ -138,13 +138,12 @@ export function OpportunityDetailPage() {
           </p>
         )}
         <div className="flex flex-wrap gap-2 pt-2">
-          {needsReview && (
-            <Link to={`/opportunities/${o.id}/edit`} className={buttonClass}>
-              Review requirements
-            </Link>
-          )}
-          <Link to={`/opportunities/${o.id}/edit`} className={secondaryButtonClass}>
-            Edit
+          {/* ponytail: the requirements queue has no opportunity_id param in the UI, so one link. */}
+          <Link
+            to={`/opportunities/${o.id}/edit`}
+            className={needsReview ? buttonClass : secondaryButtonClass}
+          >
+            {needsReview ? 'Review requirements' : 'Edit'}
           </Link>
           <button
             type="button"
@@ -184,7 +183,7 @@ export function OpportunityDetailPage() {
             type="button"
             onClick={remove}
             disabled={busy}
-            className={dangerButtonClass}
+            className={`${dangerButtonClass} ml-auto text-sm`}
           >
             Delete
           </button>

@@ -31,8 +31,7 @@ describe('inbox page', () => {
 
     expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument()
     expect(screen.getAllByRole('region')).toHaveLength(6)
-    expect(screen.getByText('All sources look healthy.')).toBeInTheDocument()
-    expect(screen.getByText(/No follow-ups due/)).toBeInTheDocument()
+    expect(screen.getAllByText('Nothing here')).toHaveLength(6)
   })
 
   it('lists items with a link, reason, and an "all" link when more exist', async () => {
@@ -56,8 +55,9 @@ describe('inbox page', () => {
       within(closing).getByRole('link', { name: 'Example Internship' }),
     ).toHaveAttribute('href', '/opportunities/opp-1')
     expect(
-      within(closing).getByText('Application deadline 2041-03-12'),
+      within(closing).getByText('Application deadline Tue, Mar 12'),
     ).toBeInTheDocument()
+    expect(within(closing).getByText('Tue, Mar 12 · in 2 days')).toBeInTheDocument()
     expect(
       within(closing).getByRole('link', { name: 'All deadlines (12)' }),
     ).toBeInTheDocument()
@@ -66,6 +66,23 @@ describe('inbox page', () => {
       'href',
       '/sources',
     )
+  })
+
+  it('shows the application kind with a human date', async () => {
+    mockApi({
+      ...loggedIn,
+      'GET /api/inbox': () =>
+        inbox({
+          applications: {
+            total: 1,
+            items: [item({ kind: 'follow_up_overdue', date: '2041-03-09' })],
+          },
+        }),
+    })
+    renderAt('/inbox')
+    expect(
+      await screen.findByText('Follow-up overdue · Sat, Mar 9 · yesterday'),
+    ).toBeInTheDocument()
   })
 
   it('links requirements to review to the review queue', async () => {

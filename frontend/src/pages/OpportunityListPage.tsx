@@ -45,32 +45,13 @@ function where(o: OpportunitySummary): string {
   return parts.length ? parts.join(' · ') : 'Location not set'
 }
 
-function Provenance({ o }: { o: OpportunitySummary }) {
-  return (
-    <p className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-      <span className="rounded bg-slate-100 px-1.5 py-0.5">
-        {o.origin === 'imported' ? 'Imported' : 'Manual'}
-      </span>
-      {o.availability === 'closed' && (
-        <span className="rounded bg-slate-700 px-1.5 py-0.5 text-white">Closed</span>
-      )}
-      {o.origin === 'imported' && <span>{o.source_names.join(', ')}</span>}
-      <NewBadge firstSeenAt={o.first_seen_at} postedAt={o.posted_at} />
-      <FreshnessBadge o={o} compact />
-      <span>
-        {o.posted_at
-          ? `Posted ${formatDay(o.posted_at)}`
-          : `Found ${formatDay(o.first_seen_at)}`}
-      </span>
-    </p>
-  )
-}
-
-/** Deadline and requirement-review badges (ADR-012 §8, §14): text labels, never color alone. */
-function ReviewBadges({ o, today }: { o: OpportunitySummary; today: string }) {
+/** Row 1: what decides whether to open it (eligibility, fit, deadline). Text labels, never color alone. */
+function PriorityBadges({ o, today }: { o: OpportunitySummary; today: string }) {
   const deadline = o.application_deadline
   return (
-    <p className="flex flex-wrap gap-1 text-xs">
+    <p className="flex flex-wrap items-center gap-2 text-xs">
+      <EligibilityBadge status={o.eligibility_status} />
+      <FitBadge score={o.fit_score} coverage={o.fit_coverage} />
       {isDeadlinePassed(deadline, today) && (
         <span className="rounded bg-slate-700 px-1.5 py-0.5 text-white">
           Deadline passed
@@ -81,6 +62,23 @@ function ReviewBadges({ o, today }: { o: OpportunitySummary; today: string }) {
           Closing soon
         </span>
       )}
+    </p>
+  )
+}
+
+/** Row 2: provenance, freshness and review housekeeping, muted (ADR-012 §8, §14). */
+function SecondaryBadges({ o }: { o: OpportunitySummary }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+      <span className="rounded bg-slate-100 px-1.5 py-0.5">
+        {o.origin === 'imported' ? 'Imported' : 'Manual'}
+      </span>
+      {o.availability === 'closed' && (
+        <span className="rounded bg-slate-700 px-1.5 py-0.5 text-white">Closed</span>
+      )}
+      {o.origin === 'imported' && <span>{o.source_names.join(', ')}</span>}
+      <NewBadge firstSeenAt={o.first_seen_at} postedAt={o.posted_at} />
+      <FreshnessBadge o={o} compact />
       {o.needs_date_verification && <NeedsDateBadge verifyBy={o.verify_by} />}
       {o.pending_requirement_count > 0 && (
         <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-900">
@@ -93,6 +91,14 @@ function ReviewBadges({ o, today }: { o: OpportunitySummary; today: string }) {
           Review needed
         </span>
       )}
+      {o.dismissed_at && (
+        <span className="rounded bg-slate-200 px-1.5 py-0.5 text-slate-800">Hidden</span>
+      )}
+      <span>
+        {o.posted_at
+          ? `Posted ${formatDay(o.posted_at)}`
+          : `Found ${formatDay(o.first_seen_at)}`}
+      </span>
     </p>
   )
 }
@@ -269,17 +275,8 @@ export function OpportunityListPage() {
                     <p className="text-sm text-slate-600">
                       {o.organization} · {opportunityTypeLabels[o.opportunity_type]}
                     </p>
-                    <Provenance o={o} />
-                    <ReviewBadges o={o} today={today} />
-                    {o.dismissed_at && (
-                      <p className="inline-block rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-800">
-                        Hidden
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-1">
-                    <FitBadge score={o.fit_score} coverage={o.fit_coverage} />
-                    <EligibilityBadge status={o.eligibility_status} />
+                    <PriorityBadges o={o} today={today} />
+                    <SecondaryBadges o={o} />
                   </div>
                 </div>
                 <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">

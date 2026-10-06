@@ -158,3 +158,45 @@ export function formatDateTime(iso: string): string {
     timeStyle: 'short',
   })
 }
+
+const DAY_MS = 86_400_000
+const utcDay = (iso: string) => Date.parse(`${iso}T00:00:00Z`)
+
+/** "Fri, Oct 9" (year added when it differs from `today`'s), no timezone shift. */
+export function formatShortDay(iso: string, today: string): string {
+  return new Date(utcDay(iso)).toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(iso.slice(0, 4) !== today.slice(0, 4) && { year: 'numeric' }),
+  })
+}
+
+/** "Fri, Oct 9 · in 3 days" relative to `today` (both YYYY-MM-DD). */
+export function formatDayRelative(iso: string, today: string): string {
+  const n = Math.round((utcDay(iso) - utcDay(today)) / DAY_MS)
+  const rel =
+    n === 0
+      ? 'today'
+      : n === 1
+        ? 'tomorrow'
+        : n === -1
+          ? 'yesterday'
+          : n > 0
+            ? `in ${n} days`
+            : `${-n} days ago`
+  return `${formatShortDay(iso, today)} · ${rel}`
+}
+
+/** Rewrites embedded YYYY-MM-DD dates in a sentence to "Fri, Oct 9". */
+export function humanizeDates(text: string, today: string): string {
+  return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (d) => formatShortDay(d, today))
+}
+
+export const inboxKindLabels: Record<string, string> = {
+  follow_up_overdue: 'Follow-up overdue',
+  follow_up_due: 'Follow-up due',
+  interview: 'Interview',
+  stale: 'Stalled',
+}

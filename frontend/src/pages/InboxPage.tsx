@@ -3,6 +3,12 @@ import { Link } from 'react-router'
 import { api } from '../api/client'
 import type { Inbox, InboxItem } from '../api/schemas'
 import { ErrorMessage } from '../components/ui'
+import {
+  formatDay,
+  formatDayRelative,
+  humanizeDates,
+  inboxKindLabels,
+} from '../lib/labels'
 
 // ADR-020: what needs attention today. Read-only; every item links to where you act on it.
 const sections: {
@@ -86,20 +92,31 @@ export function InboxPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Inbox</h1>
-      <p className="text-slate-600">What needs your attention as of {inbox.today}.</p>
+      <p className="text-slate-600">
+        What needs your attention as of {formatDay(inbox.today)}.
+      </p>
       {sections.map((section) => {
         const { total, items } = inbox[section.key]
         return (
           <section
             key={section.key}
             aria-labelledby={`inbox-${section.key}`}
-            className="space-y-2 rounded-card border p-4"
+            className={`rounded-card border ${
+              items.length
+                ? 'space-y-2 p-4'
+                : 'flex flex-wrap items-baseline gap-x-3 px-4 py-2'
+            }`}
           >
-            <h2 id={`inbox-${section.key}`} className="text-lg font-semibold">
+            <h2
+              id={`inbox-${section.key}`}
+              className={items.length ? 'text-lg font-semibold' : 'font-semibold'}
+            >
               {section.title} ({total})
             </h2>
             {items.length === 0 ? (
-              <p className="text-slate-600">{section.empty}</p>
+              <p className="text-sm text-slate-600" title={section.empty}>
+                Nothing here
+              </p>
             ) : (
               <ul className="divide-y">
                 {items.map((item) => (
@@ -111,7 +128,19 @@ export function InboxPage() {
                       {item.title}
                     </Link>{' '}
                     <span className="text-slate-600">· {item.organization}</span>
-                    <p className="text-sm text-slate-700">{item.reason}</p>
+                    {(item.kind || item.date) && (
+                      <p className="text-sm text-slate-700">
+                        {[
+                          item.kind && (inboxKindLabels[item.kind] ?? item.kind),
+                          item.date && formatDayRelative(item.date, inbox.today),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    )}
+                    <p className="text-sm text-slate-600">
+                      {humanizeDates(item.reason, inbox.today)}
+                    </p>
                   </li>
                 ))}
               </ul>
