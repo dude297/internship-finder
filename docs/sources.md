@@ -121,9 +121,11 @@ Adding a company board shouldn't flood the catalog with full-time jobs ([ADR-010
 
 Excluded postings count as **Filtered** in the run (`fetched` = provider items, `filtered` = excluded by scope, `normalized` = admitted to the pipeline) and are never processed. Changing the scope clears the source's `ETag`/`Last-Modified`, so the next sync fetches the full board instead of accepting a `304`: switching to internships-only closes previously imported postings that are now filtered (through the normal closure rule; nothing is deleted), and switching back reopens them. Items that fail validation have no trustworthy title, so they stay invalid (making the run partial) rather than filtered. Boards added before Milestone 4 were migrated to **All postings**, so the upgrade itself never closes anything. The built-in discovery feed is internship-focused already and is always **All postings**.
 
+The opportunity list also filters by the provider's posted date (`posted_within=7|30|90`, **Posted** on the Opportunities page); postings with no posted date match only when the filter is off. Old is never treated as closed (ADR-015).
+
 ### Curated program registry (Milestone 8, ADR-014)
 
-A built-in source (`curated_registry`, identifier `program-registry`) imports `backend/data/program_registry.json`: public facts about named programs (research, fellowships, summer programs), each with an official `source_url` and a `last_verified` date. It reads the file from disk and never touches the network. It can be disabled but not created, re-pointed, or filtered.
+A built-in source (`curated_registry`, identifier `program-registry`) imports `backend/data/program_registry.json`: public facts about named programs (research, fellowships, summer programs), each with an official `source_url` and a `last_verified` date. It reads the file from disk and never touches the network. It can be disabled but not created, re-pointed, or filtered. Last re-verified 2026-10-06 (Tech Interactive, DOE SULI Summer 2027, MIT PRIMES; dates the official page calls tentative say so in the summary).
 
 - **Schema:** `{"schema_version": 1, "programs": [...]}`, strict (unknown keys rejected). An entry has `slug`, `cycle` (`2027`, `2027-summer`), `title`, `organization`, `opportunity_type`, `application_url` (or null), `source_url`, optional `location` / `remote_mode`, `verified` (`open_date`, `deadline`, `start_date`, `end_date`), `typical_open_window` / `typical_close_window` (free text), `verify_by`, `eligibility_summary`, an owner-written paraphrased `description`, and `last_verified`. Links are plain https (no credentials, no port). A malformed file or a repeated `(slug, cycle)` fails the run and changes nothing; a malformed entry is an item error (partial run, nothing closes).
 - **Verified vs typical:** a date goes in `verified` only when the official page states it as firm for that cycle; dates the program calls tentative, pending approval, or subject to change go in the description or a typical window. Only `verified` dates become the opportunity's deadline / start / end. A typical window ("February") is display text and never a date, so deadline sorting, filters, and eligibility never see it.
@@ -151,7 +153,7 @@ Ties within a rank: earliest `first_seen_at`, then record ID — so two boards n
 
 The owner's fields are rewritten from its normalized output when its own item changes, it reactivates, it first attaches through deduplication and outranks the current owner (**takeover**: a board added after the feed), or the previous owner closes and it's the next owner (**fallback**: re-derived from the new owner's own *stored* raw item through its adapter's per-item normalizer, no fetch, in the same run as the closure, [ADR-013 §5](decisions/ADR-013-provider-enrichment-and-source-authority.md#5-fallback-when-a-direct-ats-source-closes)). The discovery feed never supplies a description, so a feed owner taking over keeps the last known posting text instead of erasing it; every other field is restored from the feed. Non-owners only update their own source record; unchanged items skip canonical work entirely.
 
-A curated opportunity (`manually_curated_at`) is never rewritten by any sync, owner or not (ADR-008 §8) — above all of the above.
+A curated opportunity (`manually_curated_at`) is never rewritten by any sync, owner or not (ADR-008 §8) — above all of the above. The owner can discard their edits with **Revert to source**, which re-derives the content from the authoritative active record the same way ([ADR-017 §4](decisions/ADR-017-owner-opportunity-decisions.md)). A hidden opportunity (`dismissed_at`) is not curated: syncs keep updating it and never un-hide it or re-import it as new.
 
 ## Source coverage and discovery (Milestone 7)
 
@@ -169,6 +171,8 @@ A link with credentials or an explicit port proves nothing; hosts are compared e
 Discovery only suggests. `POST /api/sources/discovery/add` (CSRF-protected) creates sources only when the owner selects suggestions and submits: at most 25 per request, validated all-or-nothing; the client sends only `kind`, `identifier`, and `region`, and the server re-derives the current suggestion set and refuses anything not in it. Already-configured suggestions are skipped and reported, never duplicated (the existing unique constraint on `(kind, identifier, region)` is the final guard). New sources default to **Internships only**. Creating a source never syncs it — the owner syncs with the existing controls.
 
 Which boards are enabled in production, and when each batch was added: [deployment.md](deployment.md), [operations.md](operations.md), [CHANGELOG.md](../CHANGELOG.md), and `GET /api/sources` (the live source list).
+
+The Action Inbox ([ADR-020](decisions/ADR-020-action-inbox.md)) reads sources only to list unhealthy ones (derived health, as on the Sources page) and reuses the list's "open" rule (`discovery.is_open`, an export of the existing availability filter). Ingestion behavior is unchanged.
 
 ## Common Behavior
 

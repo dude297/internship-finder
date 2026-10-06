@@ -13,6 +13,9 @@ class ApplicationBody(BaseModel):
     status: ApplicationStatus
     submitted_on: date | None = None
     notes: Annotated[Annotated[str, Field(max_length=10_000)] | None, BlankToNone] = None
+    next_action: Annotated[Annotated[str, Field(max_length=200)] | None, BlankToNone] = None
+    next_action_due: date | None = None
+    interview_at: datetime | None = None
 
 
 class ApplicationResponse(ApplicationBody):

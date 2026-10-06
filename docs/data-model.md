@@ -2,7 +2,7 @@
 
 ## Current Database State
 
-The schema is created by ten Alembic migrations (a linear chain; `b7e3d9f1a2c4` is head) in `backend/alembic/versions/`:
+The schema is created by twelve Alembic migrations (a linear chain; `a3c7e9b1d5f2` is head on the development branch, `b7e3d9f1a2c4` is production) in `backend/alembic/versions/`:
 
 | Revision | Milestone | Tables |
 |---|---|---|
@@ -16,6 +16,8 @@ The schema is created by ten Alembic migrations (a linear chain; `b7e3d9f1a2c4` 
 | `f2a7c9d4e1b3` (volunteer opportunity type) | 7.1 | CHECK only (below) |
 | `a8c3e5f7b9d1` (SmartRecruiters and program registry) | 8 | Registry columns on `opportunities`; `smartrecruiters` / `curated_registry` kinds; seeded registry source (below) |
 | `b7e3d9f1a2c4` (Workable and Pinpoint sources) | 8.1 | CHECK only (below) |
+| `d4f8a1c6e2b9` (owner opportunity decisions) | 9 (development, unreleased) | `opportunities.dismissed_at`, `dismissed_reason` (below) |
+| `a3c7e9b1d5f2` (application follow-up fields) | 10 (development, unreleased) | `applications.next_action`, `next_action_due`, `interview_at` (below) |
 
 The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope), and [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md) (profile source uploads and review). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `b7e3d9f1a2c4` (Milestone 8.1, applied 2026-10-05; release history in [deployment.md](deployment.md) and [CHANGELOG.md](../CHANGELOG.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
@@ -60,6 +62,14 @@ Additive ([ADR-014](decisions/ADR-014-structured-source-expansion-and-program-re
 ### Milestone 8.1 migration (`b7e3d9f1a2c4`)
 
 CHECK-only ([ADR-015 §7](decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)): `'workable'` and `'pinpoint'` in the `ingestion_sources.kind` CHECK. No data change; the M8 backend runs unchanged on the migrated schema. **Downgrade** refuses while a Workable or Pinpoint source exists. Freshness, the New filter, Independent Discovery Coverage, and the Direct Source Catalog are derived or file-based: no columns. Verified locally on PostgreSQL 18: base → head, `alembic check`, head → `a8c3e5f7b9d1` → head.
+
+### Milestone 9 migration (`d4f8a1c6e2b9`, unreleased)
+
+Additive ([ADR-017](decisions/ADR-017-owner-opportunity-decisions.md)): nullable `opportunities.dismissed_at` (timestamptz) and `dismissed_reason` (varchar(30)), plus CHECK `ck_opportunities_dismissed_reason_needs_dismissed_at`. No data change; the M8.1 backend runs unchanged on the migrated schema. **Downgrade** drops both columns (hidden state is lost). Rolling the app back to M8.1 *without* downgrading ignores the columns and un-hides every hidden opportunity. Verified locally on PostgreSQL: base → head, `alembic check`, head → `b7e3d9f1a2c4` → head; `tests/test_migrations.py` covers the round trip and the CHECK.
+
+### Milestone 10 migration (`a3c7e9b1d5f2`, unreleased)
+
+Additive ([ADR-020](decisions/ADR-020-action-inbox.md)): nullable `applications.next_action` (varchar(200)), `next_action_due` (date) and `interview_at` (timestamptz). No data change; the M9 backend runs unchanged on the migrated schema. **Downgrade** drops the three columns (follow-up fields are lost). Verified locally on PostgreSQL: base → head, `alembic check`, head → `d4f8a1c6e2b9` → head; `tests/test_migrations.py` covers the round trip.
 
 ### Conventions
 
@@ -168,6 +178,7 @@ Canonical, source-independent opportunity.
 | `first_seen_at`, `last_seen_at` | timestamptz | When any source first/last saw it (not a posting date). CHECK: last ≥ first |
 | `posted_at` | timestamptz, null, indexed | When the source says it was published (feed `posted_at`, Greenhouse `first_published`, Lever `createdAt`). Never an ATS "updated" time. Discovery sorting only; eligibility doesn't read it (Milestone 3) |
 | `manually_curated_at` | timestamptz, null | Set when the owner creates or edits the opportunity through the API. Sync never overwrites the canonical fields, requirements, or assessment of a curated opportunity. NULL for imported opportunities the owner hasn't edited. Backfilled from `updated_at` for opportunities that existed before Milestone 3 (Milestone 3) |
+| `dismissed_at`, `dismissed_reason` | timestamptz, null; varchar(30), null | The owner's durable "hidden / not interested" decision ([ADR-017](decisions/ADR-017-owner-opportunity-decisions.md)). The default list excludes hidden opportunities. Sync never reads or writes them and hiding never deletes source records or identifiers, so a hidden opportunity keeps updating and is never re-imported as new. Reason is one of `not_interested`, `not_eligible`, `already_applied`, `other` (validated by the API); CHECK: a reason requires `dismissed_at`. Not curation: hiding doesn't set `manually_curated_at` (Milestone 9) |
 | `requirements_stale_since` | timestamptz, null | Set when a sync materially changed the posting text (title, description, deadline, start date) after the owner had reviewed its requirements; the owner's next review batch clears it. A `complete` assessment is downgraded at the same time ([ADR-012 §6](decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md#6-lifecycle-and-staleness)) (Milestone 6) |
 | `requirement_extraction_fingerprint` | varchar(64), null | SHA-256 of the extractor name, version, and extraction inputs at the last extraction. NULL = never extracted. CHECK: 64 characters (Milestone 6) |
 | `program_cycle`, `typical_open_window`, `typical_close_window`, `verify_by` | varchar(20), varchar(100), varchar(100), date; all null | Curated-registry records only (Milestone 8, [ADR-014](decisions/ADR-014-structured-source-expansion-and-program-registry.md)). A typical window is text, never a date |
@@ -183,7 +194,7 @@ Deterministic requirement suggestions and their owner review (Milestone 6, [ADR-
 | `semantic_key` | varchar(64) | SHA-256 of type, normalized value, applies_at, and reference date. UNIQUE (`opportunity_id`, `semantic_key`). Never position, source text, IDs, or time |
 | `requirement_type`, `value`, `applies_at`, `reference_date` | as in `opportunity_requirements` | The original proposal; an edited accept changes only the canonical requirement. CHECK: reference date iff `explicit_date` |
 | `source_text` | varchar(500) | Evidence excerpt (the extractor caps it at 300 characters). Plain text |
-| `extractor_name`, `extractor_version` | varchar | `requirements-rules`, `2` (since Milestone 8.1; rows from an earlier version are refreshed by `scan-requirements`) |
+| `extractor_name`, `extractor_version` | varchar | `requirements-rules`, `3` (version 2 shipped in Milestone 8.1, 3 is unreleased; rows from an earlier version are refreshed by `scan-requirements`) |
 | `review_state` | enum `pending` / `accepted` / `rejected` | |
 | `is_current` | boolean, default true | Whether the latest extraction of the current text proposed it. Pending ones that stop being proposed are deleted; reviewed ones stay with `false` |
 | `accepted_requirement_id` | uuid FK → opportunity_requirements, null, SET NULL, indexed | The canonical requirement created on accept. CHECK: set only when `accepted` |
@@ -367,6 +378,9 @@ The owner's application tracking. Private runtime data; never read by eligibilit
 | `status` | enum `saved` / `applying` / `applied` / `interview` / `offer` / `accepted` / `rejected` / `withdrawn` | Any status may follow any other (no transition rules) |
 | `submitted_on` | date, null | When the application was submitted |
 | `notes` | text, null | Private notes |
+| `next_action` | varchar(200), null | The owner's next step (Action Inbox, [ADR-020](decisions/ADR-020-action-inbox.md)) |
+| `next_action_due` | date, null | When it is due |
+| `interview_at` | timestamptz, null | Scheduled interview |
 | `created_at`, `updated_at` | timestamptz | |
 
 ## Not Yet Modeled
@@ -386,6 +400,7 @@ Design rules from [ENGINEERING_GUIDELINES.md §6](../ENGINEERING_GUIDELINES.md#6
 - The API keeps exactly one `profiles` row (created by the first `PUT /api/profile`).
 - A manually created opportunity always gets one `opportunity_source_records` row: `source_type = manual`, `source_name = manual`, no `external_id`, no raw payload. It's curated from creation (`manually_curated_at`).
 - Requirement rows written by the API have `extraction_method = manual`. An opportunity update replaces the complete requirement set: old rows are deleted, and past `eligibility_rule_results` keep their text with `requirement_id` set to NULL. Any update (including of an imported opportunity) sets `manually_curated_at`.
+- `PUT`/`DELETE /api/opportunities/{id}/dismissal` set and clear `dismissed_at`/`dismissed_reason` only. `POST /api/opportunities/{id}/revert-to-source` (imported, curated opportunities with an active automated record; `409` otherwise) rewrites the canonical fields from the authoritative active record's stored item, deletes the requirements and candidates, resets the assessment, clears `manually_curated_at`, refreshes candidates, and evaluates through the fingerprinted path ([ADR-017 §4](decisions/ADR-017-owner-opportunity-decisions.md)).
 - Opportunity create/update appends an `opportunity_evaluations` row when a profile exists **and** the eligibility or fit inputs changed (fingerprints). An eligibility-relevant profile change or any Match Profile save runs one catalog pass that appends rows only for opportunities whose inputs changed, and `POST /api/opportunities/{id}/evaluate` always appends. Nothing is overwritten.
 - `PUT /api/profile/match` creates the profile row if needed, sets the fit preference columns, and replaces the Match Profile facts (unchanged facts aren't rewritten), all in one transaction with the catalog pass.
 - Profile source uploads ([ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md)) write the source, its artifact, and pending facts in one transaction, with no catalog pass. A review batch updates facts and runs at most one catalog pass, only when an accepted fit fact changed. Deleting a source deletes its artifact and facts by cascade (manual facts have no `profile_source_id` and are untouched), with one catalog pass if it had accepted fit facts.

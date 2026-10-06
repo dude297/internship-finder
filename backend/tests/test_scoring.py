@@ -1,4 +1,4 @@
-"""Fit scoring v1 (ADR-010): pure, deterministic unit tests. All data is synthetic."""
+"""Fit scoring (ADR-010, v2 per ADR-019): pure, deterministic unit tests. All data is synthetic."""
 
 from datetime import UTC, date, datetime
 
@@ -87,8 +87,8 @@ def test_final_score_rounds_half_up() -> None:
     assert result.score == 18
 
 
-def test_weights_are_the_approved_v1_weights() -> None:
-    assert SCORING_VERSION == "v1"
+def test_weights_are_the_approved_weights_unchanged_in_v2() -> None:
+    assert SCORING_VERSION == "v2"
     assert config.WEIGHTS == {
         "technical": 35,
         "academic": 20,
@@ -310,7 +310,7 @@ def test_deterministic_and_serializable() -> None:
     fit = profile(skills=["Python"], interests=["robots"])
     first = score_fit(fit, posting()).model_dump(mode="json")
     assert first == score_fit(fit, posting()).model_dump(mode="json")
-    assert first["scoring_version"] == "v1"
+    assert first["scoring_version"] == "v2"
     assert set(first["components"]) == set(config.WEIGHTS)
 
 

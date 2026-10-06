@@ -25,6 +25,7 @@ from app.enums import (
     IngestionSourceKind,
     IngestionStage,
     OpportunitySourceType,
+    RequirementsAssessmentStatus,
     SourceScope,
 )
 from app.ingestion.adapters import CollectRequest, SourceConfig, adapter_for
@@ -338,6 +339,69 @@ def _rewrite_canonical(
         evaluate_if_changed(db, context.profile, opportunity, context)
 
 
+def _normalize_stored(owner: OpportunitySourceRecord) -> NormalizedOpportunity | None:
+    """Re-derive a record's item from its stored raw payload through its own adapter's per-item
+    normalizer (no fetch). None if it can't be (no payload, or it no longer normalizes: logged
+    with IDs and exception type only, never the payload)."""
+    source = owner.ingestion_source
+    if source is None or owner.raw_payload is None:
+        return None
+    config = SourceConfig(source.kind, source.identifier, source.region, source.display_name)
+    try:
+        return adapter_for(source.kind).normalize(owner.raw_payload, config)
+    except (ItemError, ValidationError) as error:
+        logger.warning(
+            "fallback re-normalize failed opportunity_id=%s record_id=%s exception_type=%s",
+            owner.opportunity_id,
+            owner.id,
+            type(error).__name__,
+        )
+        return None
+
+
+def revert_to_source(db: Session, opportunity: Opportunity) -> bool:
+    """ADR-017: discard the owner's edits and restore canonical content from the authoritative
+    active automated record (ADR-013 §1 ranking, same as sync), through its stored raw item.
+    Returns False, changing nothing, if there is no such record or it no longer normalizes.
+    Clears curation, requirements, candidates and the review state (the owner re-reviews, as for
+    a new import); the caller re-evaluates and commits."""
+    # Lock the opportunity row first, like _owns_canonical_fields: a concurrent sync is waited out.
+    db.execute(select(Opportunity.id).where(Opportunity.id == opportunity.id).with_for_update())
+    owner = db.scalars(
+        select(OpportunitySourceRecord)
+        .where(
+            OpportunitySourceRecord.opportunity_id == opportunity.id,
+            OpportunitySourceRecord.ingestion_source_id.is_not(None),
+            OpportunitySourceRecord.is_active,
+        )
+        .order_by(_SOURCE_RANK, OpportunitySourceRecord.first_seen_at, OpportunitySourceRecord.id)
+        .limit(1)
+    ).first()
+    item = _normalize_stored(owner) if owner is not None else None
+    if owner is None or item is None:
+        return False
+    # Only the registry writes dates and date-trust fields; every other source leaves them
+    # unset, so a revert clears whatever the owner entered. A registry owner restores them from
+    # its item below (registry items never merge with other sources, ADR-014 §5).
+    if owner.source_type is not OpportunitySourceType.CURATED_REGISTRY:
+        opportunity.application_deadline = opportunity.start_date = opportunity.end_date = None
+        opportunity.program_cycle = opportunity.verify_by = None
+        opportunity.typical_open_window = opportunity.typical_close_window = None
+    kept_description = opportunity.description
+    _write_canonical(opportunity, item, owner.source_type)
+    if owner.source_type is OpportunitySourceType.PUBLIC_FEED:
+        opportunity.description = kept_description  # the feed has none (ADR-013 §4)
+    opportunity.requirements = []
+    opportunity.requirement_candidates = []
+    opportunity.requirements_assessment_status = RequirementsAssessmentStatus.UNASSESSED
+    opportunity.requirements_stale_since = None
+    opportunity.requirement_extraction_fingerprint = None
+    opportunity.manually_curated_at = None
+    db.flush()
+    refresh_candidates(db, opportunity)
+    return True
+
+
 def _apply_fallback(
     db: Session, owner: OpportunitySourceRecord, now: datetime, context: EvaluationContext | None
 ) -> None:
@@ -346,19 +410,8 @@ def _apply_fallback(
     apply the same rewrite as any other takeover. A stored item that no longer normalizes (e.g.
     the adapter's schema tightened since it was stored) is logged -- IDs and exception type
     only, never the payload -- and skipped: the opportunity keeps its current text."""
-    source = owner.ingestion_source
-    if source is None or owner.raw_payload is None:
-        return
-    config = SourceConfig(source.kind, source.identifier, source.region, source.display_name)
-    try:
-        item = adapter_for(source.kind).normalize(owner.raw_payload, config)
-    except (ItemError, ValidationError) as error:
-        logger.warning(
-            "fallback re-normalize failed opportunity_id=%s record_id=%s exception_type=%s",
-            owner.opportunity_id,
-            owner.id,
-            type(error).__name__,
-        )
+    item = _normalize_stored(owner)
+    if item is None:
         return
     with db.begin_nested():
         _rewrite_canonical(db, owner.source_type, owner.opportunity, item, now, context)

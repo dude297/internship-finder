@@ -137,6 +137,8 @@ describe('opportunity detail', () => {
     expect(screen.getByRole('button', { name: 'Re-evaluate' })).toBeDisabled()
   })
 
+  const noFollowUp = { next_action: null, next_action_due: null, interview_at: null }
+
   it('tracks the application and changes its status', async () => {
     const application = {
       status: 'saved',
@@ -169,8 +171,13 @@ describe('opportunity detail', () => {
     await screen.findByText('Application tracking saved.')
     const puts = calls.filter((c) => c.method === 'PUT')
     expect(puts.map((c) => c.body)).toEqual([
-      { status: 'saved', submitted_on: null, notes: null },
-      { status: 'applied', submitted_on: '2041-01-20', notes: 'Synthetic note' },
+      { status: 'saved', submitted_on: null, notes: null, ...noFollowUp },
+      {
+        status: 'applied',
+        submitted_on: '2041-01-20',
+        notes: 'Synthetic note',
+        ...noFollowUp,
+      },
     ])
     expect(puts[1].headers['X-CSRF-Token']).toBe('synthetic-csrf')
   })
