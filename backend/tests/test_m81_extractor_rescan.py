@@ -47,7 +47,7 @@ def _candidates(db: Session, opportunity: Opportunity) -> dict[tuple[str, str], 
 
 
 def test_v1_to_v2_rescan_preserves_reviews(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
-    assert EXTRACTOR_VERSION == "2"
+    assert EXTRACTOR_VERSION == "3"
     opportunity = Opportunity(
         title="Rescan Intern",
         organization="Example Robotics",
@@ -113,11 +113,11 @@ def test_v1_to_v2_rescan_preserves_reviews(db: Session, monkeypatch: pytest.Monk
         (requirement.id, {"years": 18}, "1")
     ]  # canonical requirements untouched
 
-    # The v1 mislabel was pending: it's gone, replaced by the accurate v2 proposal (pending).
+    # The v1 mislabel was pending: it's gone, replaced by the accurate current proposal (pending).
     assert mislabel.id not in {c.id for c in after.values()}
     replacement = after[("other", "[('description', 'U.S. citizen or permanent resident')]")]
     assert replacement.review_state == FactReviewState.PENDING
-    assert replacement.extractor_version == "2"
+    assert replacement.extractor_version == EXTRACTOR_VERSION
     assert not any(c.requirement_type is RequirementType.WORK_AUTHORIZATION for c in after.values())
     assert replacement.applies_at in set(RequirementAppliesAt)
 

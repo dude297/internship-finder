@@ -6,7 +6,7 @@
 | | |
 |---|---|
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
-| Production `main` | `ca8ff77` |
+| Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
 | **Current Development** | none |
 <!-- END GENERATED STATUS -->
@@ -27,7 +27,7 @@ Real résumé, transcript, profile, and application documents stay outside the r
 
 ## Current Objective
 
-Milestones 8.2, 9, 10, 10.1, and 11 are released (2026-10-06, five deploys, [release record](docs/releases/2026-10-06-m9-m11.md)). Production runs fit scoring v2, Hide/Revert, the Action Inbox, and stale-sync/Posted-within visibility; 45 direct sources are enabled (cap 50) with 2,335 open opportunities, 56.5% independently discovered. The next steps are owner actions: review the 563 pending requirement suggestions (none accepted; hold the two false-positive families until extractor v3, [PR #45](https://github.com/dude297/internship-finder/pull/45), is released and rescanned) and activate the encrypted backup.
+Milestones 8.2, 9, 10, 10.1, and 11 are released (2026-10-06, five deploys, [release record](docs/releases/2026-10-06-m9-m11.md)). Production runs fit scoring v2, Hide/Revert, the Action Inbox, and stale-sync/Posted-within visibility; 45 direct sources are enabled (cap 50) with 2,335 open opportunities, 56.5% independently discovered. The next steps are owner actions: review the 558 pending requirement suggestions (all v3 after the follow-up rescan; none accepted) and activate the encrypted backup.
 
 ## Status Summary
 
@@ -40,7 +40,7 @@ Terms: **Selected** = decided in an ADR. **Scaffolded/Implemented** = code exist
 | Core domain persistence | **Implemented** ([ADR-006](docs/decisions/ADR-006-core-domain-persistence-model.md), migration `3b9c6b57bb60`, immutable) |
 | Authentication / private API | **Implemented and hosted** ([ADR-007](docs/decisions/ADR-007-single-user-auth-and-private-api.md), migration `7d7f4f8b9a3c`, immutable; hardened by [ADR-009](docs/decisions/ADR-009-hosted-deployment-architecture.md) §6–§7) |
 | Opportunity ingestion | **Implemented and deployed** ([ADR-008](docs/decisions/ADR-008-opportunity-ingestion-and-deduplication.md), migration `726372d627b8`). Since Milestone 6: Ashby boards (no production Ashby source), a scheduled GitHub Actions sync (active since 2026-10-02), derived source health ([ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)) |
-| Requirement suggestions and review | **Implemented and deployed; v2 scanned** (`requirements-rules` v2 deployed 2026-10-05; catalog scan run 2026-10-06: all stored suggestions are v2, 563 pending, 0 accepted, 0 rejected, 0 canonical; [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). About 90% precision in the audit; two false-positive families await extractor v3 ([PR #45](https://github.com/dude297/internship-finder/pull/45), not merged). Suggestions never affect eligibility until accepted |
+| Requirement suggestions and review | **Implemented and deployed; v3 scanned** (`requirements-rules` v2 deployed 2026-10-05, v3 2026-10-06 [PR #45](https://github.com/dude297/internship-finder/pull/45); catalog scans run 2026-10-06: all stored suggestions are v3, 558 pending, 0 accepted, 0 rejected, 0 canonical; [ADR-012](docs/decisions/ADR-012-opportunity-requirement-intelligence-and-automation.md)). About 90% precision in the audit; two false-positive families await extractor v3 ([PR #45](https://github.com/dude297/internship-finder/pull/45), not merged). Suggestions never affect eligibility until accepted |
 | Eligibility | **Implemented** v1 (rules version `v1`; still v1, unchanged by the 2026-10-06 release train), evaluated automatically (only when inputs change). Every latest evaluation is `needs_verification` until requirements are accepted |
 | Fit scoring and ranking | **Implemented and deployed: scoring v2** (Milestone 11, [ADR-019](docs/decisions/ADR-019-fit-scoring-v2.md), no migration; `reevaluate` applied 2026-10-06, 2,451 evaluations, 10 scores changed all upward). v1 history rows kept ([ADR-010](docs/decisions/ADR-010-fit-scoring-v1.md), migration `b41e7c9d2f60`) |
 | Owner decisions: hide and revert | **Implemented and deployed** (Milestone 9, [ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md), migration `d4f8a1c6e2b9`): Hide/Unhide durable across syncs, Hidden filter, Revert to source (irreversible; confirmation in the UI) |
@@ -87,17 +87,14 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-None on `main`. Merged and live in production: everything through Milestone 11 (`main` `ca8ff77`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+None on `main`. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
-Open pull requests (not merged):
-
-- [PR #45](https://github.com/dude297/internship-finder/pull/45): requirements extractor v3 (fixes the deemed-export and "U.S. Person required ... no sponsorship" false positives). Needs review; after release, rescan (`scan-requirements`).
-- [PR #46](https://github.com/dude297/internship-finder/pull/46): registry re-verification (SULI opens 2026-10-14, Tech Interactive dates, MIT PRIMES).
+Open pull requests: none.
 
 ## Known Operational Issues
 
 - Direct sources: 45 enabled (cap 50). `greenhouse:andurilindustries` fails ("The source response is too large": 2,457 jobs exceed the 20 MiB `MAX_BYTES` cap) and is disabled; SpaceX fails the same way in a disposable-database test. Both stay in the catalog as failing entries until a size-tolerant adapter exists.
-- 563 requirement suggestions are pending, none accepted. Do not accept the deemed-export "U.S. person ... or eligible for deemed export licensing" group (21 at audit) or the "U.S. Person required ... does not provide sponsorship" group (8) until extractor v3 ([PR #45](https://github.com/dude297/internship-finder/pull/45)) is released and rescanned.
+- 558 requirement suggestions are pending (all `requirements-rules` v3 after the 2026-10-06 rescan), none accepted. The deemed-export false positives (21) are gone; review the rest one by one.
 - Backup is not active: no backup beyond Neon Free's short restore window until the owner installs `age`, generates a key pair into private storage, sets `BACKUP_AGE_RECIPIENT`, dispatches once, and runs a restore drill.
 - Render still builds with `pip install .`; switch the build command to `pip install -r requirements.lock && pip install --no-deps .` (owner action).
 - Production feed not retired. Feed-free readiness passed on disposable databases (technically GO), conditional on losing about 1,016 feed-only postings (about 800 on Workday/Oracle, which have no adapter).
@@ -147,7 +144,7 @@ None open. Fixed during hosted validation (2026-09-29):
 
 ## Database State
 
-Current (2026-10-06, after the Milestone 11 release; aggregates from the release record): migration `a3c7e9b1d5f2`; 2,451 opportunities evaluated (2,335 open at the final catalog count); 47 sources run per sync (45 enabled direct sources plus the feed and the registry); every latest evaluation is scoring v2 and `needs_verification`, with 5,771 v1 history rows kept; 0 canonical requirements; 563 pending candidates (all v2), 0 accepted, 0 rejected. Size and application counts were not re-measured. At the Milestone 8.1 release (2026-10-05): 1,847 opportunities, 28 sources, 19 pending candidates, 0 applications, 34 MB. Earlier snapshots: [archive](docs/releases/archive-project-state-2026-10-05.md).
+Current (2026-10-06, after the Milestone 11 release; aggregates from the release record): migration `a3c7e9b1d5f2`; 2,451 opportunities evaluated (2,335 open at the final catalog count); 47 sources run per sync (45 enabled direct sources plus the feed and the registry); every latest evaluation is scoring v2 and `needs_verification`, with 5,771 v1 history rows kept; 0 canonical requirements; 558 pending candidates (all v3), 0 accepted, 0 rejected. Size and application counts were not re-measured. At the Milestone 8.1 release (2026-10-05): 1,847 opportunities, 28 sources, 19 pending candidates, 0 applications, 34 MB. Earlier snapshots: [archive](docs/releases/archive-project-state-2026-10-05.md).
 
 ## Current Scoring Version
 
@@ -183,15 +180,15 @@ Details, licensing basis, and attribution: [docs/sources.md](docs/sources.md).
 
 Milestones 8.2 through 11 are released and the 2026-10-06 activation is done. Next, in order:
 
-1. Owner: review the 563 pending requirement suggestions. Do not accept the deemed-export and "U.S. Person required ... no sponsorship" groups until extractor v3 ([PR #45](https://github.com/dude297/internship-finder/pull/45)) is reviewed, released, and followed by `scan-requirements`.
+1. Owner: review the 558 pending requirement suggestions (v3; nothing is ever auto-accepted).
 2. Owner: activate the encrypted backup (install `age`, `age-keygen` into private storage, `gh variable set BACKUP_AGE_RECIPIENT`, dispatch once, restore drill) and switch Render's build command to the lock install ([deployment.md](docs/deployment.md#render-internship-finder-api)).
-3. Review and merge [PR #46](https://github.com/dude297/internship-finder/pull/46) (registry re-verification; SULI opens 2026-10-14).
+3. Re-verify NIST SHIP around 2026-10-15 to 2026-10-20 (USAJOBS announcement expected).
 4. Recommended next milestone: close the large-response gap (Anduril, SpaceX over the 20 MiB cap) or add Workday/Oracle coverage, which also decides whether the feed (about 1,016 feed-only postings, about 800 on Workday/Oracle) can ever be retired.
 
 ## Recent Important Decisions
 
 - 2026-10-05: Milestone 8.1 released. PR #25 merged (merge commit) as `main` `203a562`; Neon migrated to `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`, Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`; hosted smoke 14/14. v2 scan and catalog activation deferred to the owner.
-- 2026-10-06: Release train: `f6210e9` (M8.2/security/CSP), M9 `4f419e5` (migration `d4f8a1c6e2b9`), M10 `1dbb86f` (migration `a3c7e9b1d5f2`), M10.1 `1d270d6`, M11 `ca8ff77`; five Render deploys, four Vercel deploys; hosted smokes all passed; v2 requirement scan and catalog activation (26 → 45 sources) run with owner authorization. [Release record](docs/releases/2026-10-06-m9-m11.md).
+- 2026-10-06: Release train: `f6210e9` (M8.2/security/CSP), M9 `4f419e5` (migration `d4f8a1c6e2b9`), M10 `1dbb86f` (migration `a3c7e9b1d5f2`), M10.1 `1d270d6`, M11 `ca8ff77`; five Render deploys, four Vercel deploys; hosted smokes all passed; v2 requirement scan and catalog activation (26 → 45 sources) run with owner authorization. [Release record](docs/releases/2026-10-06-m9-m11.md). Follow-up: extractor v3 (#45) and registry re-verification (#46) released (`cf1ad43`), rescan 563 → 558 pending (v3).
 - 2026-10-06: ADR-020 accepted (Milestone 10, released): a read-only, bounded, set-based Action Inbox derived on read; three nullable follow-up columns on `applications`; fit threshold 70; hidden opportunities excluded everywhere. Migration `a3c7e9b1d5f2`.
 - 2026-10-06: ADR-017 accepted (Milestone 9, released): hiding is two nullable columns that sync never touches (hidden excluded by default); Revert to source reuses the ADR-013 owner-record and fallback code and the fingerprinted evaluation. Migration `d4f8a1c6e2b9`.
 - 2026-10-05: ADR-015 accepted: derived listing freshness (never stored), first-seen "New", live-link pings rejected, `requirements-rules` v2, Independent Discovery Coverage, the Direct Source Catalog, Workable and Pinpoint adapters, an empty-snapshot closure guard; no first-party company adapter yet. Migration `b7e3d9f1a2c4`.

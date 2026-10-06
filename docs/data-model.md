@@ -194,7 +194,7 @@ Deterministic requirement suggestions and their owner review (Milestone 6, [ADR-
 | `semantic_key` | varchar(64) | SHA-256 of type, normalized value, applies_at, and reference date. UNIQUE (`opportunity_id`, `semantic_key`). Never position, source text, IDs, or time |
 | `requirement_type`, `value`, `applies_at`, `reference_date` | as in `opportunity_requirements` | The original proposal; an edited accept changes only the canonical requirement. CHECK: reference date iff `explicit_date` |
 | `source_text` | varchar(500) | Evidence excerpt (the extractor caps it at 300 characters). Plain text |
-| `extractor_name`, `extractor_version` | varchar | `requirements-rules`, `2` (since Milestone 8.1; rows from an earlier version are refreshed by `scan-requirements`) |
+| `extractor_name`, `extractor_version` | varchar | `requirements-rules`, `3` (version 2 shipped in Milestone 8.1, 3 is unreleased; rows from an earlier version are refreshed by `scan-requirements`) |
 | `review_state` | enum `pending` / `accepted` / `rejected` | |
 | `is_current` | boolean, default true | Whether the latest extraction of the current text proposed it. Pending ones that stop being proposed are deleted; reviewed ones stay with `false` |
 | `accepted_requirement_id` | uuid FK → opportunity_requirements, null, SET NULL, indexed | The canonical requirement created on accept. CHECK: set only when `accepted` |

@@ -23,7 +23,7 @@ def extract(description: str | None, title: str = "Synthetic Internship") -> tup
 
 def test_extractor_identity() -> None:
     assert EXTRACTOR_NAME == "requirements-rules"
-    assert EXTRACTOR_VERSION == "2"
+    assert EXTRACTOR_VERSION == "3"
 
 
 # --- minimum_age ----------------------------------------------------------------------------
@@ -121,6 +121,43 @@ def test_completed_education_level_is_not_enrollment() -> None:
 
 def test_us_person_proposes_nothing() -> None:
     assert extract("Applicants should be a U.S. person.") == ()
+
+
+def test_us_person_either_or_deemed_export_proposes_nothing() -> None:
+    assert (
+        extract(
+            "Applicants must either be a “U.S. person” as defined by 22 C.F.R. § 120.62 "
+            "or otherwise eligible for deemed export licensing."
+        )
+        == ()
+    )
+
+
+def test_us_person_with_definition_still_proposes_label() -> None:
+    (proposal,) = extract(
+        "Applicants must be a U.S. person (U.S. citizen, permanent resident/green card holder, "
+        "or protected individual)."
+    )
+    assert proposal.value == {"description": "U.S. person (export control)"}
+
+
+def test_us_person_status_with_no_sponsorship_proposes_both() -> None:
+    proposals = extract(
+        "U.S. Person status (U.S. citizen or lawful permanent resident) is required, and TNC "
+        "does not provide visa sponsorship for these roles."
+    )
+    descriptions = {p.value["description"] for p in proposals}
+    assert descriptions == {
+        "U.S. person (export control)",
+        "U.S. citizen or permanent resident",
+        "Authorized to work in the United States without sponsorship",
+    }
+
+
+def test_authorized_without_sponsorship_unchanged() -> None:
+    (proposal,) = extract("Must be authorized to work in the US without requiring sponsorship.")
+    assert proposal.requirement_type is RequirementType.WORK_AUTHORIZATION
+    assert proposal.value == {"description": "Authorized to work in the United States"}
 
 
 def test_work_authorization_required() -> None:

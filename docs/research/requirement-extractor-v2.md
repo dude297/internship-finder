@@ -152,4 +152,6 @@ university or community college" is a list.
 Known limitations (documented, not fixed): scope-limited citizenship ("U.S. citizen to work on the
 classified track", "for the defense team") still gives a citizenship proposal; a requirement split
 by a hard line break ("U.S.\ncitizen") is missed; "U.S. Person status (U.S. citizen or lawful
-permanent resident) is required" with a sponsorship statement yields only the sponsorship label.
+permanent resident) is required" with a sponsorship statement yielded only the sponsorship label until version 3.
+
+Version 3 (post-release audit of pending suggestions, no new types or labels): a U.S. person clause that also offers "or otherwise eligible for (a) deemed export / export license" (or says "deemed export") is an either/or and proposes nothing; when a no-sponsorship statement is found, that span is blanked and the rest of the clause is still matched (the negation guard sees only the remainder), so "U.S. Person status (...) is required, and X does not provide visa sponsorship" gives the U.S. person, citizen-or-permanent-resident, and sponsorship proposals. "Authorized to work ... without requiring sponsorship" is unchanged.
