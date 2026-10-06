@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | none |
+| **Current Development** | Milestone 19 on `feature/ui-landing-login` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -89,7 +89,7 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 None on `main`. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 
-Open pull requests: none.
+Open pull requests: `feature/ui-landing-login` (frontend only: design tokens, public landing page, login states; not released).
 
 ## Known Operational Issues
 

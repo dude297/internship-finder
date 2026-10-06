@@ -238,6 +238,14 @@ Verified against PostgreSQL 18 (local Docker and CI): `upgrade head`, `check`, `
 - review migrations before merging
 - no manual production schema changes
 
+## Frontend design tokens and public pages
+
+Tokens live in `frontend/src/index.css` (`@theme`, Tailwind utilities such as `bg-lab-surface`, `text-lab-muted`, `rounded-card`): dark "lab" palette (bg, surface, elevated, border, text, muted), accent (`#2f81f7` for text on dark, `#1f6feb` with white text for buttons, `#1a62d1` hover), warning/danger/success, control and card radii, one shadow, a gutter spacing, and a system monospace stack. Contrast pairs are listed in a comment there; recheck before changing a value. No external fonts or CDNs (the CSP allows `'self'` only). The authenticated app stays light slate and only uses the accent, radii, focus ring and the `Mark` glyph.
+
+- `/` is a public landing page (`LandingPage.tsx`): static copy, an inline SVG schematic (a stacked list below 768px), synthetic preview data, and generic capability counts. It makes no API calls of its own. A signed-in owner visiting `/` is redirected to `/opportunities` (change `Home` in `App.tsx` when the default route changes).
+- `/login` is a split layout. States: slow session check or slow login (after 4s, "Waking the server" for the Render cold start), wrong credentials (401), rate limit (429), backend unavailable (network/5xx, with Retry once automatic retries stop). Auth and CSRF behavior is unchanged: the server message is shown for 401 and 429, and errors are tied to the inputs with `aria-describedby`.
+- Motion is limited to 300ms rise-in, a dashed signal on the schematic and a pulse dot; all disabled under `prefers-reduced-motion`.
+
 ## Documentation Expectations
 
 Documentation is part of Definition of Done: [ENGINEERING_GUIDELINES.md §15](../ENGINEERING_GUIDELINES.md#15-documentation-maintenance-rules) (what to update) and [docs/README.md](README.md) (document authority). Check locally with `python scripts/check_docs.py` (add `--base origin/main` on a branch to run the changed-path guards CI runs).
