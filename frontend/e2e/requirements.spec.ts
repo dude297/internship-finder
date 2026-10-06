@@ -78,7 +78,10 @@ async function login(page: Page) {
 }
 
 async function openOpportunity(page: Page, heading: string, show = 'open') {
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Show').selectOption(show)
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
@@ -95,7 +98,10 @@ test('requirement intelligence: extraction, review, staleness, and persistence',
   await login(page)
 
   // A profile so the opportunity is evaluated.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Profile', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Profile', exact: true })
+    .click()
   await page.getByLabel('Current level').selectOption('high_school')
   await page.getByLabel('Status as of').fill('2040-09-01')
   await page.getByLabel('Expected graduation').fill('2041-06-10')
@@ -106,7 +112,10 @@ test('requirement intelligence: extraction, review, staleness, and persistence',
   await expect(page.getByRole('status')).toContainText('Profile saved.')
 
   // Add a Greenhouse board by its public link and sync the first version of the posting.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Sources', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Sources', exact: true })
+    .click()
   await page.getByLabel('Organization name').fill(organization)
   await page
     .getByLabel('Job board link or name')
@@ -164,7 +173,10 @@ test('requirement intelligence: extraction, review, staleness, and persistence',
   // The posting changes materially (adds a work-authorization sentence); syncing reopens
   // review without discarding the accepted requirements.
   publishGreenhouse(rewrittenDescription)
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Sources', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Sources', exact: true })
+    .click()
   await page.getByRole('button', { name: `Sync ${organization} now` }).click()
   await expect(page.getByText(`${organization}: sync finished.`)).toBeVisible()
 
@@ -190,7 +202,10 @@ test('requirement intelligence: extraction, review, staleness, and persistence',
   ).toBeVisible()
 
   // The "Needs review" list filter finds it.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Requirement suggestions').selectOption('needs_review')
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
@@ -223,7 +238,10 @@ test('deadline filter and sort', async ({ page }) => {
   })
   expect(response.status()).toBe(201)
 
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByLabel('Deadline').selectOption('7')
   await page.getByRole('button', { name: 'Search' }).click()
@@ -238,7 +256,10 @@ test('deadline filter and sort', async ({ page }) => {
 
 test('source health and an Ashby board', async ({ page }) => {
   await login(page)
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Sources', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Sources', exact: true })
+    .click()
 
   await expect(
     page.getByRole('listitem').filter({ hasText: organization }).getByText('Healthy'),
@@ -260,7 +281,10 @@ test('source health and an Ashby board', async ({ page }) => {
   const card = page.getByRole('listitem').filter({ hasText: ashbyBoardName })
   await expect(card).toContainText('Created: 1')
 
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Opportunities', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Opportunities', exact: true })
+    .click()
   await page.getByLabel('Search title or organization').fill(String(run))
   await page.getByRole('button', { name: 'Search' }).click()
   await expect(
