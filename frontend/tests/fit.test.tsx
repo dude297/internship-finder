@@ -336,7 +336,9 @@ describe('source scope', () => {
     fireEvent.change(screen.getByLabelText('Import'), { target: { value: 'all' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add source' }))
     await screen.findByText(/Added Example Robotics/)
-    expect(calls.at(-1)!.body).toMatchObject({ scope: 'all' })
+    expect(calls.filter((c) => c.method === 'POST').at(-1)!.body).toMatchObject({
+      scope: 'all',
+    })
   })
 
   it('shows filtered counts and switches a board scope', async () => {
@@ -348,7 +350,9 @@ describe('source scope', () => {
     })
     renderAt('/sources')
 
-    const card = (await screen.findAllByRole('listitem'))[1]
+    // Wait for both cards: findAllBy resolves on the first listitem, before the list is complete.
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
+    const card = screen.getAllByRole('listitem')[1]
     expect(card).toHaveTextContent('Filtered: 3')
     const select = within(card).getByLabelText('Import')
     expect(select).toHaveValue('internships_only')
@@ -361,7 +365,7 @@ describe('source scope', () => {
         'Example Robotics: All postings. The next sync applies it.',
       ),
     ).toBeInTheDocument()
-    expect(calls.at(-1)!.body).toEqual({
+    expect(calls.filter((c) => c.method === 'PUT').at(-1)!.body).toEqual({
       display_name: 'Example Robotics',
       enabled: true,
       scope: 'all',

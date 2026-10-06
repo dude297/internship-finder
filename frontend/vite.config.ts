@@ -12,6 +12,8 @@ export default defineConfig({
   preview: { proxy: api },
   test: {
     environment: 'jsdom',
+    testTimeout: 20000, // secondary to the 5 s asyncUtilTimeout in tests/setup.ts
+    hookTimeout: 20000,
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
   },
