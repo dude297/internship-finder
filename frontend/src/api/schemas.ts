@@ -141,11 +141,41 @@ export const applicationSchema = z.object({
   status: z.enum(applicationStatuses),
   submitted_on: nullableDate,
   notes: z.string().nullable(),
+  next_action: z.string().nullable().default(null),
+  next_action_due: nullableDate.default(null),
+  interview_at: z.string().nullable().default(null),
   created_at: z.string(),
   updated_at: z.string(),
 })
 export type Application = z.infer<typeof applicationSchema>
-export type ApplicationInput = Pick<Application, 'status' | 'submitted_on' | 'notes'>
+export type ApplicationInput = Pick<
+  Application,
+  'status' | 'submitted_on' | 'notes' | 'next_action' | 'next_action_due' | 'interview_at'
+>
+
+// ADR-020: the Action Inbox. Minimal items: where to go, why, and the relevant date.
+export const inboxItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  organization: z.string(),
+  reason: z.string(),
+  date: nullableDate,
+})
+export type InboxItem = z.infer<typeof inboxItemSchema>
+const inboxSectionSchema = z.object({
+  total: z.number().int(),
+  items: z.array(inboxItemSchema),
+})
+export const inboxSchema = z.object({
+  today: isoDate,
+  new_high_fit: inboxSectionSchema,
+  closing_soon: inboxSectionSchema,
+  pending_requirement_review: inboxSectionSchema,
+  source_warnings: inboxSectionSchema,
+  program_verify_by: inboxSectionSchema,
+  applications: inboxSectionSchema,
+})
+export type Inbox = z.infer<typeof inboxSchema>
 
 export const requirementSchema = z.object({
   id: z.string(),

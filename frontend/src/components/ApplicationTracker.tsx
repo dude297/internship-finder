@@ -10,6 +10,15 @@ import { applicationStatusLabels } from '../lib/labels'
 import { buttonClass, dangerButtonClass, inputClass } from '../lib/styles'
 import { ErrorMessage, Field, SuccessMessage } from './ui'
 
+// <input type="datetime-local"> works in local time without a zone; the API stores an instant.
+const pad = (n: number) => String(n).padStart(2, '0')
+function toLocalInput(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+const toInstant = (local: string) => (local ? new Date(local).toISOString() : null)
+
 /** Private application tracking. Changing it never changes eligibility. */
 export function ApplicationTracker({
   opportunityId,
@@ -23,6 +32,11 @@ export function ApplicationTracker({
   const [status, setStatus] = useState<ApplicationStatus>(application?.status ?? 'saved')
   const [submittedOn, setSubmittedOn] = useState(application?.submitted_on ?? '')
   const [notes, setNotes] = useState(application?.notes ?? '')
+  const [nextAction, setNextAction] = useState(application?.next_action ?? '')
+  const [nextActionDue, setNextActionDue] = useState(application?.next_action_due ?? '')
+  const [interviewAt, setInterviewAt] = useState(
+    toLocalInput(application?.interview_at ?? null),
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -49,6 +63,9 @@ export function ApplicationTracker({
           status,
           submitted_on: orNull(submittedOn),
           notes: orNull(notes),
+          next_action: orNull(nextAction),
+          next_action_due: orNull(nextActionDue),
+          interview_at: toInstant(interviewAt),
         }),
       'Application tracking saved.',
     )
@@ -76,6 +93,9 @@ export function ApplicationTracker({
                     status: 'saved',
                     submitted_on: null,
                     notes: null,
+                    next_action: null,
+                    next_action_due: null,
+                    interview_at: null,
                   }),
                 'Now tracking this opportunity.',
               )
@@ -109,6 +129,34 @@ export function ApplicationTracker({
               className={inputClass}
             />
           </Field>
+          <Field id="application-next-action" label="Next action">
+            <input
+              id="application-next-action"
+              type="text"
+              maxLength={200}
+              value={nextAction}
+              onChange={(e) => setNextAction(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field id="application-next-action-due" label="Next action due">
+            <input
+              id="application-next-action-due"
+              type="date"
+              value={nextActionDue}
+              onChange={(e) => setNextActionDue(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field id="application-interview" label="Interview at">
+            <input
+              id="application-interview"
+              type="datetime-local"
+              value={interviewAt}
+              onChange={(e) => setInterviewAt(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
           <Field id="application-notes" label="Private notes">
             <textarea
               id="application-notes"
@@ -132,6 +180,9 @@ export function ApplicationTracker({
                   setStatus('saved')
                   setSubmittedOn('')
                   setNotes('')
+                  setNextAction('')
+                  setNextActionDue('')
+                  setInterviewAt('')
                   return null
                 }, 'Stopped tracking this opportunity.')
               }

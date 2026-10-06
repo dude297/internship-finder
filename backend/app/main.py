@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api import (
     auth,
     health,
+    inbox,
     opportunities,
     profile,
     profile_sources,
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
     private.include_router(profile_sources.router)
     private.include_router(profile.router)
     private.include_router(opportunities.router)
+    private.include_router(inbox.router)
     private.include_router(requirement_review.router)
     private.include_router(sources.router)
     app.include_router(private)

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router'
 import { AuthProvider } from './auth/AuthProvider'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppShell } from './components/AppShell'
+import { InboxPage } from './pages/InboxPage'
 import { LoginPage } from './pages/LoginPage'
 import { MatchProfilePage } from './pages/MatchProfilePage'
 import { OpportunityDetailPage } from './pages/OpportunityDetailPage'
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
+            <Route path="/inbox" element={<InboxPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/profile/match" element={<MatchProfilePage />} />
             <Route path="/profile/sources" element={<ProfileSourcesPage />} />

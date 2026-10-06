@@ -2,7 +2,7 @@
 
 ## Current Database State
 
-The schema is created by eleven Alembic migrations (a linear chain; `d4f8a1c6e2b9` is head on the development branch, `b7e3d9f1a2c4` is production) in `backend/alembic/versions/`:
+The schema is created by twelve Alembic migrations (a linear chain; `a3c7e9b1d5f2` is head on the development branch, `b7e3d9f1a2c4` is production) in `backend/alembic/versions/`:
 
 | Revision | Milestone | Tables |
 |---|---|---|
@@ -17,6 +17,7 @@ The schema is created by eleven Alembic migrations (a linear chain; `d4f8a1c6e2b
 | `a8c3e5f7b9d1` (SmartRecruiters and program registry) | 8 | Registry columns on `opportunities`; `smartrecruiters` / `curated_registry` kinds; seeded registry source (below) |
 | `b7e3d9f1a2c4` (Workable and Pinpoint sources) | 8.1 | CHECK only (below) |
 | `d4f8a1c6e2b9` (owner opportunity decisions) | 9 (development, unreleased) | `opportunities.dismissed_at`, `dismissed_reason` (below) |
+| `a3c7e9b1d5f2` (application follow-up fields) | 10 (development, unreleased) | `applications.next_action`, `next_action_due`, `interview_at` (below) |
 
 The design rationale is in [ADR-006](decisions/ADR-006-core-domain-persistence-model.md) (core domain), [ADR-007](decisions/ADR-007-single-user-auth-and-private-api.md) (authentication), [ADR-008](decisions/ADR-008-opportunity-ingestion-and-deduplication.md) (ingestion), [ADR-010](decisions/ADR-010-fit-scoring-v1.md) (fit scoring, Match Profile, source scope), and [ADR-011](decisions/ADR-011-profile-source-ingestion-and-review.md) (profile source uploads and review). The migrations are verified in CI against a disposable PostgreSQL 18 container (upgrade → `alembic check` → downgrade → upgrade, plus integration tests that step through every revision). The hosted Neon database is at `b7e3d9f1a2c4` (Milestone 8.1, applied 2026-10-05; release history in [deployment.md](deployment.md) and [CHANGELOG.md](../CHANGELOG.md)). Locally, `compose.yaml` runs a development PostgreSQL 18.
 
@@ -65,6 +66,10 @@ CHECK-only ([ADR-015 §7](decisions/ADR-015-freshness-requirements-v2-and-indepe
 ### Milestone 9 migration (`d4f8a1c6e2b9`, unreleased)
 
 Additive ([ADR-017](decisions/ADR-017-owner-opportunity-decisions.md)): nullable `opportunities.dismissed_at` (timestamptz) and `dismissed_reason` (varchar(30)), plus CHECK `ck_opportunities_dismissed_reason_needs_dismissed_at`. No data change; the M8.1 backend runs unchanged on the migrated schema. **Downgrade** drops both columns (hidden state is lost). Rolling the app back to M8.1 *without* downgrading ignores the columns and un-hides every hidden opportunity. Verified locally on PostgreSQL: base → head, `alembic check`, head → `b7e3d9f1a2c4` → head; `tests/test_migrations.py` covers the round trip and the CHECK.
+
+### Milestone 10 migration (`a3c7e9b1d5f2`, unreleased)
+
+Additive ([ADR-020](decisions/ADR-020-action-inbox.md)): nullable `applications.next_action` (varchar(200)), `next_action_due` (date) and `interview_at` (timestamptz). No data change; the M9 backend runs unchanged on the migrated schema. **Downgrade** drops the three columns (follow-up fields are lost). Verified locally on PostgreSQL: base → head, `alembic check`, head → `d4f8a1c6e2b9` → head; `tests/test_migrations.py` covers the round trip.
 
 ### Conventions
 
@@ -373,6 +378,9 @@ The owner's application tracking. Private runtime data; never read by eligibilit
 | `status` | enum `saved` / `applying` / `applied` / `interview` / `offer` / `accepted` / `rejected` / `withdrawn` | Any status may follow any other (no transition rules) |
 | `submitted_on` | date, null | When the application was submitted |
 | `notes` | text, null | Private notes |
+| `next_action` | varchar(200), null | The owner's next step (Action Inbox, [ADR-020](decisions/ADR-020-action-inbox.md)) |
+| `next_action_due` | date, null | When it is due |
+| `interview_at` | timestamptz, null | Scheduled interview |
 | `created_at`, `updated_at` | timestamptz | |
 
 ## Not Yet Modeled
