@@ -118,6 +118,7 @@ None open. Fixed during hosted validation (2026-09-29):
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
 - Title/organization search uses `ILIKE '%term%'` without a trigram index; fine at thousands of rows.
 - Every opportunity update replaces every requirement row (new IDs; old rule results keep their text with `requirement_id` NULL).
+- The scheduled sync's `PRODUCTION_DATABASE_URL` uses the same Neon role as the app (full read/write, including auth and profile tables). Mitigated by the `main`-only `production` environment, SHA-pinned actions, and hash-locked dependencies; a least-privilege ingestion role and required reviewers on the environment are owner actions (security review 2026-10-06).
 - Expired sessions are deleted only when that user logs in again; there's no periodic cleanup.
 - `profiles` is logically a singleton, but only the service enforces that.
 - Backend dependencies are hash-locked (`backend/requirements.lock`, `requirements-dev.lock`) for CI and the scheduled sync, but Render still builds with `pip install .` (range-resolved) until its build command is switched to the lock (owner action, [deployment.md](docs/deployment.md#render-internship-finder-api)).

@@ -73,6 +73,9 @@ class _Hit(NamedTuple):
 
 _PLACEHOLDER = chr(0xE000)  # private-use codepoint: won't collide with real text
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+|\s*[\r\n]+\s*|\s*[•▪◦]\s*")
+# Horizontal whitespace runs collapse first: `\s*` around the newline alternative backtracks
+# quadratically over a long run of spaces (50,000 spaces took ~140 s), and a provider can send one.
+_HORIZONTAL_SPACE_RUN = re.compile(r"[^\S\r\n]{2,}")
 _DOTTED_ABBREVIATION = re.compile(r"\b(?:[A-Za-z]{1,2}\.){2,}|\bPh\.D\b")
 
 
@@ -96,6 +99,7 @@ def _clauses(text: str | None) -> list[str]:
     if not text:
         return []
     clauses: list[str] = []
+    text = _HORIZONTAL_SPACE_RUN.sub(" ", text)
     for sentence in _SENTENCE_BOUNDARY.split(_protect_abbreviations(text)):
         for clause in sentence.split(";"):
             restored = _restore_abbreviations(clause).strip()
