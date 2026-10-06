@@ -158,4 +158,69 @@ describe('profile editor', () => {
       'Current City',
     )
   })
+
+  it('defaults every work-authorization answer to "not provided" and saves explicit answers', async () => {
+    const calls = mockApi({
+      ...loggedIn,
+      'GET /api/profile': () => savedProfile,
+      'PUT /api/profile': () => ({ profile: savedProfile, reevaluated_opportunities: 0 }),
+    })
+    renderAt('/profile')
+    const group = await screen.findByRole('group', { name: 'Work authorization' })
+    expect(group).toBeInTheDocument()
+    const labels = [
+      'Currently authorized to work in the U.S.',
+      'Need employer sponsorship now',
+      'May need sponsorship in the future',
+      'U.S. citizen',
+      'U.S. permanent resident (green card holder)',
+      'U.S. person for export control (ITAR/EAR)',
+      'Hold an active U.S. security clearance',
+    ]
+    for (const label of labels) {
+      const select = screen.getByLabelText(label)
+      expect(select).toHaveValue('')
+      expect(select).toHaveDisplayValue('Prefer not to say / not provided')
+    }
+    expect(screen.getByText(/protected individual/)).toBeInTheDocument()
+
+    // Citizen "yes" must not fill in any other answer.
+    fireEvent.change(screen.getByLabelText('U.S. citizen'), { target: { value: 'yes' } })
+    fireEvent.change(screen.getByLabelText('Need employer sponsorship now'), {
+      target: { value: 'no' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await screen.findByRole('status')
+
+    const put = calls.find((c) => c.method === 'PUT')
+    expect(put?.body).toMatchObject({
+      us_citizen: true,
+      needs_sponsorship_now: false,
+      work_authorized_us: null,
+      us_person_export_control: null,
+      us_permanent_resident: null,
+      needs_sponsorship_future: null,
+      active_security_clearance: null,
+    })
+  })
+
+  it('shows previously saved work-authorization answers', async () => {
+    mockApi({
+      ...loggedIn,
+      'GET /api/profile': () => ({
+        ...savedProfile,
+        us_person_export_control: false,
+        work_authorized_us: true,
+      }),
+    })
+    renderAt('/profile')
+
+    expect(
+      await screen.findByLabelText('U.S. person for export control (ITAR/EAR)'),
+    ).toHaveValue('no')
+    expect(screen.getByLabelText('Currently authorized to work in the U.S.')).toHaveValue(
+      'yes',
+    )
+    expect(screen.getByLabelText('U.S. citizen')).toHaveValue('')
+  })
 })

@@ -27,6 +27,14 @@ class ProfileInput(EducationTimeline):
 
     date_of_birth: date | None = None
     citizenships: list[CountryCode] | None = None
+    # Owner-provided work-authorization facts (ADR-026). None = not provided.
+    work_authorized_us: bool | None = None
+    needs_sponsorship_now: bool | None = None
+    needs_sponsorship_future: bool | None = None
+    us_citizen: bool | None = None
+    us_permanent_resident: bool | None = None
+    us_person_export_control: bool | None = None
+    active_security_clearance: bool | None = None
 
 
 class OpportunityInput(BaseModel):

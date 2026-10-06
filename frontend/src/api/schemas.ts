@@ -127,6 +127,13 @@ export const profileSchema = z.object({
   date_of_birth: nullableDate,
   citizenships: z.array(z.string()).nullable(),
   work_authorizations: z.array(z.string()).nullable(),
+  work_authorized_us: z.boolean().nullable().default(null),
+  needs_sponsorship_now: z.boolean().nullable().default(null),
+  needs_sponsorship_future: z.boolean().nullable().default(null),
+  us_citizen: z.boolean().nullable().default(null),
+  us_permanent_resident: z.boolean().nullable().default(null),
+  us_person_export_control: z.boolean().nullable().default(null),
+  active_security_clearance: z.boolean().nullable().default(null),
   location: z.string().nullable(),
 })
 export type Profile = z.infer<typeof profileSchema>
