@@ -134,22 +134,22 @@ When a complete successful sync no longer lists a posting, its source record is 
 
 [ADR-021](decisions/ADR-021-encrypted-backups.md). `.github/workflows/backup-production.yml` runs weekly (Sundays 09:43 UTC) and on manual dispatch, only on `main` of `dude297/internship-finder`, in the `production` environment. It runs `scripts/backup_db.sh`, which streams `pg_dump --format=custom | age -r <public key>` into a file (no plaintext on disk or in logs) and uploads it as the artifact `db-backup-<run id>` with **14-day retention**. The workflow holds only the *public* age key; the private key stays with the owner.
 
-**Artifacts of this public repository are downloadable by any signed-in GitHub user.** That is why the backup is encrypted before upload, why the file name is only `backup-YYYYMMDD.dump.age`, and why retention is bounded. Treat the decrypted dump as exactly as sensitive as the database (it includes the profile and auth tables).
+**Artifacts of this public repository are downloadable by any signed-in GitHub user.** That is why the backup is encrypted before upload and why the file name is only `backup-YYYYMMDD.dump.age`. Retention (14 days) limits storage, **not exposure**: anyone signed in can download and keep the ciphertext, so confidentiality rests entirely on the private key, and a key compromise discloses every past backup. Treat the decrypted dump as exactly as sensitive as the database (it includes the profile and auth tables).
 
-Without the `BACKUP_AGE_RECIPIENT` variable (or the `PRODUCTION_DATABASE_URL` secret) the first step fails with a fixed message and nothing touches the database.
+Without the `BACKUP_AGE_RECIPIENT` variable (or the `PRODUCTION_DATABASE_URL` secret) the first step fails with a fixed message and nothing touches the database. `pg_dump` and `psql` output never reaches the public log (only a fixed message and exit codes); the URL, host, role and password are masked.
 
 ### Owner activation (once)
 
-1. On a trusted machine install [age](https://github.com/FiloSottile/age) and run `age-keygen -o internship-finder-backup.key`. It prints `Public key: age1...`.
+1. On a trusted machine install [age](https://github.com/FiloSottile/age) and run `age-keygen -pq -o internship-finder-backup.key` (hybrid post-quantum, recommended because the ciphertext stays downloadable; plain `age-keygen` also works). It prints `Public key: age1pq1...` (or `age1...`).
 2. Store the private key file in a password manager **and** one offline copy. Never commit it, paste it into chat, or put it in GitHub. Losing it makes every backup unreadable.
 3. Set the public key as a repository variable (not a secret): `gh variable set BACKUP_AGE_RECIPIENT --body "age1..."` (or Settings, Secrets and variables, Actions, Variables). An environment variable on `production` also works.
 4. Dispatch once: `gh workflow run backup-production.yml --ref main`, and confirm it is green and the artifact exists.
-5. Test a restore (below) into a local or new Neon database before relying on it.
+5. **Hard gate:** do not rely on the backup until a restore test (below) from a real artifact into a disposable target has passed.
 
 ### Restore runbook
 
 1. Download the artifact: `gh run download <run-id> -n db-backup-<run-id>` (or from the run page), giving `backup-YYYYMMDD.dump.age`.
-2. Create a disposable target: a local database (`docker compose exec -T postgres psql -U internship_finder -c "CREATE DATABASE restore_check"`) or a **new Neon branch** (Neon console; never the production branch). You need `age`, `pg_restore`, and `psql` (PostgreSQL 18 client tools) on your PATH.
+2. Create a disposable target: a local database (`docker compose exec -T postgres psql -U internship_finder -c "CREATE DATABASE restore_check"`) or a **new Neon project** (a Neon *branch* starts with a copy of production data, so the script would refuse it; a branch works only after `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` on that branch, never on production). You need `age`, `pg_restore`, and `psql` (PostgreSQL 18 client tools) on your PATH.
 3. Restore:
 
    ```bash
@@ -158,9 +158,9 @@ Without the `BACKUP_AGE_RECIPIENT` variable (or the `PRODUCTION_DATABASE_URL` se
    scripts/restore_backup.sh backup-YYYYMMDD.dump.age
    ```
 
-   The script decrypts with `age -d -i <key> | pg_restore --no-owner --no-privileges --exit-on-error`, and **refuses a target that already has tables**, so it can't overwrite anything.
+   The script decrypts with `age -d -i <key> | pg_restore --no-owner --no-privileges --exit-on-error`, and **refuses a target that already has tables**, so it can't overwrite anything. If a restore fails partway (`--exit-on-error`), the target is partial: retry on a fresh target.
 4. Verify: the script prints the `alembic_version` and row counts (opportunities, source records, sources, profiles). Also run `alembic current` from `backend/` with `DATABASE_URL` set to the restored database (it must report the head revision), and compare the counts with the live database.
-5. **Replacing production is a separate, owner-only decision**, never part of this script: pause the scheduled sync, take a fresh backup, restore into a new Neon branch, verify, then point `DATABASE_URL` (Render and the `production` environment secret) at it. Don't drop anything in the production branch.
+5. **Replacing production is a separate, owner-only decision**, never part of this script: pause the scheduled sync, take a fresh backup, restore into a new Neon project, verify, then point `DATABASE_URL` (Render and the `production` environment secret) at it. Don't drop anything in the production branch.
 
 Verified locally on 2026-10-06 against disposable PostgreSQL 18 databases: migrate to head, insert synthetic rows, dump and encrypt (58 KB, no table names or row text in the file), decrypt and restore into an empty database; row counts and `alembic current` matched. A non-empty target and a wrong key were both refused, and a failing `pg_dump` left no file.
 

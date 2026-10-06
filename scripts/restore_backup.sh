@@ -16,7 +16,7 @@ url="${RESTORE_DATABASE_URL/+psycopg/}"
 
 tables=$(${PSQL:-psql} "$url" -Atqc "select count(*) from information_schema.tables where table_schema = 'public'")
 if [ "$tables" != "0" ]; then
-  echo "Refusing: the target database already has $tables public tables. Restore into an empty database or a new Neon branch."
+  echo "Refusing: the target database already has $tables public tables. Restore into an empty database or a new Neon project (a Neon branch starts with production data; reset its public schema first)."
   exit 1
 fi
 

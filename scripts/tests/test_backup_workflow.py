@@ -54,6 +54,17 @@ class BackupWorkflowInvariants(unittest.TestCase):
         self.assertNotIn("AGE-SECRET-KEY", WF + SCRIPT)
         self.assertNotIn("secrets.BACKUP", CODE)
 
+    def test_tool_stderr_withheld_and_hardening(self) -> None:
+        self.assertIn('2>>"$errfile"', SCRIPT)
+        self.assertIn("::add-mask::", SCRIPT)
+        self.assertIn('PGSSLMODE="${PGSSLMODE:-require}"', SCRIPT)
+        self.assertIn("ulimit -c 0", SCRIPT)
+        self.assertIn("select count(*) from opportunities", SCRIPT)
+        self.assertIn("age1pq1", SCRIPT)
+
+    def test_pgdg_key_file_must_hold_exactly_one_key(self) -> None:
+        self.assertIn("grep -c '^pub')\" = 1", CODE)
+
     def test_dump_streams_into_age(self) -> None:
         self.assertRegex(SCRIPT, r"--format=custom[^\n]*\\\n\s*\| \$\{AGE:-age\} -r")
 

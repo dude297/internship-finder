@@ -56,6 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o pgdg.asc
+          [ "$(gpg --show-keys --with-colons pgdg.asc | grep -c '^pub')" = 1 ]  # exactly one key in the file
           gpg --show-keys --with-colons pgdg.asc | grep -qx 'fpr:::::::::B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8:'
           sudo install -d /usr/share/keyrings
           gpg --dearmor < pgdg.asc | sudo tee /usr/share/keyrings/pgdg.gpg > /dev/null
@@ -65,6 +66,8 @@ jobs:
           pg_dump --version | grep -q 'pg_dump (PostgreSQL) 18\.'
 
       - name: Install age (pinned release, checksum verified)
+        # The SHA-256 is a trust-on-first-use pin: it detects a changed or tampered download, not a
+        # compromised upstream release at the time it was pinned. Bump version and checksum together.
         env:
           AGE_VERSION: v1.3.2
           AGE_SHA256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
