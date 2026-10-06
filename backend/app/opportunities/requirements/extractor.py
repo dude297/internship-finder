@@ -23,7 +23,7 @@ from app.opportunities.eligibility.schemas import REQUIREMENT_VALUE_SCHEMAS
 from app.opportunities.requirements.identity import ExtractionInput, semantic_key
 
 EXTRACTOR_NAME = "requirements-rules"
-EXTRACTOR_VERSION = "2"
+EXTRACTOR_VERSION = "3"
 
 MAX_PROPOSALS = 20
 MAX_EXCERPT_CHARS = 300
@@ -995,7 +995,18 @@ _EXPORT_LEAD_RE = re.compile(
 )
 
 
+# "U.S. person ... or otherwise eligible for deemed export licensing" is an either/or: the posting
+# does not require U.S. person status.
+_EXPORT_LICENSE_ALT_RE = re.compile(
+    r"\bdeemed[- ]exports?\b|\bor\s+(?:otherwise\s+)?(?:be\s+)?eligible\s+for\s+(?:an?\s+)?"
+    r"(?:\w+\s+){0,3}?export\s+licen[sc]es?\b",
+    re.IGNORECASE,
+)
+
+
 def _match_us_person(clause: str) -> list[_Hit]:
+    if _EXPORT_LICENSE_ALT_RE.search(clause):
+        return []
     person = _US_PERSON_RE.search(clause)
     if person is not None and _US_PERSON_LEAD_RE.search(clause):
         return [_Hit(RequirementType.OTHER, {"description": OTHER_US_PERSON_LABEL}, person.start())]
@@ -1064,6 +1075,7 @@ _NO_SPONSOR_PATTERNS = (
         re.IGNORECASE,
     ),
 )
+_NO_SPONSORSHIP_RE = re.compile("|".join(p.pattern for p in _NO_SPONSOR_PATTERNS), re.IGNORECASE)
 _POSITIVE_SPONSOR_RE = re.compile(
     r"\b(?:do|does|will|can|would|are\s+able\s+to)\s+(?:also\s+)?(?:sponsor|provide\s+(?:visa\s+)?"
     r"sponsorship|offer\s+(?:visa\s+)?sponsorship)\b|\bsponsorship\s+(?:is\s+|may\s+be\s+)?"
@@ -1165,13 +1177,20 @@ def _clause_hits(clause: str) -> list[_Hit]:
     if _other_role_only(clause) or _HEDGE_RE.search(clause) or _QUESTION_RE.search(clause):
         return []
     hits = _match_no_sponsorship(clause)  # negative in form, so before the negation guard
-    if _NEGATION_RE.search(_DATE_BOUND_NEGATION_RE.sub(" ", clause)):
-        return hits
     no_sponsorship = bool(hits)
+    if no_sponsorship:
+        # The "does not sponsor" span is spent; the rest of the clause is still judged on its own
+        # ("U.S. Person status is required, and X does not provide visa sponsorship").
+        # Blanked at equal length so the remaining hits' positions still index the original clause.
+        clause_rest = _NO_SPONSORSHIP_RE.sub(lambda m: " " * len(m.group()), clause)
+    else:
+        clause_rest = clause
+    if _NEGATION_RE.search(_DATE_BOUND_NEGATION_RE.sub(" ", clause_rest)):
+        return hits
     for matcher in _MATCHERS:
         if matcher is _match_work_authorization and no_sponsorship:
             continue  # the no-sponsorship label is the more specific statement of the same fact
-        hits.extend(matcher(clause))
+        hits.extend(matcher(clause_rest))
     return sorted(hits, key=lambda h: h.position)
 
 

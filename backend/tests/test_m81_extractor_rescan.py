@@ -47,7 +47,7 @@ def _candidates(db: Session, opportunity: Opportunity) -> dict[tuple[str, str], 
 
 
 def test_v1_to_v2_rescan_preserves_reviews(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
-    assert EXTRACTOR_VERSION == "2"
+    assert EXTRACTOR_VERSION == "3"
     opportunity = Opportunity(
         title="Rescan Intern",
         organization="Example Robotics",
