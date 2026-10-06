@@ -359,12 +359,14 @@ def _normalize_stored(owner: OpportunitySourceRecord) -> NormalizedOpportunity |
         return None
 
 
-def revert_to_source(db: Session, opportunity: Opportunity, now: datetime) -> bool:
+def revert_to_source(db: Session, opportunity: Opportunity) -> bool:
     """ADR-017: discard the owner's edits and restore canonical content from the authoritative
     active automated record (ADR-013 §1 ranking, same as sync), through its stored raw item.
     Returns False, changing nothing, if there is no such record or it no longer normalizes.
     Clears curation, requirements, candidates and the review state (the owner re-reviews, as for
     a new import); the caller re-evaluates and commits."""
+    # Lock the opportunity row first, like _owns_canonical_fields: a concurrent sync is waited out.
+    db.execute(select(Opportunity.id).where(Opportunity.id == opportunity.id).with_for_update())
     owner = db.scalars(
         select(OpportunitySourceRecord)
         .where(
@@ -379,11 +381,16 @@ def revert_to_source(db: Session, opportunity: Opportunity, now: datetime) -> bo
     if owner is None or item is None:
         return False
     # Only the registry writes dates and date-trust fields; every other source leaves them
-    # unset, so a revert clears whatever the owner entered.
-    opportunity.application_deadline = opportunity.start_date = opportunity.end_date = None
-    opportunity.program_cycle = opportunity.verify_by = None
-    opportunity.typical_open_window = opportunity.typical_close_window = None
+    # unset, so a revert clears whatever the owner entered. A registry owner restores them from
+    # its item below (registry items never merge with other sources, ADR-014 §5).
+    if owner.source_type is not OpportunitySourceType.CURATED_REGISTRY:
+        opportunity.application_deadline = opportunity.start_date = opportunity.end_date = None
+        opportunity.program_cycle = opportunity.verify_by = None
+        opportunity.typical_open_window = opportunity.typical_close_window = None
+    kept_description = opportunity.description
     _write_canonical(opportunity, item, owner.source_type)
+    if owner.source_type is OpportunitySourceType.PUBLIC_FEED:
+        opportunity.description = kept_description  # the feed has none (ADR-013 §4)
     opportunity.requirements = []
     opportunity.requirement_candidates = []
     opportunity.requirements_assessment_status = RequirementsAssessmentStatus.UNASSESSED

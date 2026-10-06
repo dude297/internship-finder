@@ -168,7 +168,8 @@ def dismiss(opportunity: Opportunity, reason: DismissReason | None) -> None:
     """ADR-017: hide it. Idempotent; a repeat keeps the first time and updates the reason."""
     if opportunity.dismissed_at is None:
         opportunity.dismissed_at = datetime.now(UTC)
-    opportunity.dismissed_reason = reason.value if reason else None
+    if reason is not None:  # a repeat without a reason keeps the existing one
+        opportunity.dismissed_reason = reason.value
 
 
 def undismiss(opportunity: Opportunity) -> None:
@@ -187,6 +188,6 @@ def revert_to_source(db: Session, opportunity: Opportunity) -> None:
         raise RevertRefused("This opportunity was created by hand; it has no source to revert to.")
     if opportunity.manually_curated_at is None:
         raise RevertRefused("This opportunity has no owner edits to revert.")
-    if not restore_source_content(db, opportunity, datetime.now(UTC)):
+    if not restore_source_content(db, opportunity):
         raise RevertRefused("No active source can restore this opportunity right now.")
     evaluate_automatically(db, opportunity)

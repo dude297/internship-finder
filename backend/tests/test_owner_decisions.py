@@ -1,6 +1,9 @@
 """Owner decisions on opportunities (ADR-017): durable hide, un-hide, and revert to source.
 Synthetic data only."""
 
+import copy
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,16 +12,23 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.enums import IngestionSourceKind
+from app.ingestion.adapters import program_registry
+from app.ingestion.adapters.community_feed import BUILTIN_IDENTIFIER
+from app.ingestion.pipeline import sync_source
 from app.models import IngestionSource, Opportunity, OpportunitySourceRecord
 from tests.ingestion_fixtures import (
+    FEED_URL,
     GREENHOUSE_BOARD,
     GREENHOUSE_URL,
     FakeSource,
+    feed,
+    feed_job,
     greenhouse_board,
     greenhouse_job,
 )
 from tests.test_api_workflow import US_CITIZENS, create, put_profile
 from tests.test_ingestion import count, sync
+from tests.test_program_registry_unit import ENTRY
 
 pytestmark = pytest.mark.postgres
 
@@ -91,6 +101,141 @@ def test_hide_survives_sync_and_is_not_reimported(
     assert response.json()["dismissed_at"] is None
     assert oid in ids(client)
     assert oid not in ids(client, hidden="only")
+
+
+def test_repeat_dismissal_without_a_reason_keeps_the_existing_one(client: TestClient) -> None:
+    oid = create(client)["id"]
+    client.put(f"/api/opportunities/{oid}/dismissal", json={"reason": "not_eligible"})
+    again = client.put(f"/api/opportunities/{oid}/dismissal").json()
+    assert again["dismissed_reason"] == "not_eligible"
+
+
+def test_hide_survives_takeover_fallback_and_reactivation(
+    client: TestClient, db: Session, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    feed_source = db.scalars(
+        select(IngestionSource).where(IngestionSource.identifier == BUILTIN_IDENTIFIER)
+    ).one()
+    web.json(
+        FEED_URL,
+        feed(
+            feed_job(
+                f"greenhouse:{GREENHOUSE_BOARD}:1001",
+                url="https://careers.example.com/robotics?gh_jid=1001",
+            )
+        ),
+    )
+    sync(db, feed_source, web)
+    opportunity = db.scalars(select(Opportunity)).one()
+    oid = str(opportunity.id)
+    client.put(f"/api/opportunities/{oid}/dismissal", json={"reason": "other"})
+
+    def still_hidden() -> None:
+        db.refresh(opportunity)
+        assert opportunity.dismissed_at is not None
+        assert opportunity.dismissed_reason == "other"
+        assert count(db, Opportunity) == 1
+        assert oid not in ids(client)
+
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(1001, content=SENTENCE)))
+    sync(db, gh_source, web)  # takeover by the ATS record
+    assert opportunity.description == SENTENCE
+    still_hidden()
+    web.json(GREENHOUSE_URL, greenhouse_board())
+    sync(db, gh_source, web)  # the ATS record closes: fallback to the feed
+    still_hidden()
+    web.json(GREENHOUSE_URL, greenhouse_board(greenhouse_job(1001, content=SENTENCE)))
+    sync(db, gh_source, web)  # reactivation
+    still_hidden()
+
+
+def edit_body(client: TestClient, oid: str, **changes: Any) -> dict[str, Any]:
+    body = client.get(f"/api/opportunities/{oid}").json()
+    edit: dict[str, Any] = {
+        "title": body["title"],
+        "organization": body["organization"],
+        "opportunity_type": body["opportunity_type"],
+        "description": body["description"],
+        "application_deadline": body["application_deadline"],
+        "requirements": [],
+    }
+    response = client.put(f"/api/opportunities/{oid}", json=edit | changes)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_revert_keeps_tracking_and_hidden_state(
+    client: TestClient, db: Session, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    oid = str(imported(db, gh_source, web).id)
+    client.put(f"/api/opportunities/{oid}/application", json={"status": "saved"})
+    client.put(f"/api/opportunities/{oid}/dismissal", json={"reason": "other"})
+    edit_body(client, oid, title="Owner Edit")
+
+    reverted = client.post(f"/api/opportunities/{oid}/revert-to-source").json()
+
+    assert reverted["title"] != "Owner Edit"
+    assert reverted["application"]["status"] == "saved"
+    assert reverted["dismissed_at"] is not None and reverted["dismissed_reason"] == "other"
+
+
+def test_revert_of_a_feed_owned_opportunity_keeps_its_description(
+    client: TestClient, db: Session, web: FakeSource
+) -> None:
+    feed_source = db.scalars(
+        select(IngestionSource).where(IngestionSource.identifier == BUILTIN_IDENTIFIER)
+    ).one()
+    web.json(FEED_URL, feed(feed_job()))
+    sync(db, feed_source, web)
+    oid = str(db.scalars(select(Opportunity)).one().id)
+    edit_body(client, oid, title="Owner Edit", description="Known text.")
+
+    reverted = client.post(f"/api/opportunities/{oid}/revert-to-source").json()
+
+    assert reverted["title"] == "Synthetic Engineering Intern"
+    assert reverted["description"] == "Known text."  # a feed owner never erases it (ADR-013 §4)
+
+
+@pytest.mark.registry
+def test_revert_of_a_registry_program_restores_its_dates(
+    client: TestClient, db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "r.json"
+    path.write_text(
+        json.dumps({"schema_version": 1, "programs": [copy.deepcopy(ENTRY)]}), encoding="utf-8"
+    )
+    monkeypatch.setattr(program_registry, "REGISTRY_PATH", path)
+    source = db.scalars(
+        select(IngestionSource).where(IngestionSource.kind == IngestionSourceKind.CURATED_REGISTRY)
+    ).one()
+    sync_source(db, source)
+    oid = str(db.scalars(select(Opportunity)).one().id)
+    edit_body(client, oid, title="Owner Edit", application_deadline="2041-02-01")
+
+    reverted = client.post(f"/api/opportunities/{oid}/revert-to-source").json()
+
+    assert reverted["title"] == ENTRY["title"]
+    assert reverted["application_deadline"] == ENTRY["verified"]["deadline"]
+    assert reverted["start_date"] == ENTRY["verified"]["start_date"]
+    assert reverted["verify_by"] == ENTRY["verify_by"]
+    assert reverted["manually_curated_at"] is None
+
+
+def test_revert_of_an_unnormalizable_stored_item_is_refused_unchanged(
+    client: TestClient, db: Session, gh_source: IngestionSource, web: FakeSource
+) -> None:
+    opportunity = imported(db, gh_source, web)
+    oid = str(opportunity.id)
+    edit_body(client, oid, title="Owner Edit")
+    record = db.scalars(select(OpportunitySourceRecord)).one()
+    record.raw_payload = {"not": "a greenhouse job"}
+    db.commit()
+
+    response = client.post(f"/api/opportunities/{oid}/revert-to-source")
+
+    assert response.status_code == 409
+    after = client.get(f"/api/opportunities/{oid}").json()
+    assert after["title"] == "Owner Edit" and after["manually_curated_at"] is not None
 
 
 def test_dismiss_without_body_bad_reason_and_missing(client: TestClient) -> None:

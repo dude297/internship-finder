@@ -29,7 +29,7 @@ The sync pipeline never reads or writes them. A hidden opportunity keeps receivi
 
 All owner-only and CSRF-protected by the existing router dependency ([ADR-007](ADR-007-single-user-auth-and-private-api.md)):
 
-- `PUT /api/opportunities/{id}/dismissal` with optional `{"reason": ...}`: hide. Idempotent; a repeat keeps the first `dismissed_at` and may change the reason.
+- `PUT /api/opportunities/{id}/dismissal` with optional `{"reason": ...}`: hide. Idempotent; a repeat keeps the first `dismissed_at`, and keeps the existing reason unless a new one is given.
 - `DELETE /api/opportunities/{id}/dismissal`: un-hide.
 - `POST /api/opportunities/{id}/revert-to-source`: see §4.
 
@@ -44,10 +44,13 @@ For an imported, curated opportunity, `revert-to-source`:
 3. Rewrites the source-derived canonical fields with `_write_canonical`, clears the dates and date-trust fields the source doesn't write (only the program registry writes them), deletes the recorded requirements and candidates, resets the assessment to `unassessed`, clears staleness and the extraction fingerprint and `manually_curated_at`, then refreshes candidates from the restored text.
 4. Re-evaluates through `evaluate_if_changed` (fingerprinted), so no history row is added if nothing eligibility- or fit-relevant changed.
 
+Details: a public-feed owner never erases the last known description (the feed has none; same guard as sync, ADR-013 §4). A registry owner restores its dates and date-trust fields from its stored item. The opportunity row is locked first, as in the sync owner query. Candidates are deleted and re-proposed, so suggestions the owner previously rejected or accepted reappear as **pending** after a revert.
+
 It is refused (`409`, message shown to the owner, nothing changed) when the opportunity is manual-only, has no owner edits, has no active automated record, or the stored item no longer normalizes. The UI requires confirmation and states that edits and recorded requirements are discarded; application tracking and hidden state are kept. After a revert the opportunity is not curated, so later syncs own its content again.
 
 ## Consequences
 
 - Positive: "not interested" survives every sync with no new tables; no sync code changed; revert reuses existing authority and fingerprint code.
 - Negative: revert discards accepted requirements along with the edits (the owner re-reviews, as for a new import). Hidden opportunities still count in per-source coverage and are still evaluated (cheap; keeps un-hide instant).
+- Rollback: the columns are additive, so rolling the app back to Milestone 8.1 without downgrading ignores them and **un-hides** every hidden opportunity (it would also let it reappear in lists); downgrading the migration deletes the hidden state.
 - Not built: bulk hide, a hidden count badge, per-row list actions, hiding by company or source. Hiding is per opportunity; a posting that a source re-lists under a different identity can appear as a new opportunity ([ADR-008 §6](ADR-008-opportunity-ingestion-and-deduplication.md)).

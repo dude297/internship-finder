@@ -64,7 +64,7 @@ CHECK-only ([ADR-015 §7](decisions/ADR-015-freshness-requirements-v2-and-indepe
 
 ### Milestone 9 migration (`d4f8a1c6e2b9`, unreleased)
 
-Additive ([ADR-017](decisions/ADR-017-owner-opportunity-decisions.md)): nullable `opportunities.dismissed_at` (timestamptz) and `dismissed_reason` (varchar(30)), plus CHECK `ck_opportunities_dismissed_reason_needs_dismissed_at`. No data change; the M8.1 backend runs unchanged on the migrated schema. **Downgrade** drops both columns (hidden state is lost). Verified locally on PostgreSQL: base → head, `alembic check`, head → `b7e3d9f1a2c4` → head; `tests/test_migrations.py` covers the round trip and the CHECK.
+Additive ([ADR-017](decisions/ADR-017-owner-opportunity-decisions.md)): nullable `opportunities.dismissed_at` (timestamptz) and `dismissed_reason` (varchar(30)), plus CHECK `ck_opportunities_dismissed_reason_needs_dismissed_at`. No data change; the M8.1 backend runs unchanged on the migrated schema. **Downgrade** drops both columns (hidden state is lost). Rolling the app back to M8.1 *without* downgrading ignores the columns and un-hides every hidden opportunity. Verified locally on PostgreSQL: base → head, `alembic check`, head → `b7e3d9f1a2c4` → head; `tests/test_migrations.py` covers the round trip and the CHECK.
 
 ### Conventions
 
