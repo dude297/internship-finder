@@ -81,7 +81,8 @@ Only after it merges is the milestone **COMPLETE**. The procedure is in [deploym
 
 - canonical documents exist; `status.json` is valid and its schema revision has a migration file; generated status blocks match it;
 - internal Markdown links and `#anchors` resolve; no duplicate H1/H2 inside a canonical document; research headers present;
-- with `--base <ref>`: code paths changed without their canonical document fail (migrations/models → data-model.md; eligibility/requirements → eligibility.md; scoring → scoring.md; ingestion/catalog → sources.md; sync workflow/source health → operations.md; `vercel.json` → deployment.md), and `feature/` branches must change PROJECT_STATE.md and CHANGELOG.md.
+- with `--base <ref>`: code paths changed without their canonical document fail (migrations/models/`enums.py` → data-model.md; eligibility/requirements and `requirement_candidates.py`/`requirement_review.py` → eligibility.md; scoring → scoring.md; ingestion, catalogs, `program_registry.json` and the discovery/sources services → sources.md; sync workflow, source health, `freshness.py`, `cli.py` → operations.md; `core/config.py` → deployment.md; `vercel.json` → deployment.md; `ci.yml` → development.md), and `feature/` branches must change PROJECT_STATE.md, CHANGELOG.md, and `status.json`. A whitespace-only edit does not count as updating a document, renames count as delete plus add, an unreachable base is reported as a failure, a changed `production` status needs a `docs/releases/` record in the same range, and release records may only be appended to;
+- links: inline and reference-style (`[x]: target`) targets, exact filename case (Linux CI), and `production.main_sha` must be a real commit.
 
 A change that truly leaves behavior unchanged (refactor, formatting, comments) is waived per rule with a commit trailer, which stays reviewable in history:
 
@@ -90,3 +91,5 @@ Docs-Impact-Waiver: <rule>: <reason, 10+ characters>
 ```
 
 Rules: `migration`, `models`, `eligibility`, `scoring`, `ingestion`, `scheduling`, `hosting`, `milestone`. The guard catches a missing document edit, not a wrong one: review still owns correctness.
+
+Known limitations (reviewed, accepted): the guard checks that *a* document changed, not that the right words did, so a one-word edit satisfies a rule; `backend/app/api/`, `schemas/`, other `services/`, and `frontend/src/` behavior changes have no code-to-document rule (too many false positives; the PR's Documentation Impact Audit and review own them); the `milestone` rule keys on the `feature/` branch name, so a milestone on a differently named branch is not enforced; waiver reasons are not validated, only recorded; on a squash merge the waiver trailer must be carried into the squash message or the post-merge push check fails; HTML anchors, images, and non-ATX headings are not link-checked; research headers are only checked for presence in the first 8 lines; deleting or editing the `docs` job in `ci.yml` is only stopped by branch protection (require the `docs` check) and review; `production.schema_revision` and `main_sha` cannot be verified against Neon/Render from CI, so release closeout stays a reviewed step.
