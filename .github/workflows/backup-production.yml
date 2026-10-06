@@ -1,0 +1,96 @@
+name: Encrypted database backup
+
+# ADR-021: a weekly `pg_dump` of the production Neon database, encrypted with a PUBLIC age key
+# before it leaves this job, kept as a workflow artifact for 14 days. The workflow holds no
+# decryption key: the owner keeps the private key offline. Schedule and workflow_dispatch only
+# (never pull_request / pull_request_target / push: those can run from a fork, and this job
+# carries a production database secret). `schedule` only runs on the default branch of the base
+# repository; the `if:` guard is defense in depth against a manual dispatch elsewhere.
+#
+# Artifacts of a public repository are downloadable by any signed-in GitHub user, so the file is
+# encrypted before upload and its name carries nothing but the date.
+on:
+  schedule:
+    # Sundays 09:43 UTC. Off the hour: GitHub delays or drops scheduled runs at the top of the hour.
+    - cron: "43 9 * * 0"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.repository == 'dude297/internship-finder' && github.ref == 'refs/heads/main' && vars.BACKUP_AGE_RECIPIENT != ''
+    # Pinned image (not -latest): the PGDG apt line below names this release's codename (noble).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Same GitHub Environment as the scheduled sync (deployment branches: main only); it holds
+    # the PRODUCTION_DATABASE_URL secret. BACKUP_AGE_RECIPIENT is a plain variable (a public key).
+    environment: production
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Check the backup is configured
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          if [ -z "$BACKUP_AGE_RECIPIENT" ]; then
+            echo "::error::BACKUP_AGE_RECIPIENT is empty; the owner must set the age public key variable first (docs/operations.md)."
+            exit 1
+          fi
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL is empty; configure it on the production environment."
+            exit 1
+          fi
+
+      - name: Install PostgreSQL 18 client (PGDG)
+        # pg_dump must match the server's major version (Neon runs PostgreSQL 18). The apt key's
+        # fingerprint is checked against the one PostgreSQL publishes before it is trusted.
+        run: |
+          set -euo pipefail
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o pgdg.asc
+          [ "$(gpg --show-keys --with-colons pgdg.asc | grep -c '^pub')" = 1 ]  # exactly one key in the file
+          gpg --show-keys --with-colons pgdg.asc | grep -qx 'fpr:::::::::B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8:'
+          sudo install -d /usr/share/keyrings
+          gpg --dearmor < pgdg.asc | sudo tee /usr/share/keyrings/pgdg.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          pg_dump --version | grep -q 'pg_dump (PostgreSQL) 18\.'
+
+      - name: Install age (pinned release, checksum verified)
+        # The SHA-256 is a trust-on-first-use pin: it detects a changed or tampered download, not a
+        # compromised upstream release at the time it was pinned. Bump version and checksum together.
+        env:
+          AGE_VERSION: v1.3.2
+          AGE_SHA256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+        run: |
+          set -euo pipefail
+          curl -fsSL -o age.tar.gz "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-amd64.tar.gz"
+          echo "${AGE_SHA256}  age.tar.gz" | sha256sum -c -
+          sudo tar -xzf age.tar.gz -C /usr/local/bin --strip-components=1 age/age
+          age --version
+
+      - name: Dump and encrypt
+        env:
+          # Scoped to this step only: never a job- or workflow-level env, and never logged.
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          mkdir "${RUNNER_TEMP}/out"
+          scripts/backup_db.sh "${RUNNER_TEMP}/out/backup-$(date -u +%Y%m%d).dump.age"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/out/*.dump.age
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
