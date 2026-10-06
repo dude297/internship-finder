@@ -9,10 +9,10 @@ A personal, single-user tool for finding internship and research opportunities, 
 <!-- BEGIN GENERATED STATUS (scripts/check_docs.py --write-status) -->
 | | |
 |---|---|
-| **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
-| Production `main` | `cf1ad43` |
-| Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | Milestone 19 on `feature/m19-ux-a11y` |
+| **Current Production** | Milestone 19, released 2026-10-06 ([release record](docs/releases/2026-10-06-m12-m19.md)) |
+| Production `main` | `8ea9fea` |
+| Production schema | `c9e2b7a4d1f8` |
+| **Current Development** | none |
 <!-- END GENERATED STATUS -->
 
 ## Stack
