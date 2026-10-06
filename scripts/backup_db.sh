@@ -51,6 +51,7 @@ if [[ "$rest" == *@* && "$userinfo" == *:* ]]; then
   hex='\x' # a literal: a backslash typed inside "${...}" would be dropped
   PGPASSWORD="$(printf '%b' "${pw//%/$hex}")"
   export PGPASSWORD
+  [ "${GITHUB_ACTIONS:-}" = "true" ] && echo "::add-mask::$PGPASSWORD"
   url="${url%%://*}://${userinfo%%:*}@${rest#*@}"
 fi
 
