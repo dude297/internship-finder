@@ -697,15 +697,21 @@ def _sync(
     adapter = adapter_for(source.kind)
     try:
         if adapter.collect is not None:
-            # ADR-014 §2: several requests (or none); no conditional-request validators.
+            # ADR-014 §2: several requests (or none). An adapter may return a `Fetched` (one
+            # conditional request, ADR-022); a plain payload carries no validators.
             rows = db.execute(
                 select(
                     OpportunitySourceRecord.external_id, OpportunitySourceRecord.raw_payload
                 ).where(OpportunitySourceRecord.ingestion_source_id == source.id)
             ).all()
             known = {external_id: raw for external_id, raw in rows if external_id is not None}
-            request = CollectRequest(config, source.scope, known, transport)
-            fetched = Fetched(adapter.collect(request), None, None)
+            request = CollectRequest(
+                config, source.scope, known, transport, source.etag, source.last_modified
+            )
+            collected = adapter.collect(request)
+            fetched = (
+                collected if isinstance(collected, Fetched) else Fetched(collected, None, None)
+            )
         else:
             fetched = fetch_json(
                 adapter.url(config),

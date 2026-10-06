@@ -37,6 +37,10 @@ jobs:
     # A GitHub Environment named "production" must exist with PRODUCTION_DATABASE_URL set as an
     # environment secret (ideally with required reviewers / deployment protection rules). This
     # scopes the secret so it's never readable by a workflow run outside this environment.
+    # ADR-027 (Proposed): once the owner sets SYNC_DATABASE_URL (a least-privilege `if_sync` role,
+    # docs/operations.md), it takes precedence; until then the full-privilege PRODUCTION_DATABASE_URL
+    # is used exactly as before. The backup workflow keeps PRODUCTION_DATABASE_URL (pg_dump needs
+    # read access to everything).
     environment: production
     defaults:
       run:
@@ -55,15 +59,15 @@ jobs:
 
       - name: Check the database secret is configured
         env:
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.SYNC_DATABASE_URL || secrets.PRODUCTION_DATABASE_URL }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "::error::PRODUCTION_DATABASE_URL is empty; configure it on the production environment."
+            echo "::error::neither SYNC_DATABASE_URL nor PRODUCTION_DATABASE_URL is set; configure one on the production environment."
             exit 1
           fi
 
       - name: Sync every enabled source
         env:
           # Scoped to this step only: never a job- or workflow-level env, and never logged.
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.SYNC_DATABASE_URL || secrets.PRODUCTION_DATABASE_URL }}
         run: .venv/bin/python -m app.cli sync-sources --scheduled

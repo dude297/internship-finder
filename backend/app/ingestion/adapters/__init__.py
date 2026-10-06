@@ -31,6 +31,9 @@ class CollectRequest:
     # external_id → this source's stored raw item (to reuse unchanged detail responses).
     known: Mapping[str, Any]
     transport: httpx2.BaseTransport | None
+    # Stored validators, for an adapter that makes one conditional request (ADR-022).
+    etag: str | None = None
+    last_modified: str | None = None
 
 
 @dataclass(frozen=True)
@@ -44,7 +47,8 @@ class Adapter:
     normalize: Callable[[dict[str, Any], SourceConfig], NormalizedOpportunity]
     # ADR-014 §2: set for adapters that need several requests (pagination, detail) or none (the
     # registry file). Returns the payload `parse` reads (never None); raises FetchError or
-    # SnapshotError when no complete snapshot can be built. No conditional requests then.
+    # SnapshotError when no complete snapshot can be built. May return a `Fetched` (Greenhouse,
+    # ADR-022) to keep conditional-request validators; a plain payload carries none.
     collect: Callable[["CollectRequest"], Any] | None = None
 
 
