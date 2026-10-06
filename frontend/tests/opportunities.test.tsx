@@ -16,6 +16,23 @@ describe('opportunity list', () => {
     )
   })
 
+  it('opens More filters when one is active and clears every filter', async () => {
+    const calls = mockApi({
+      ...loggedIn,
+      ...noSources,
+      'GET /api/opportunities': () => listPage([summary()]),
+    })
+    renderAt('/opportunities?freshness=direct_verified&eligibility=eligible')
+
+    expect(await screen.findByText(/More filters \(1 active\)/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Freshness')).toHaveValue('direct_verified')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    await waitFor(() => expect(screen.getByLabelText('Freshness')).toHaveValue(''))
+    expect(screen.getByLabelText('Eligibility')).toHaveValue('')
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull()
+    expect(calls.at(-1)?.path).not.toContain('freshness')
+  })
+
   it('keeps every eligibility state distinct', async () => {
     mockApi({
       ...loggedIn,
