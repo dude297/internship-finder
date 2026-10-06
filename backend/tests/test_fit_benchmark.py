@@ -337,6 +337,8 @@ def test_same_region_city_scores_less_than_exact_city() -> None:
         ("Greater Bay Area", 100),
         ("Sunnyvale, CA 94085", 100),
         ("Oakland, NY 10001", 0),
+        ("Oakland 10001", 0),
+        ("San Jose, CA 95134-1706", 100),
     ],
 )
 def test_region_rejects_other_states_and_countries(location: str, expected: int) -> None:

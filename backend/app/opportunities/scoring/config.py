@@ -296,6 +296,8 @@ REGION_CITIES: Final[dict[str, frozenset[str]]] = {
     ),
 }
 REGION_LABELS: Final = frozenset({"bay area", "silicon valley"})
+# ZIP prefixes that stay inside a region (a ZIP elsewhere, e.g. "Oakland 10001", is another place).
+REGION_ZIP_PREFIXES: Final[dict[str, tuple[str, ...]]] = {"bay area": ("94", "95")}
 REGION_CITY_SCORE: Final = 75  # same-region city; a region-label preference scores 100
 REGION_ALLOWED_WORDS: Final = frozenset(
     """
