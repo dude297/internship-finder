@@ -473,6 +473,378 @@
         "robotics",
         "hardware"
       ]
+    },
+    {
+      "organization": "Rocket Lab",
+      "kind": "greenhouse",
+      "identifier": "rocketlab",
+      "region": null,
+      "careers_url": "https://www.rocketlabcorp.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/rocketlab/jobs (documented public API, HTTP 200, board name \"Rocket Lab Corporation\"; posting links on job-boards.greenhouse.io); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Astranis",
+      "kind": "greenhouse",
+      "identifier": "astranis",
+      "region": null,
+      "careers_url": "https://www.astranis.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/astranis/jobs (documented public API, HTTP 200, board name \"Astranis\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Varda Space Industries",
+      "kind": "greenhouse",
+      "identifier": "vardaspace",
+      "region": null,
+      "careers_url": "https://varda.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/vardaspace/jobs (documented public API, HTTP 200, board name \"Varda Space Industries\"; posting links on job-boards.greenhouse.io); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Zipline",
+      "kind": "greenhouse",
+      "identifier": "flyzipline",
+      "region": null,
+      "careers_url": "https://www.zipline.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/flyzipline/jobs (documented public API, HTTP 200, board name \"Zipline \"; posting links on www.zipline.com); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "robotics",
+        "aerospace",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Neuralink",
+      "kind": "greenhouse",
+      "identifier": "neuralink",
+      "region": null,
+      "careers_url": "https://neuralink.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/neuralink/jobs (documented public API, HTTP 200, board name \"Neuralink\"; posting links on boards.greenhouse.io); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "hardware",
+        "research",
+        "robotics"
+      ]
+    },
+    {
+      "organization": "Figure AI",
+      "kind": "greenhouse",
+      "identifier": "figureai",
+      "region": null,
+      "careers_url": "https://www.figure.ai/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/figureai/jobs (documented public API, HTTP 200, board name \"Figure\"; posting links on job-boards.greenhouse.io); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "robotics",
+        "ai"
+      ]
+    },
+    {
+      "organization": "Kodiak Robotics",
+      "kind": "greenhouse",
+      "identifier": "kodiak",
+      "region": null,
+      "careers_url": "https://kodiak.ai/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/kodiak/jobs (documented public API, HTTP 200, board name \"Kodiak\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "mobility",
+        "robotics",
+        "ai"
+      ]
+    },
+    {
+      "organization": "PsiQuantum",
+      "kind": "greenhouse",
+      "identifier": "psiquantum",
+      "region": null,
+      "careers_url": "https://www.psiquantum.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/psiquantum/jobs (documented public API, HTTP 200, board name \"PsiQuantum\"; posting links on www.psiquantum.com); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "hardware",
+        "research"
+      ]
+    },
+    {
+      "organization": "Lightmatter",
+      "kind": "greenhouse",
+      "identifier": "lightmatter",
+      "region": null,
+      "careers_url": "https://lightmatter.co/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/lightmatter/jobs (documented public API, HTTP 200, board name \"Lightmatter\"; posting links on boards.greenhouse.io); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "ai",
+        "hardware",
+        "semiconductor"
+      ]
+    },
+    {
+      "organization": "Astera Labs",
+      "kind": "greenhouse",
+      "identifier": "asteralabs",
+      "region": null,
+      "careers_url": "https://www.asteralabs.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/asteralabs/jobs (documented public API, HTTP 200, board name \"Astera Labs\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "semiconductor",
+        "hardware",
+        "cloud"
+      ]
+    },
+    {
+      "organization": "Formlabs",
+      "kind": "greenhouse",
+      "identifier": "formlabs",
+      "region": null,
+      "careers_url": "https://careers.formlabs.com/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/formlabs/jobs (documented public API, HTTP 200, board name \"Formlabs\"; posting links on careers.formlabs.com); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Together AI",
+      "kind": "greenhouse",
+      "identifier": "togetherai",
+      "region": null,
+      "careers_url": "https://www.together.ai/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/togetherai/jobs (documented public API, HTTP 200, board name \"Together AI\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "ai",
+        "cloud"
+      ]
+    },
+    {
+      "organization": "Roblox",
+      "kind": "greenhouse",
+      "identifier": "roblox",
+      "region": null,
+      "careers_url": "https://careers.roblox.com/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/roblox/jobs (documented public API, HTTP 200, board name \"Roblox\"; posting links on careers.roblox.com); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "software"
+      ]
+    },
+    {
+      "organization": "Samsara",
+      "kind": "greenhouse",
+      "identifier": "samsara",
+      "region": null,
+      "careers_url": "https://www.samsara.com/company/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/samsara/jobs (documented public API, HTTP 200, board name \"Samsara\"; posting links on www.samsara.com); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "cloud",
+        "hardware",
+        "software"
+      ]
+    },
+    {
+      "organization": "Kairos Power",
+      "kind": "greenhouse",
+      "identifier": "kairospower",
+      "region": null,
+      "careers_url": "https://kairospower.com/careers/",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/kairospower/jobs (documented public API, HTTP 200, board name \"Kairos Power\"; posting links on job-boards.greenhouse.io)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "research",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Efficient Computer",
+      "kind": "greenhouse",
+      "identifier": "efficientcomputer",
+      "region": null,
+      "careers_url": "https://www.efficient.computer/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/efficientcomputer/jobs (documented public API, HTTP 200, board name \"Efficient Computer\"; posting links on job-boards.greenhouse.io); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "semiconductor",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Motional",
+      "kind": "greenhouse",
+      "identifier": "motional",
+      "region": null,
+      "careers_url": "https://motional.com/careers",
+      "evidence": "https://boards-api.greenhouse.io/v1/boards/motional/jobs (documented public API, HTTP 200, board name \"Motional\"; posting links on motional.com); careers page did not expose the board link to a non-JS fetch, ownership rests on the API's company name",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "mobility",
+        "robotics",
+        "ai"
+      ]
+    },
+    {
+      "organization": "Shield AI",
+      "kind": "lever",
+      "identifier": "shieldai",
+      "region": "global",
+      "careers_url": "https://shield.ai/careers/",
+      "evidence": "https://api.lever.co/v0/postings/shieldai?mode=json (documented public API, HTTP 200; posting links on jobs.lever.co)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "robotics",
+        "ai"
+      ]
+    },
+    {
+      "organization": "Waabi",
+      "kind": "lever",
+      "identifier": "waabi",
+      "region": "global",
+      "careers_url": "https://waabi.ai/careers/",
+      "evidence": "https://api.lever.co/v0/postings/waabi?mode=json (documented public API, HTTP 200; posting links on jobs.lever.co)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "mobility",
+        "robotics",
+        "ai"
+      ]
+    },
+    {
+      "organization": "Quantinuum",
+      "kind": "lever",
+      "identifier": "quantinuum",
+      "region": "eu",
+      "careers_url": "https://www.quantinuum.com/careers",
+      "evidence": "https://api.eu.lever.co/v0/postings/quantinuum?mode=json (documented public API, HTTP 200; posting links on jobs.eu.lever.co)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "research",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Rigetti Computing",
+      "kind": "lever",
+      "identifier": "rigetti",
+      "region": "global",
+      "careers_url": "https://www.rigetti.com/careers",
+      "evidence": "https://api.lever.co/v0/postings/rigetti?mode=json (documented public API, HTTP 200; posting links on jobs.lever.co)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "research",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Saronic",
+      "kind": "ashby",
+      "identifier": "saronic",
+      "region": null,
+      "careers_url": "https://www.saronic.com/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/saronic (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "aerospace",
+        "robotics",
+        "ai"
+      ]
+    },
+    {
+      "organization": "Etched",
+      "kind": "ashby",
+      "identifier": "etched",
+      "region": null,
+      "careers_url": "https://www.etched.com/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/etched (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "ai",
+        "hardware",
+        "semiconductor"
+      ]
+    },
+    {
+      "organization": "Gecko Robotics",
+      "kind": "ashby",
+      "identifier": "gecko-robotics",
+      "region": null,
+      "careers_url": "https://www.geckorobotics.com/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/gecko-robotics (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "robotics",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Cohere",
+      "kind": "ashby",
+      "identifier": "cohere",
+      "region": null,
+      "careers_url": "https://cohere.com/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/cohere (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "ai"
+      ]
+    },
+    {
+      "organization": "Notion",
+      "kind": "ashby",
+      "identifier": "notion",
+      "region": null,
+      "careers_url": "https://www.notion.com/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/notion (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "software"
+      ]
+    },
+    {
+      "organization": "1X Technologies",
+      "kind": "ashby",
+      "identifier": "1x",
+      "region": null,
+      "careers_url": "https://www.1x.tech/careers",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/1x (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "robotics",
+        "ai",
+        "hardware"
+      ]
+    },
+    {
+      "organization": "Helion Energy",
+      "kind": "ashby",
+      "identifier": "helion",
+      "region": null,
+      "careers_url": "https://www.helionenergy.com/careers/",
+      "evidence": "https://api.ashbyhq.com/posting-api/job-board/helion (documented public API, HTTP 200; posting links on jobs.ashbyhq.com)",
+      "verified_at": "2026-10-06",
+      "tags": [
+        "research",
+        "hardware"
+      ]
     }
   ]
 }

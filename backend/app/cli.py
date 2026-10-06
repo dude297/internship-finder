@@ -27,6 +27,16 @@ Requirement candidate catalog scan (ADR-012 §9):
 Idempotent; never accepts, rejects, changes an assessment status, or evaluates. Prints counts
 only. Exits 2 on an operational (database) error, never on an individual extractor failure.
 
+Eligibility re-evaluation (ADR-018):
+
+    python -m app.cli reevaluate [--stale-only] [--dry-run] [--batch-size N]
+
+Runs the existing batched catalog pass for the owner's profile: appends an evaluation row only
+for opportunities whose eligibility or fit fingerprint is stale (rules/scoring version bumped,
+or any other fingerprinted input changed). `--stale-only` is the pass's only mode, accepted for
+explicitness; `--dry-run` counts and writes nothing. Counts only; exit 2 on a database error,
+exit 1 (class name only) on any other failure.
+
 Source coverage and discovery (ADR-013 §2, §9):
 
     python -m app.cli source-coverage
@@ -68,6 +78,7 @@ from app.enums import IngestionRunStatus
 from app.ingestion.http import configured_transport
 from app.ingestion.pipeline import SyncInProgress, sync_enabled_sources, sync_source
 from app.models import AuthUser, IngestionRun, IngestionSource
+from app.repositories import CATALOG_BATCH_SIZE, evaluate_catalog, evaluation_context
 from app.services import auth, source_bootstrap, source_discovery, source_retirement
 from app.services.requirement_candidates import CATALOG_SCAN_BATCH_SIZE, scan_catalog
 
@@ -198,6 +209,26 @@ def _scan_requirements(batch_size: int) -> int:
         f"scanned {result.scanned}, refreshed {result.refreshed}, unchanged {result.unchanged},"
         f" failed {result.failed}, candidates_created {result.candidates_created}"
     )
+    return 0
+
+
+def _reevaluate(batch_size: int, dry_run: bool) -> int:
+    try:
+        with Session(get_engine(), expire_on_commit=False) as db:
+            context = evaluation_context(db)
+            if context is None:
+                print("no profile; nothing to evaluate")
+                return 0
+            result = evaluate_catalog(db, context, batch_size=batch_size, dry_run=dry_run)
+            db.commit()
+    except (OperationalError, ArgumentError, RuntimeError):
+        print(DB_ERROR_MESSAGE, file=sys.stderr)
+        return 2
+    except Exception as error:  # fixed line + class name only: never the message or parameters
+        print(f"error: re-evaluation failed ({type(error).__name__}).", file=sys.stderr)
+        return 1
+    label = "would evaluate" if dry_run else "evaluated"
+    print(f"{label} {result.evaluated}, unchanged {result.unchanged}")
     return 0
 
 
@@ -335,6 +366,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "scan-requirements", help="refresh requirement candidates catalog-wide (ADR-012 §9)"
     )
     scan.add_argument("--batch-size", type=int, default=CATALOG_SCAN_BATCH_SIZE)
+    reevaluate = commands.add_parser(
+        "reevaluate", help="re-evaluate opportunities with stale fingerprints (ADR-018)"
+    )
+    reevaluate.add_argument("--stale-only", action="store_true", help="the only mode; explicit")
+    reevaluate.add_argument("--dry-run", action="store_true", help="count, write nothing")
+    reevaluate.add_argument("--batch-size", type=int, default=CATALOG_BATCH_SIZE)
     commands.add_parser(
         "source-coverage", help="print ATS source coverage and discovery counts (ADR-013)"
     )
@@ -360,6 +397,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _sync_source(args.source)
     if args.command == "scan-requirements":
         return _scan_requirements(args.batch_size)
+    if args.command == "reevaluate":
+        return _reevaluate(args.batch_size, args.dry_run)
     if args.command == "source-coverage":
         return _source_coverage()
     if args.command == "retire-source":

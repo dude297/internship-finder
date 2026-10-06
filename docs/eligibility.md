@@ -42,6 +42,7 @@ Implementation: `backend/app/opportunities/eligibility/`. The single entry point
 - Creating or updating an opportunity (by hand or by a source sync) appends an evaluation if a profile exists **and** the eligibility inputs changed since the latest evaluation. The inputs are compared by a SHA-256 fingerprint of the rules version, the canonical profile inputs, the opportunity's reference dates and assessment status, and its requirements ([ADR-008 §9](decisions/ADR-008-opportunity-ingestion-and-deduplication.md#9-evaluation-without-history-explosion)), so a title-only edit or an unchanged sync adds nothing. Without a profile, nothing is evaluated and the UI says so. An evaluation is never faked.
 - Imported opportunities start `unassessed` (ELIG-REQ-000 → at least `needs_verification`). Source fields such as the discovery feed's sponsorship, H-1B, or skill tags never become requirements. The owner records requirements with **Review requirements** (the regular editor) and marks the assessment `partial` or `complete`; later syncs never overwrite that review.
 - Saving the profile re-evaluates every opportunity when an input the rules read changed (the fields of `ProfileInput`: the education timeline, date of birth, and citizenships). Changing only the grade, location, or work authorizations doesn't, because no v1 rule reads them.
+- A rules or scoring version bump makes every evaluation stale ([ADR-018](decisions/ADR-018-evaluation-staleness.md)): both versions are part of the fingerprints. `python -m app.cli reevaluate` runs the catalog pass and appends the new rows (a release step). Time passing never makes an evaluation stale: rules resolve the education status and age at each requirement's reference date, never at today, so an evaluation is a pure function of the profile and the opportunity's dates.
 - `POST /api/opportunities/{id}/evaluate` appends one on demand.
 - Application tracking never affects eligibility.
 
@@ -57,7 +58,7 @@ Imported and manual postings get deterministic requirement **suggestions** (`req
 
 - Extraction never changes `requirements_assessment_status`. Accepting the first requirement while `unassessed` moves it to `partial`. Only the owner's explicit choice makes it `complete` (zero requirements allowed). Rejecting every suggestion never implies `complete`.
 - If a sync later changes a reviewed posting's text, a `complete` assessment is downgraded (to `partial`, or `unassessed` if no canonical requirement remains), the opportunity is flagged "Posting changed since requirement review", accepted requirements are kept, and the opportunity is re-evaluated.
-- An accepted work-authorization suggestion evaluates to `needs_verification` (ELIG-REQ-001) until a work-authorization rule exists.
+- An accepted work-authorization suggestion evaluates to `needs_verification` (ELIG-REQ-001) until a work-authorization rule exists (design: [work-authorization-eligibility-design.md](research/work-authorization-eligibility-design.md); not implemented).
 - Suggestions need posting text: the discovery feed has no description, so feed-only postings stay `unassessed` (`needs_verification`) until the owner enters requirements or a board source with descriptions supplies text. Production figures: [deployment.md](deployment.md), [CHANGELOG.md](../CHANGELOG.md).
 
 ## Time-Aware Evaluation
