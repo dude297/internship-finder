@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | none |
+| **Current Development** | Milestone 19 on `feature/m19-ux-a11y` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -98,6 +98,7 @@ Merged to `main` (`919f2e8`), **not deployed**. Production still runs Milestone 
 | 16 Dashboard and Application Engine v2 | [#57](https://github.com/dude297/internship-finder/pull/57) | `c9e2b7a4d1f8` | [ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md); `/dashboard` default, `/applications`, event history |
 | 17 Operational finish | [#48](https://github.com/dude297/internship-finder/pull/48), [#54](https://github.com/dude297/internship-finder/pull/54) | none | CI token, backup argv; least-privilege `if_sync` role ([ADR-027](docs/decisions/ADR-027-least-privilege-sync-role.md), **not activated**) |
 | 19 UX | [#51](https://github.com/dude297/internship-finder/pull/51), [#56](https://github.com/dude297/internship-finder/pull/56) | none | landing, login states, design tokens; Sources page |
+| 19 UX final pass (a11y, responsive) | this PR (`feature/m19-ux-a11y`) | none | axe e2e on every route, nav and pipeline layout; unmerged |
 
 Deferred: Milestone 16 in the original roadmap (Target Company Intelligence; the feed Pareto and catalog cover gap finding for now) and Milestone 18 beyond what the dashboard shows. Merged but **not activated**: the encrypted weekly backup ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
 

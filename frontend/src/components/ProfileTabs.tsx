@@ -8,7 +8,10 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
 /** Eligibility (may I apply?) and Match (how well does it fit?) stay separate (ADR-001). */
 export function ProfileTabs() {
   return (
-    <nav aria-label="Profile sections" className="flex gap-2 border-b border-slate-200">
+    <nav
+      aria-label="Profile sections"
+      className="flex flex-wrap gap-x-2 border-b border-slate-200"
+    >
       <NavLink to="/profile" end className={tabClass}>
         Eligibility Profile
       </NavLink>

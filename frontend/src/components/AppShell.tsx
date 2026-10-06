@@ -7,7 +7,7 @@ import { Mark } from './Mark'
 import { ErrorMessage } from './ui'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `inline-flex min-h-9 items-center rounded-control px-3 ${
+  `inline-flex min-h-9 items-center rounded-control px-2.5 sm:px-3 ${
     isActive
       ? 'bg-slate-100 font-medium shadow-[inset_0_-2px_0_var(--color-lab-accent-strong)]'
       : 'text-slate-700 hover:bg-slate-100'
@@ -75,24 +75,24 @@ export function AppShell() {
             <Mark className="h-6 w-6 text-blue-700" />
             Personal Internship Finder
           </p>
-          <nav aria-label="Main" className="flex flex-wrap gap-1">
+          <nav aria-label="Main" className="order-last flex w-full flex-wrap gap-1">
             <NavLink to="/dashboard" className={linkClass}>
               Dashboard
             </NavLink>
             <NavLink to="/inbox" className={linkClass}>
               Inbox
             </NavLink>
-            <NavLink to="/applications" className={linkClass}>
-              Applications
-            </NavLink>
-            <NavLink to="/profile" className={linkClass}>
-              Profile
-            </NavLink>
             <NavLink to="/opportunities" className={linkClass}>
               Opportunities
             </NavLink>
             <NavLink to="/requirements" className={linkClass}>
               Review
+            </NavLink>
+            <NavLink to="/applications" className={linkClass}>
+              Applications
+            </NavLink>
+            <NavLink to="/profile" className={linkClass}>
+              Profile
             </NavLink>
             <NavLink to="/sources" className={linkClass}>
               Sources
