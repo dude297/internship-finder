@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+
+- Direct Source Catalog: 26 more verified boards (64 to 90; Greenhouse 20, Ashby 5, Lever 1), mostly space, robotics, fusion/quantum, AI-hardware, and quant-with-hardware employers (e.g. Muon Space, K2 Space, General Matter, Graphcore, IMC, Virtu), each checked against its provider's documented API on 2026-10-06. None are enabled; enabling all would pass the 50-source cap. No migration.
+- `backend/scripts/feed_pareto.py`: read-only report of how much of the public community feed is not covered by a direct source (status, provider histogram, top organizations, unconfigured supported boards). Analysis: [feed-dependence-pareto-2026-10-06.md](docs/research/feed-dependence-pareto-2026-10-06.md) (68% of the feed's listings are Workday or Oracle HCM, which the app does not support).
+
 ### Documentation
 
 - Research note [m13-workday-oracle-provider-gate.md](docs/research/m13-workday-oracle-provider-gate.md): Workday (YELLOW: robots-advertised sitemap capped at 100 URLs plus JobPosting JSON-LD), Oracle Recruiting Cloud (RED), 14 ATS families (Personio and Teamtailor GREEN pending governance), and mega-cap career sites. No code or behavior change.
