@@ -4,7 +4,9 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
-Nothing yet.
+### Documentation
+
+- Research note [m13-workday-oracle-provider-gate.md](docs/research/m13-workday-oracle-provider-gate.md): Workday (YELLOW: robots-advertised sitemap capped at 100 URLs plus JobPosting JSON-LD), Oracle Recruiting Cloud (RED), 14 ATS families (Personio and Teamtailor GREEN pending governance), and mega-cap career sites. No code or behavior change.
 
 ## Milestones 8.2, 9, 10, 10.1, and 11 (released 2026-10-06)
 
