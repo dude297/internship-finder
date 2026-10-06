@@ -51,7 +51,10 @@ def save_application(
     when the status first becomes `applied` and it is still empty; a value the owner entered is
     never overwritten. Eligibility is untouched."""
     now = now or datetime.now(UTC)
-    app = opportunity.application
+    # Lock the row so two saves carrying the same expected_updated_at can't both pass the check.
+    app = db.scalars(
+        select(Application).where(Application.opportunity_id == opportunity.id).with_for_update()
+    ).one_or_none()
     creating = app is None
     expected = body.expected_updated_at
     if expected is not None and (app is None or app.updated_at != _aware(expected)):
