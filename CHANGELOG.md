@@ -14,6 +14,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- Curated Program Registry re-verified 2026-10-06 against the official pages: Tech Interactive holiday teen volunteers now carry verified application dates (Oct 9 to Oct 23, 2026), DOE SULI Summer 2027 now carries verified open (2026-10-14) and deadline (2027-01-06), MIT PRIMES re-checked (open, Nov 2, 2026 deadline); NASA Space Apps, Navy SEAP, and NIST SHIP unchanged. Data only; no code or migration.
 - Frontend responses send a strict Content-Security-Policy and a Permissions-Policy (security review L3); verified against the production build with zero violations. Takes effect on the next Vercel deploy.
 - Security hardening from the 2026-10-06 review: the requirement extractor collapses horizontal whitespace runs before sentence splitting (a 50,000-space description took ~140 s, now milliseconds); CLI logs never print tracebacks or exception messages, and the database engine hides bound parameters, so public Actions logs can't carry the database host or profile-derived values; CI actions pinned to commit SHAs.
 - Backend dependency lock: `backend/requirements.lock` and `backend/requirements-dev.lock` (transitive, SHA-256 hashed, universal for Python 3.12, generated with `uv pip compile`). CI, the E2E job, and the scheduled production sync install from them; Render's build command switch is an owner action ([development.md](docs/development.md#dependency-lock)). No product change.
