@@ -14,6 +14,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- Security hardening from the 2026-10-06 review: the requirement extractor collapses horizontal whitespace runs before sentence splitting (a 50,000-space description took ~140 s, now milliseconds); CLI logs never print tracebacks or exception messages, and the database engine hides bound parameters, so public Actions logs can't carry the database host or profile-derived values; CI actions pinned to commit SHAs.
 - Backend dependency lock: `backend/requirements.lock` and `backend/requirements-dev.lock` (transitive, SHA-256 hashed, universal for Python 3.12, generated with `uv pip compile`). CI, the E2E job, and the scheduled production sync install from them; Render's build command switch is an owner action ([development.md](docs/development.md#dependency-lock)). No product change.
 - Documentation governance: [document authority map](docs/README.md), immutable [release records](docs/releases/) (history moved out of PROJECT_STATE.md, deployment.md, and operations.md), `docs/status.json` with generated status blocks, a Documentation Synchronization Contract (CLAUDE.md, ENGINEERING_GUIDELINES.md §14–§15), and `scripts/check_docs.py` enforced by a new CI `docs` job (links, anchors, status, research headers, changed-path guards). Docs and tooling only; no product change.
 
