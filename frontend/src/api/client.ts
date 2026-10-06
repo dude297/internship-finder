@@ -4,6 +4,8 @@ import {
   catalogResponseSchema,
   discoveryAddResponseSchema,
   evaluationSchema,
+  inboxSchema,
+  dataAgeSchema,
   matchProfileSaveSchema,
   matchProfileSchema,
   opportunityDetailSchema,
@@ -22,6 +24,7 @@ import {
   sourceSchema,
   type ApplicationInput,
   type DiscoverySelectionInput,
+  type DismissReason,
   type MatchProfile,
   type OpportunityInput,
   type OpportunityQuery,
@@ -171,6 +174,8 @@ export const api = {
   saveMatchProfile: (body: MatchProfile) =>
     request('PUT', '/profile/match', matchProfileSaveSchema, body),
 
+  getDataAge: () => request('GET', '/status/freshness', dataAgeSchema),
+  getInbox: () => request('GET', '/inbox', inboxSchema),
   listOpportunities: (query: OpportunityQuery) => {
     const params = new URLSearchParams()
     for (const [key, value] of Object.entries(query))
@@ -190,6 +195,26 @@ export const api = {
     ),
   deleteOpportunity: (id: string) =>
     request('DELETE', `/opportunities/${encodeURIComponent(id)}`, null),
+  /** ADR-017: hide / un-hide, and discard owner edits in favour of the source's content. */
+  dismissOpportunity: (id: string, reason?: DismissReason) =>
+    request(
+      'PUT',
+      `/opportunities/${encodeURIComponent(id)}/dismissal`,
+      opportunityDetailSchema,
+      reason ? { reason } : {},
+    ),
+  restoreOpportunity: (id: string) =>
+    request(
+      'DELETE',
+      `/opportunities/${encodeURIComponent(id)}/dismissal`,
+      opportunityDetailSchema,
+    ),
+  revertOpportunityToSource: (id: string) =>
+    request(
+      'POST',
+      `/opportunities/${encodeURIComponent(id)}/revert-to-source`,
+      opportunityDetailSchema,
+    ),
   evaluateOpportunity: (id: string) =>
     request(
       'POST',

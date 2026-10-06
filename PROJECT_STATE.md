@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | Milestone 11 on `feature/m11-fit-scoring-v2` |
+| **Current Development** | Milestone 12 on `feature/m12-encrypted-backup` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -93,9 +93,11 @@ Merged to `main` since the Milestone 8.1 release, **not deployed** (Render/Verce
 
 In review, release-gated (each needs a production window; see each PR):
 
-- Milestone 9 owner decisions, Hide/Unhide and Revert to source ([PR #33](https://github.com/dude297/internship-finder/pull/33), ADR-017; migration `d4f8a1c6e2b9`). Merging requires migrating Neon in the same window, because the scheduled sync refuses a schema behind `main`.
+- Milestone 9 owner decisions, Hide/Unhide and Revert to source ([PR #33](https://github.com/dude297/internship-finder/pull/33), [ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md); migration `d4f8a1c6e2b9`). Merging requires migrating Neon in the same window, because the scheduled sync refuses a schema behind `main`.
 - Milestone 10 Action Inbox and application follow-ups ([PR #38](https://github.com/dude297/internship-finder/pull/38), stacked on #33, ADR-020; migration `a3c7e9b1d5f2`) and freshness visibility, a stale-sync banner and a Posted-within filter ([PR #42](https://github.com/dude297/internship-finder/pull/42), stacked on #38; no migration).
 - Fit scoring v2 ([PR #37](https://github.com/dude297/internship-finder/pull/37), ADR-019): needs `reevaluate` right after deploy.
+
+In development on `feature/m10-action-inbox` (stacked on Milestone 9, unreleased): Milestone 10 Action Inbox ([ADR-020](docs/decisions/ADR-020-action-inbox.md); migration `a3c7e9b1d5f2`): `GET /api/inbox` and an **Inbox** page (new high fit, closing soon, requirements to review, source warnings, program dates to re-check, applications needing attention), plus Next action / Next action due / Interview at on application tracking. It also needs Neon migrated before the scheduled sync runs the new code.
 
 ## Known Operational Issues
 
@@ -121,7 +123,6 @@ None open. Fixed during hosted validation (2026-09-29):
 - Database backups: an encrypted weekly backup workflow and a restore script are implemented ([ADR-021](docs/decisions/ADR-021-encrypted-backups.md), Proposed, unreleased) but **not activated**: until the owner sets `BACKUP_AGE_RECIPIENT`, there is no backup beyond Neon Free's short restore window. The private key is the owner's alone; losing it loses every backup.
 - Board scope is title-based: internships titled without intern/co-op/apprentice words are filtered, and titles such as "Internship Program Manager" are kept. Greenhouse postings are typed by title from Milestone 6 (still `other` in production until released). Boards added before Milestone 4 were migrated to **All postings**.
 - A recurring `partial` run (for example, a persistent identity conflict) blocks closure for that source until resolved.
-- Deleting an imported opportunity deletes its source records, so the next sync re-imports it (no "hide" yet). There's no "revert to source" for curated opportunities.
 - Title/organization search uses `ILIKE '%term%'` without a trigram index; measured < 0.5 s at 10,000 opportunities, trigram not worth it below ~50,000 ([scale audit](docs/operations.md#scale-audit-2026-10-06)).
 - Every opportunity update replaces every requirement row (new IDs; old rule results keep their text with `requirement_id` NULL).
 - The scheduled sync's `PRODUCTION_DATABASE_URL` uses the same Neon role as the app (full read/write, including auth and profile tables). Mitigated by the `main`-only `production` environment, SHA-pinned actions, and hash-locked dependencies; a least-privilege ingestion role and required reviewers on the environment are owner actions (security review 2026-10-06).
@@ -190,6 +191,8 @@ Also watch Bosch's backlog (98 deferred at 2026-10-05 21:07 UTC) clear and its S
 ## Recent Important Decisions
 
 - 2026-10-05: Milestone 8.1 released. PR #25 merged (merge commit) as `main` `203a562`; Neon migrated to `b7e3d9f1a2c4`; Render `dep-db22sfvlot8c73dki4lg`, Vercel `dpl_ArUbqmusQFddZhR4GVJnUjuVrxqj`; hosted smoke 14/14. v2 scan and catalog activation deferred to the owner.
+- 2026-10-06: ADR-020 accepted on `feature/m10-action-inbox` (unreleased): a read-only, bounded, set-based Action Inbox derived on read; three nullable follow-up columns on `applications`; fit threshold 70; hidden opportunities excluded everywhere. Migration `a3c7e9b1d5f2`.
+- 2026-10-06: ADR-017 accepted on `feature/m9-owner-decisions` (unreleased): hiding is two nullable columns that sync never touches (hidden excluded by default); Revert to source reuses the ADR-013 owner-record and fallback code and the fingerprinted evaluation. Migration `d4f8a1c6e2b9`.
 - 2026-10-05: ADR-015 accepted: derived listing freshness (never stored), first-seen "New", live-link pings rejected, `requirements-rules` v2, Independent Discovery Coverage, the Direct Source Catalog, Workable and Pinpoint adapters, an empty-snapshot closure guard; no first-party company adapter yet. Migration `b7e3d9f1a2c4`.
 - 2026-10-05: Milestone 8 released. PR #23 → `main` `9263860`; Neon migrated to `a8c3e5f7b9d1`; Render `dep-db1j19hsrm7s73bu01dg`, Vercel `dpl_CNabjmvDw2fyAus25jqVa781D1a3`; registry synced (13); 6 SmartRecruiters companies activated; coverage 22.4% → 38.7%. Runbook rule added: sync the feed on new code before adding sources whose feed identity that release introduces.
 - 2026-10-04: ADR-014 accepted (on the Milestone 8 branch): SmartRecruiters public Posting API as an ATS source with bounded detail fetching and partial-run semantics; a multi-request `collect` adapter hook; the curated program registry as a built-in automated source (own `curated_registry` provenance, so it can update its own entries while owner edits still win); verified vs typical dates and `verify_by`. Migration `a8c3e5f7b9d1`. Oracle, Workday, USAJOBS excluded from M8.

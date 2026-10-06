@@ -16,6 +16,7 @@ from app.models import Opportunity, OpportunityRequirementCandidate
 from app.repositories import get_profile
 from app.schemas.application import ApplicationBody, ApplicationResponse
 from app.schemas.opportunity import (
+    DismissBody,
     EvaluationResponse,
     OpportunityBody,
     OpportunityDetail,
@@ -101,6 +102,8 @@ def list_opportunities(
     needs_date_verification: bool | None = None,
     freshness: discovery.FreshnessFilter | None = None,
     discovered_within: discovery.DiscoveredWithin | None = None,
+    posted_within: discovery.PostedWithin | None = None,
+    hidden: discovery.HiddenFilter = "exclude",
     today: date | None = None,
     sort: discovery.Sort = "newest",
 ) -> OpportunityPage:
@@ -130,6 +133,8 @@ def list_opportunities(
         needs_date_verification=needs_date_verification,
         freshness=freshness,
         discovered_within=discovered_within,
+        posted_within=posted_within,
+        hidden=hidden,
         today=today,
     )
     items, total = discovery.list_page(db, filters, limit, offset, sort)
@@ -162,6 +167,39 @@ def replace_opportunity(
 def delete_opportunity(opportunity_id: uuid.UUID, db: DbSession) -> None:
     db.delete(_load(db, opportunity_id))
     db.commit()
+
+
+@router.put("/{opportunity_id}/dismissal")
+def dismiss_opportunity(
+    opportunity_id: uuid.UUID, db: DbSession, body: DismissBody | None = None
+) -> OpportunityDetail:
+    """ADR-017: hide it (idempotent). Provenance and source records are untouched."""
+    opportunity = _load(db, opportunity_id)
+    service.dismiss(opportunity, body.reason if body else None)
+    db.commit()
+    return _detail(db, opportunity)
+
+
+@router.delete("/{opportunity_id}/dismissal")
+def restore_opportunity(opportunity_id: uuid.UUID, db: DbSession) -> OpportunityDetail:
+    """ADR-017: un-hide it."""
+    opportunity = _load(db, opportunity_id)
+    service.undismiss(opportunity)
+    db.commit()
+    return _detail(db, opportunity)
+
+
+@router.post("/{opportunity_id}/revert-to-source")
+def revert_opportunity_to_source(opportunity_id: uuid.UUID, db: DbSession) -> OpportunityDetail:
+    """ADR-017: discard the owner's edits and restore the authoritative active source's content."""
+    opportunity = _load(db, opportunity_id)
+    try:
+        service.revert_to_source(db, opportunity)
+    except service.RevertRefused as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    db.commit()
+    db.refresh(opportunity)
+    return _detail(db, service.get_opportunity(db, opportunity_id) or opportunity)
 
 
 @router.post("/{opportunity_id}/evaluate", status_code=status.HTTP_201_CREATED)

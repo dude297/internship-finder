@@ -141,11 +141,48 @@ export const applicationSchema = z.object({
   status: z.enum(applicationStatuses),
   submitted_on: nullableDate,
   notes: z.string().nullable(),
+  next_action: z.string().nullable().default(null),
+  next_action_due: nullableDate.default(null),
+  interview_at: z.string().nullable().default(null),
   created_at: z.string(),
   updated_at: z.string(),
 })
 export type Application = z.infer<typeof applicationSchema>
-export type ApplicationInput = Pick<Application, 'status' | 'submitted_on' | 'notes'>
+export type ApplicationInput = Pick<
+  Application,
+  'status' | 'submitted_on' | 'notes' | 'next_action' | 'next_action_due' | 'interview_at'
+>
+
+// ADR-020: the Action Inbox. Minimal items: where to go, why, and the relevant date.
+export const inboxItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  organization: z.string(),
+  reason: z.string(),
+  date: nullableDate,
+})
+export type InboxItem = z.infer<typeof inboxItemSchema>
+const inboxSectionSchema = z.object({
+  total: z.number().int(),
+  items: z.array(inboxItemSchema),
+})
+export const dataAgeSchema = z.object({
+  last_successful_sync_at: z.string().nullable(),
+  age_hours: z.number().nullable(),
+  stale: z.boolean(),
+  reason: z.enum(['ok', 'stale', 'never_synced', 'no_sources']),
+})
+export type DataAge = z.infer<typeof dataAgeSchema>
+export const inboxSchema = z.object({
+  today: isoDate,
+  new_high_fit: inboxSectionSchema,
+  closing_soon: inboxSectionSchema,
+  pending_requirement_review: inboxSectionSchema,
+  source_warnings: inboxSectionSchema,
+  program_verify_by: inboxSectionSchema,
+  applications: inboxSectionSchema,
+})
+export type Inbox = z.infer<typeof inboxSchema>
 
 export const requirementSchema = z.object({
   id: z.string(),
@@ -215,6 +252,14 @@ export const evaluationSchema = z.object({
 })
 export type Evaluation = z.infer<typeof evaluationSchema>
 
+export const dismissReasons = [
+  'not_interested',
+  'not_eligible',
+  'already_applied',
+  'other',
+] as const
+export type DismissReason = (typeof dismissReasons)[number]
+
 export const opportunitySummarySchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -254,6 +299,7 @@ export const opportunitySummarySchema = z.object({
   source_names: z.array(z.string()),
   pending_requirement_count: z.number().int(),
   requirements_stale: z.boolean(),
+  dismissed_at: z.string().nullable().default(null),
   freshness: z.enum(freshnessStates),
   freshness_checked_at: z.string().nullable(),
   program_last_verified: nullableDate,
@@ -311,6 +357,9 @@ export const opportunityDetailSchema = z.object({
   first_seen_at: z.string(),
   last_seen_at: z.string(),
   manually_curated_at: z.string().nullable(),
+  // ADR-017: the owner's hidden decision.
+  dismissed_at: z.string().nullable().default(null),
+  dismissed_reason: z.enum(dismissReasons).nullable().default(null),
   requirements: z.array(requirementSchema),
   application: applicationSchema.nullable(),
   origin: z.enum(origins),
@@ -611,11 +660,14 @@ export interface OpportunityQuery {
   sort?: 'recommended' | 'newest' | 'deadline' | 'discovered'
   freshness?: 'direct_verified' | 'needs_review'
   discovered_within?: '1' | '7'
+  posted_within?: '7' | '30' | '90'
   requirements_assessment_status?: string
   requirement_review?: 'pending' | 'stale' | 'needs_review'
   deadline_within?: '7' | '14' | '30'
   has_deadline?: 'true'
   needs_date_verification?: 'true'
+  // ADR-017: omitted = hidden ones excluded.
+  hidden?: 'include' | 'only'
   // The browser's local date (YYYY-MM-DD); sent whenever a deadline filter is used (ADR-012 §14).
   today?: string
 }
