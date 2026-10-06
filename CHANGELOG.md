@@ -6,6 +6,7 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Milestone 18, source quality and supply intelligence (no migration; [ADR-025 amendment](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)): the dashboard's Discovery section gains a New supply block: new open opportunities today and this week (client time zone), how many of those this week were found independently of the community feed, new this week by source kind (top 5), closing-soon count, and an 8-week trend of new opportunities (inline SVG with a text equivalent; includes ones that have since closed; hidden excluded). "Descriptions gained" is not shown because no description history exists. Two extra aggregate statements.
 - Milestone 16: Home Dashboard and Application Engine v2 ([ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)). Migration `c9e2b7a4d1f8` (additive: `applications.applied_at`, `application_events`).
   - Application history: meaningful changes (created, status, next action, follow-up date, interview scheduled/updated, note added, offer received) are recorded in the same transaction; no history is invented for existing applications. `applied_at` is stamped when an application first becomes applied and can be corrected.
   - `GET /api/applications` (filters and sorts), `GET /api/applications/{id}/events`, and `GET /api/dashboard` (actions, pipeline counts, new high-fit, upcoming, discovery health, requirement suggestions, outcome funnel; rates only with at least 5 applications, medians only with at least 3 timed ones).

@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | Milestone 16 on `feature/m15-dashboard-application-engine` |
+| **Current Development** | Milestone 18 on `feature/m18-discovery-quality` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -90,6 +90,8 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 **Milestone 16, Home Dashboard and Application Engine v2** ([ADR-025](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)), branch `feature/m15-dashboard-application-engine`, not merged and not in production. Migration `c9e2b7a4d1f8` (additive; production schema stays `a3c7e9b1d5f2` until it ships). Adds `application_events` and `applications.applied_at`, `GET /api/applications`, `GET /api/applications/{id}/events`, `GET /api/dashboard`, and the `/dashboard` and `/applications` pages. History and funnel medians start empty for existing applications.
 
 Live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+
+Milestone 18, source quality / supply intelligence, on branch `feature/m18-discovery-quality` (unreleased; no migration): new-supply metrics and an 8-week trend in the dashboard's Discovery section ([ADR-025 amendment](docs/decisions/ADR-025-dashboard-and-application-engine-v2.md)).
 
 Milestone 19, Sources page UX, on branch `feature/m19-sources-ux` (unreleased; frontend only, no migration): coverage summary, health-grouped sources with last error and last success, value-ordered suggestions, clearer empty states. See [CHANGELOG.md](CHANGELOG.md).
 

@@ -1,18 +1,28 @@
 """Home dashboard (ADR-025). Synthetic data only. `today` is pinned (2041-03-10)."""
 
-from datetime import timedelta
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event, update
+from sqlalchemy import event, select, update
 from sqlalchemy.orm import Session
 
 from app.enums import ApplicationStatus as S
-from app.models import Application, ApplicationEvent, Opportunity, OpportunityEvaluation
+from app.enums import IngestionSourceKind, OpportunitySourceType, SourceRegion, SourceScope
+from app.models import (
+    Application,
+    ApplicationEvent,
+    IngestionSource,
+    Opportunity,
+    OpportunityEvaluation,
+    OpportunitySourceRecord,
+)
 from app.services import dashboard as dashboard_service
 from tests.test_api_workflow import create, put_profile
 from tests.test_application_engine import TODAY, at, days, make, track
+from tests.test_source_discovery import ats_source, gh_fields, make_opportunity, make_record
 
 pytestmark = pytest.mark.postgres
 
@@ -219,7 +229,7 @@ def test_dashboard_statement_count_is_constant(client: TestClient, db: Session) 
     db.execute(update(OpportunityEvaluation).values(fit_score=90, eligibility_status="eligible"))
     db.commit()
     assert count() == before
-    assert before <= 30
+    assert before <= 22  # was 20 before the two new-supply statements (ADR-025 amendment)
     body = dashboard(client)
     assert len(body["actions"]["applications"]["items"]) <= 10
     assert body["actions"]["applications"]["total"] == 15
@@ -311,3 +321,120 @@ def test_actions_total_counts_an_opportunity_once(client: TestClient) -> None:
     assert body["actions"]["closing_soon"]["total"] == 1
     assert body["actions"]["applications"]["total"] == 1
     assert body["actions"]["total"] == 1
+
+
+# --- New supply (ADR-025 amendment): first_seen_at based, hidden excluded -----------------------
+
+
+def _new(db: Session, seen: datetime, *, source: IngestionSource | None = None, **kw: Any) -> str:
+    opp = make_opportunity(db, title=f"New {seen.isoformat()}")
+    opp.first_seen_at = opp.last_seen_at = seen
+    if source is not None:
+        ext, url = gh_fields(job=str(opp.id)[:8])
+        make_record(
+            db,
+            opp,
+            source=source,
+            external_id=ext,
+            source_url=url,
+            source_type=kw.get("source_type", OpportunitySourceType.PUBLIC_FEED),
+        )
+    db.commit()
+    return str(opp.id)
+
+
+def _discovery(client: TestClient, offset: int = 0) -> dict[str, Any]:
+    r = client.get(
+        "/api/dashboard", params={"today": TODAY.isoformat(), "tz_offset_minutes": offset}
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["discovery"]
+
+
+def test_new_supply_zero_data(client: TestClient) -> None:
+    d = _discovery(client)
+    assert (d["new_today"], d["new_this_week"], d["new_this_week_independent"]) == (0, 0, 0)
+    assert d["new_this_week_by_provider"] == [] and d["closing_soon"] == 0
+    assert [w["count"] for w in d["weekly_new"]] == [0] * 8
+    assert d["weekly_new"][-1]["week_start"] == "2041-03-04"
+    assert d["weekly_new"][0]["week_start"] == "2041-01-14"
+
+
+def test_new_supply_week_boundaries_and_time_zone(client: TestClient, db: Session) -> None:
+    _new(db, datetime(2041, 3, 10, 0, 0, tzinfo=UTC))  # today
+    _new(db, datetime(2041, 3, 4, 0, 0, tzinfo=UTC))  # first instant of the week
+    _new(db, datetime(2041, 3, 3, 23, 59, tzinfo=UTC))  # last instant of the previous week
+    _new(db, datetime(2041, 1, 14, 0, 0, tzinfo=UTC))  # first instant of the 8-week trend
+    _new(db, datetime(2041, 1, 13, 23, 59, tzinfo=UTC))  # before the trend: never counted
+    _new(db, datetime(2041, 3, 11, 0, 0, tzinfo=UTC))  # UTC tomorrow: not counted at offset 0
+    d = _discovery(client)
+    assert (d["new_today"], d["new_this_week"]) == (1, 2)
+    assert [w["count"] for w in d["weekly_new"]] == [1, 0, 0, 0, 0, 0, 1, 2]
+    # Browser at UTC-8 (+480): local today starts 08:00 UTC, so the 03-10 00:00 UTC opportunity
+    # is local yesterday (still this week); the 03-11 00:00 UTC one is local 03-10 16:00: today.
+    d = _discovery(client, 480)
+    assert (d["new_today"], d["new_this_week"]) == (1, 2)  # 03-04 00:00 UTC is local 03-03
+
+
+def test_new_supply_closed_and_hidden(client: TestClient, db: Session) -> None:
+    source = ats_source(db, IngestionSourceKind.GREENHOUSE, "acme")
+    seen = datetime(2041, 3, 9, 12, tzinfo=UTC)
+    closed = _new(db, seen, source=source)
+    hidden = _new(db, seen, source=source)
+    _new(db, seen, source=source)
+    for rec in db.scalars(
+        select(OpportunitySourceRecord).where(
+            OpportunitySourceRecord.opportunity_id == uuid.UUID(closed)
+        )
+    ):
+        rec.is_active = False
+        rec.closed_at = seen
+    db.commit()
+    assert client.put(f"/api/opportunities/{hidden}/dismissal").status_code == 200
+    d = _discovery(client)
+    assert d["new_this_week"] == 1  # closed and hidden are not open
+    assert d["weekly_new"][-1]["count"] == 2  # trend keeps the closed one; hidden is excluded
+    assert d["new_this_week_by_provider"] == [{"provider": "greenhouse", "count": 1}]
+
+
+def test_new_supply_feed_only_vs_independent(client: TestClient, db: Session) -> None:
+    gh = ats_source(db, IngestionSourceKind.GREENHOUSE, "acme")
+    feed = _builtin(db, IngestionSourceKind.COMMUNITY_FEED)
+    seen = datetime(2041, 3, 9, 12, tzinfo=UTC)
+    _new(db, seen, source=feed)  # feed only
+    _new(db, seen, source=gh, source_type=OpportunitySourceType.ATS)  # independent
+    both = _new(db, seen, source=feed)  # feed + ATS: independent
+    opp = db.get(Opportunity, uuid.UUID(both))
+    assert opp is not None
+    ext, url = gh_fields(job="9999")
+    make_record(
+        db, opp, source=gh, external_id=ext, source_url=url, source_type=OpportunitySourceType.ATS
+    )
+    db.commit()
+    d = _discovery(client)
+    assert (d["new_this_week"], d["new_this_week_independent"]) == (3, 2)
+    assert {p["provider"]: p["count"] for p in d["new_this_week_by_provider"]} == {
+        "community_feed": 2,
+        "greenhouse": 2,
+    }
+
+
+def test_new_supply_provider_list_is_top_five(client: TestClient, db: Session) -> None:
+    seen = datetime(2041, 3, 9, 12, tzinfo=UTC)
+    for i, kind in enumerate(list(IngestionSourceKind)[:6]):
+        _new(db, seen, source=_builtin(db, kind, f"id{i}"))
+    assert len(_discovery(client)["new_this_week_by_provider"]) == 5
+
+
+def _builtin(db: Session, kind: IngestionSourceKind, ident: str = "x") -> IngestionSource:
+    builtin = kind in (IngestionSourceKind.COMMUNITY_FEED, IngestionSourceKind.CURATED_REGISTRY)
+    src = IngestionSource(
+        kind=kind,
+        identifier=ident,
+        region=SourceRegion.GLOBAL if kind == IngestionSourceKind.LEVER else None,
+        display_name="Synthetic",
+        scope=SourceScope.ALL if builtin else SourceScope.INTERNSHIPS_ONLY,
+    )
+    db.add(src)
+    db.flush()
+    return src
