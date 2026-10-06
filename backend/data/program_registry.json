@@ -65,10 +65,10 @@
       },
       "typical_open_window": null,
       "typical_close_window": null,
-      "verify_by": "2026-10-20",
-      "eligibility_summary": "MIT PRIMES and PRIMES-USA are for high school sophomores and juniors; the owner (senior) would NOT be eligible. Applications for the 2026-2027 year close November 2, 2026. Free, year-long program.",
+      "verify_by": "2026-11-02",
+      "eligibility_summary": "MIT PRIMES and PRIMES-USA are for high school sophomores and juniors; the owner (senior) would NOT be eligible. Applications for the 2026-2027 year are open now and close November 2, 2026. Free, year-long program.",
       "description": "Free year-long research program in mathematics and bioinformatics with guided reading, run in person in Greater Boston (PRIMES) or remotely for students elsewhere in the US (PRIMES-USA). Listed for awareness; not open to graduating seniors.",
-      "last_verified": "2026-10-04"
+      "last_verified": "2026-10-06"
     },
     {
       "slug": "uc-cosmos",
@@ -150,17 +150,17 @@
       "location": "DOE national laboratories (various)",
       "remote_mode": null,
       "verified": {
-        "open_date": null,
-        "deadline": null,
+        "open_date": "2026-10-14",
+        "deadline": "2027-01-06",
         "start_date": null,
         "end_date": null
       },
       "typical_open_window": null,
-      "typical_close_window": "January 6, 2027, 5:00 PM ET (published as tentative)",
+      "typical_close_window": null,
       "verify_by": "2026-12-01",
-      "eligibility_summary": "Applicants must be at least 18 years old, a U.S. citizen or lawful permanent resident, and currently enrolled full-time in college with at least one completed semester, 12 credit hours (6 in STEM), and a 3.0 GPA. Not open to incoming freshmen, so the owner would NOT be eligible for Summer 2027; earliest realistic cycle is after the first college year. Dates are tentative per the page.",
+      "eligibility_summary": "Applicants must be at least 18 years old, a U.S. citizen or lawful permanent resident, and currently enrolled full-time in college with at least one completed semester, 12 credit hours (6 in STEM), and a 3.0 GPA. Not open to incoming freshmen, so the owner would NOT be eligible for Summer 2027; earliest realistic cycle is after the first college year. Summer 2027 applications open October 14, 2026 and close January 6, 2027, 5:00 PM ET (DOE: “All dates are tentative and subject to change”).",
       "description": "Paid internships at DOE national laboratories (including Berkeley Lab, SLAC and LLNL) where undergraduates work on research with a lab scientist. Summer 2027 offers begin around February 3, 2027.",
-      "last_verified": "2026-10-04"
+      "last_verified": "2026-10-06"
     },
     {
       "slug": "lbnl-experiences-in-research",
@@ -288,17 +288,17 @@
       "location": "San Jose, CA",
       "remote_mode": "onsite",
       "verified": {
-        "open_date": null,
-        "deadline": null,
+        "open_date": "2026-10-09",
+        "deadline": "2026-10-23",
         "start_date": "2026-11-23",
         "end_date": "2027-01-03"
       },
-      "typical_open_window": "October 9 (page lists the date without a year)",
-      "typical_close_window": "October 23 (page lists the date without a year)",
-      "verify_by": "2026-10-09",
-      "eligibility_summary": "The page does not state a minimum age or grade for the teen holiday volunteer program. The program runs November 23, 2026 through January 3, 2027.",
+      "typical_open_window": null,
+      "typical_close_window": null,
+      "verify_by": "2026-10-23",
+      "eligibility_summary": "The page does not state a minimum age or grade for the teen holiday volunteer program. Applications are open October 9 to October 23, 2026 (the page prints the dates without a year); the program runs November 23, 2026 through January 3, 2027.",
       "description": "Seasonal teen volunteer program at the Tech Interactive science and technology museum in San Jose, supporting visitors during the holiday period. Time commitment is not stated on the page.",
-      "last_verified": "2026-10-04"
+      "last_verified": "2026-10-06"
     },
     {
       "slug": "nih-summer-internship-program",
