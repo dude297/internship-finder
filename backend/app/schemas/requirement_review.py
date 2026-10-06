@@ -12,7 +12,7 @@ from app.enums import (
     RequirementsAssessmentStatus,
     RequirementType,
 )
-from app.schemas.opportunity import RequirementResponse
+from app.schemas.opportunity import FreshnessState, RequirementResponse
 
 MAX_REVIEW_ITEMS = 50
 
@@ -83,3 +83,71 @@ class RequirementReviewResult(BaseModel):
     review: RequirementReviewResponse
     # Whether a new evaluation row was appended (only when an eligibility input changed).
     evaluated: bool
+
+
+# --- Global review queue (ADR-024) -------------------------------------------------------------
+
+MAX_QUEUE_PAGE = 100
+MAX_BATCH_REJECT = 100
+
+
+class QueueOpportunity(BaseModel):
+    id: uuid.UUID
+    title: str
+    organization: str
+    application_url: str | None
+    first_seen_at: datetime
+    requirements_assessment_status: RequirementsAssessmentStatus
+    # Set when the posting changed after its last review (ADR-012 §6).
+    requirements_stale_since: datetime | None
+    # ADR-015: derived listing freshness, never a guarantee the posting is open.
+    freshness: FreshnessState
+    freshness_checked_at: datetime | None
+    source_names: list[str]
+    source_kinds: list[str]
+
+
+class QueueItem(BaseModel):
+    candidate: RequirementCandidateResponse
+    opportunity: QueueOpportunity
+    # The opportunity's canonical requirements (what eligibility reads).
+    existing_requirements: list[RequirementResponse]
+    # A canonical requirement that already means exactly this (same semantic key). Accepting
+    # links to it instead of creating a second one (ADR-012 §7); the UI warns.
+    duplicate_of: uuid.UUID | None
+
+
+class QueueCategoryCount(BaseModel):
+    requirement_type: RequirementType
+    count: int
+
+
+class QueueSummary(BaseModel):
+    # Pending suggestions on visible (not hidden, not closed) opportunities, ignoring filters.
+    pending_total: int
+    by_type: list[QueueCategoryCount]
+    # Reviewed candidates whose row last changed on `today` (UTC); see ADR-024 for the caveat.
+    accepted_today: int
+    rejected_today: int
+    today: date
+    extractor_versions: list[str]
+
+
+class QueuePage(BaseModel):
+    items: list[QueueItem]
+    total: int  # matching the filters
+    limit: int
+    offset: int
+    summary: QueueSummary
+
+
+class BatchRejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_BATCH_REJECT)
+
+
+class BatchRejectResult(BaseModel):
+    rejected: int
+    opportunities: int
+    evaluated: int  # opportunities that received a new evaluation

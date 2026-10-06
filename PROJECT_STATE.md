@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 11, released 2026-10-06 ([release record](docs/releases/2026-10-06-m9-m11.md)) |
 | Production `main` | `cf1ad43` |
 | Production schema | `a3c7e9b1d5f2` |
-| **Current Development** | Milestone 19 on `feature/ui-landing-login` |
+| **Current Development** | Milestone 14 on `feature/m14-requirement-workbench` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-06
@@ -87,9 +87,11 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
-None on `main`. Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+Milestone 14, Requirement Review Workbench, on `feature/m14-requirement-workbench` (not merged, not deployed; no migration): a global **Review** queue (`/requirements`) over the pending suggestions, keyboard-driven accept/edit/reject/skip through the existing atomic review endpoint, and an all-or-nothing **Reject selected** (no accept-all). [ADR-024](docs/decisions/ADR-024-requirement-review-workbench.md). Production is unchanged until it is released.
 
-Open pull requests: `feature/ui-landing-login` (frontend only: design tokens, public landing page, login states; not released).
+On `main`, merged but **not deployed**: security low debt ([PR #48](https://github.com/dude297/internship-finder/pull/48)), Workday/Oracle provider gate research ([PR #49](https://github.com/dude297/internship-finder/pull/49)), feed-dependence Pareto and 26 more catalog boards ([PR #50](https://github.com/dude297/internship-finder/pull/50), none enabled), and the landing page, login states, and design tokens ([PR #51](https://github.com/dude297/internship-finder/pull/51), Milestone 19). Merged and live in production: everything through Milestone 11 plus extractor v3 and the registry re-verification (`main` `cf1ad43`). Merged but **not activated**: the encrypted weekly backup ([PR #39](https://github.com/dude297/internship-finder/pull/39), [PR #40](https://github.com/dude297/internship-finder/pull/40), [ADR-021](docs/decisions/ADR-021-encrypted-backups.md)), inert until the owner sets `BACKUP_AGE_RECIPIENT`.
+
+Open pull requests: see GitHub (Milestones 12, 14, 15, 17 in review).
 
 ## Known Operational Issues
 

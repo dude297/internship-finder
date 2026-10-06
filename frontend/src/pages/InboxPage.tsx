@@ -10,7 +10,7 @@ const sections: {
   title: string
   empty: string
   to: (item: InboxItem) => string
-  all?: { label: string; to: string; exact?: boolean }
+  all?: { label: string; to: string; exact?: boolean; always?: boolean }
 }[] = [
   {
     key: 'applications',
@@ -41,7 +41,7 @@ const sections: {
     title: 'Requirements to review',
     empty: 'No suggested requirements are waiting for review.',
     to: (i) => `/opportunities/${i.id}`,
-    all: { label: 'All to review', to: '/opportunities?requirement_review=pending' },
+    all: { label: 'Review requirement suggestions', to: '/requirements', always: true },
   },
   {
     key: 'program_verify_by',
@@ -116,11 +116,11 @@ export function InboxPage() {
                 ))}
               </ul>
             )}
-            {section.all && total > items.length && (
+            {section.all && total > 0 && (section.all.always || total > items.length) && (
               <p>
                 <Link to={section.all.to} className="text-blue-800 underline">
                   {section.all.label}
-                  {section.all.exact !== false && ` (${total})`}
+                  {section.all.exact !== false && !section.all.always && ` (${total})`}
                 </Link>
               </p>
             )}

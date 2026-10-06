@@ -68,6 +68,20 @@ describe('inbox page', () => {
     )
   })
 
+  it('links requirements to review to the review queue', async () => {
+    mockApi({
+      ...loggedIn,
+      'GET /api/inbox': () =>
+        inbox({ pending_requirement_review: { total: 1, items: [item()] } }),
+    })
+    renderAt('/inbox')
+
+    const review = await screen.findByRole('region', { name: /Requirements to review/ })
+    expect(
+      within(review).getByRole('link', { name: 'Review requirement suggestions' }),
+    ).toHaveAttribute('href', '/requirements')
+  })
+
   it('shows an error when the inbox fails to load', async () => {
     mockApi({
       ...loggedIn,
