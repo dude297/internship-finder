@@ -109,7 +109,7 @@ ADR-007's same-origin constraint is met by Vercel rewriting `/api/*` to Render b
  FastAPI (ranking: eligibility bucket, then fit) → React SPA
 ```
 
-The scheduled workflow only orchestrates; core logic lives in the backend package ([deployment.md](deployment.md#topology), [ADR-009 amendment](decisions/ADR-009-hosted-deployment-architecture.md#amendment-2026-10-01-scheduled-source-sync-milestone-6)). Sources are layered: public feed, ATS APIs, curated program registry, manual entry ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md), [ADR-014](decisions/ADR-014-structured-source-expansion-and-program-registry.md)). Custom career-page scraping and browser automation are not implemented.
+The scheduled workflow only orchestrates; core logic lives in the backend package ([deployment.md](deployment.md#topology), [ADR-009 amendment](decisions/ADR-009-hosted-deployment-architecture.md#amendment-2026-10-01-scheduled-source-sync-milestone-6)). Sources are layered: public feed, ATS APIs, curated program registry, manual entry ([ADR-005](decisions/ADR-005-source-and-profile-ingestion-strategy.md), [ADR-014](decisions/ADR-014-structured-source-expansion-and-program-registry.md)). Custom career-page scraping and browser automation are not implemented. A source can be retired (records closed through the pipeline's closure path, then disabled) and a new installation bootstrapped from the Direct Source Catalog without the feed ([ADR-016](decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)).
 
 ### Profile flow (since Milestone 5; résumés only)
 

@@ -82,6 +82,8 @@ Per-milestone implementation and release detail: [docs/releases/](docs/releases/
 
 ## Current Development
 
+Merged to `main`, not released: Milestone 8.2 "True Feed Independence" ([PR #30](https://github.com/dude297/internship-finder/pull/30), [ADR-016](docs/decisions/ADR-016-source-retirement-and-feed-free-bootstrap.md)), not released: `retire-source` (safe, atomic, dry-run-default source retirement through the normal closure and fallback path) and `bootstrap-sources` (feed-free setup of a new installation). No migration. Retiring the production feed is an owner-gated step not yet run.
+
 Milestone 9 owner decisions (`feature/m9-owner-decisions`, unreleased, not merged, not deployed): durable **Hide / Unhide** for opportunities (`dismissed_at`, migration `d4f8a1c6e2b9`, not applied to production), a **Hidden** list filter (hidden excluded by default, including from the recommended sort), and **Revert to source** for curated imported opportunities ([ADR-017](docs/decisions/ADR-017-owner-opportunity-decisions.md)). Production is still Milestone 8.1.
 
 ## Known Operational Issues
