@@ -13,6 +13,7 @@ import sys
 import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 FEED = (  # same URL as FEEDS in app/ingestion/adapters/community_feed.py
@@ -76,12 +77,12 @@ def norm(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", name)
 
 
-def board(job: dict) -> tuple[str, str]:
+def board(job: dict[str, Any]) -> tuple[str, str]:
     """(provider, board identifier) from the feed id, which names the ATS board."""
-    kind, _, rest = job["id"].partition(":")
+    kind, _, rest = str(job["id"]).partition(":")
     if kind in SUPPORTED or kind in ("workday", "oracle"):
         return kind, rest.split(":")[0].lower()
-    return kind, urlsplit(job.get("url") or "").hostname or "?"
+    return kind, urlsplit(str(job.get("url") or "")).hostname or "?"
 
 
 def main() -> None:
@@ -91,10 +92,10 @@ def main() -> None:
     cat = json.loads(CATALOG.read_text(encoding="utf-8"))["sources"]
     cat_boards = {c["identifier"].lower() for c in cat}
     cat_names = {norm(c["organization"]) for c in cat}
-    status: Counter = Counter()
-    prov: Counter = Counter()
-    green: Counter = Counter()
-    orgs: dict[str, Counter] = defaultdict(Counter)
+    status: Counter[str] = Counter()
+    prov: Counter[str] = Counter()
+    green: Counter[str] = Counter()
+    orgs: defaultdict[str, Counter[str]] = defaultdict(Counter)
     for j in jobs:
         kind, b = board(j)
         if kind in SUPPORTED and b in ENABLED:
