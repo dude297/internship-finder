@@ -7,7 +7,7 @@
     "release_record": "docs/releases/2026-10-05-m8-1.md"
   },
   "development": {
-    "milestone": "10",
-    "branch": "feature/m10-1-freshness-visibility"
+    "milestone": "11",
+    "branch": "feature/m11-fit-scoring-v2"
   }
 }

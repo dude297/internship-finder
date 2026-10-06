@@ -8,7 +8,7 @@
 | **Current Production** | Milestone 8.1, released 2026-10-05 ([release record](docs/releases/2026-10-05-m8-1.md)) |
 | Production `main` | `203a562` |
 | Production schema | `b7e3d9f1a2c4` |
-| **Current Development** | Milestone 10 on `feature/m10-1-freshness-visibility` |
+| **Current Development** | Milestone 11 on `feature/m11-fit-scoring-v2` |
 <!-- END GENERATED STATUS -->
 
 Last Updated: 2026-10-05
@@ -99,8 +99,6 @@ In review, release-gated (each needs a production window; see each PR):
 
 In development on `feature/m10-action-inbox` (stacked on Milestone 9, unreleased): Milestone 10 Action Inbox ([ADR-020](docs/decisions/ADR-020-action-inbox.md); migration `a3c7e9b1d5f2`): `GET /api/inbox` and an **Inbox** page (new high fit, closing soon, requirements to review, source warnings, program dates to re-check, applications needing attention), plus Next action / Next action due / Interview at on application tracking. It also needs Neon migrated before the scheduled sync runs the new code.
 
-In development on `feature/m10-1-freshness-visibility` (stacked on Milestone 10, unreleased, no migration): an app-wide **data-age banner** when the newest successful sync is over 36 h old (`GET /api/status/freshness`), and a **Posted** filter on the list (`posted_within=7|30|90`; opportunities with no posted date are excluded only while it is set). Stale is never read as closed ([ADR-015](docs/decisions/ADR-015-freshness-requirements-v2-and-independent-discovery.md)).
-
 ## Known Operational Issues
 
 - SmartRecruiters `boschgroup` cleared its detail backlog on 2026-10-05 (first complete `success` run, 5 closed); its postings move from **Verification incomplete** to **ATS verified** as of that run.
@@ -135,7 +133,7 @@ None open. Fixed during hosted validation (2026-09-29):
 - `work_authorization` requirements are stored but not evaluated (always `needs_verification`, ELIG-REQ-001). A design for a safe profile representation and rules exists ([research note](docs/research/work-authorization-eligibility-design.md)); nothing is implemented.
 - Milestone 8: a large SmartRecruiters internship board (> 100 postings needing detail) takes several partial runs to fill, during which Source Health shows a warning and nothing closes; a SmartRecruiters company that renames its identifier closes its postings (the API answers 200 with zero postings for an unknown company); registry dates are only as current as the file (`verify_by` surfaces staleness); extractor v1 proposes a work-authorization suggestion for "citizens or permanent residents" wording (pending only; see the recall analysis); a SmartRecruiters posting whose detail fails on every run keeps its source partial, so removed postings stay open until it resolves; the list's "Needs date verification" uses the client's date and the detail page the server's UTC date (can differ near midnight); an owner edit of a registry opportunity can't clear `verify_by`/typical windows, so the badge can persist after the owner enters a confirmed deadline; `collect` sources load the source's stored raw payloads per run (bounded by the 5,000-posting cap).
 - Milestone 7: a database error while applying an ADR-013 §5 fallback fails that source's whole run (the stored item already normalized once, so unlikely); the abandoned-run threshold (15 min) is shorter than the scheduled workflow timeout (20 min), so keep enabled ATS sources at or under the measured cap of 50.
-- Milestone 6: the requirement extractor favors precision and misses requirements phrased unusually; a deduplicated opportunity whose earliest source has no description (the discovery feed) gets no description and therefore no suggestions from a later board record (resolved by Milestone 7's ATS authority, once released); when the schedule is auto-disabled after 60 days of repository inactivity nothing pushes an alert (Source Health turns `stale`; the unreleased data-age banner shows it the next time the app is opened).
+- Milestone 6: the requirement extractor favors precision and misses requirements phrased unusually; a deduplicated opportunity whose earliest source has no description (the discovery feed) gets no description and therefore no suggestions from a later board record (resolved by Milestone 7's ATS authority, once released); nothing alerts when the schedule is auto-disabled after 60 days of repository inactivity (Source Health turns `stale`).
 
 ## Architecture Constraints
 
