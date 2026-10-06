@@ -60,6 +60,7 @@ counts only. Exit 1 on a refusal (running sync, unknown source/tag, cap), 2 on a
 
 import argparse
 import getpass
+import logging
 import sys
 import time
 import uuid
@@ -338,7 +339,26 @@ def _bootstrap_sources(tags: list[str], *, disable_feed: bool, dry_run: bool, sy
     return _sync_sources(scheduled=False) if sync and not dry_run else 0
 
 
+class _NoTracebackFormatter(logging.Formatter):
+    """CLI output can land in public GitHub Actions logs: an exception is reduced to its class
+    name, never its message or traceback (which can carry the database host or SQL)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        if record.exc_info and record.exc_info[0] is not None:
+            name = record.exc_info[0].__name__
+            record = logging.makeLogRecord({**record.__dict__, "exc_info": None, "exc_text": None})
+            return f"{super().format(record)} ({name})"
+        return super().format(record)
+
+
+def _configure_logging() -> None:
+    handler = logging.StreamHandler()
+    handler.setFormatter(_NoTracebackFormatter("%(levelname)s %(name)s: %(message)s"))
+    logging.basicConfig(level=logging.WARNING, handlers=[handler], force=True)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_logging()
     parser = argparse.ArgumentParser(
         prog="python -m app.cli", description="Owner account and source administration."
     )

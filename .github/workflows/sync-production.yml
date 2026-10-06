@@ -1,6 +1,6 @@
 name: Scheduled source sync
 
-# ADR-012 §10 / ADR-009 amendment (docs/decisions/ADR-009-amendment-draft.md): syncs the
+# ADR-012 §10 / ADR-009 amendment of 2026-10-01 (docs/decisions/ADR-009-hosted-deployment-architecture.md): syncs the
 # production sources twice a day against Neon. Schedule and workflow_dispatch only — never
 # pull_request, pull_request_target, or push, since those can run from a fork and this job
 # carries a production database secret. GitHub only runs `schedule` on the base repository's

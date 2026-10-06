@@ -13,11 +13,11 @@ jobs:
     # Documentation guard (docs/README.md "Enforcement"): stdlib-only script, no secrets, no network.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0 # the changed-path guards diff against the base
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version-file: backend/.python-version
       - name: Checker tests
@@ -45,8 +45,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version-file: frontend/package.json
           cache: npm
@@ -82,8 +82,8 @@ jobs:
       DATABASE_URL: postgresql+psycopg://ci:ci-test-only@localhost:5432/internship_finder_test
       TEST_DATABASE_URL: postgresql+psycopg://ci:ci-test-only@localhost:5432/internship_finder_test
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version-file: backend/.python-version
       # Locked, hash-checked dependencies, then the app itself without re-resolving: a
@@ -126,14 +126,14 @@ jobs:
       E2E_OWNER_USERNAME: e2e-synthetic-owner
       E2E_OWNER_PASSWORD: e2e-synthetic-password-not-a-secret
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version-file: backend/.python-version
       - name: Install backend
         working-directory: backend
         run: python -m venv .venv && .venv/bin/python -m pip install -r requirements.lock && .venv/bin/python -m pip install --no-deps -e .
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version-file: frontend/package.json
           cache: npm
@@ -147,7 +147,7 @@ jobs:
         working-directory: frontend
         run: npx playwright test
       # Only synthetic test data can appear in these (the database and owner above are fake).
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()
         with:
           name: playwright-report

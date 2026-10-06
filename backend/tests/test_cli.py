@@ -317,3 +317,21 @@ def test_scheduled_sync_refuses_a_database_behind_the_code(
 
 def test_schema_check_matches_the_migrated_test_database(db: Session) -> None:
     assert cli.schema_is_current(db.connection())
+
+
+def test_cli_logging_never_prints_tracebacks() -> None:
+    import logging
+
+    from app.cli import _NoTracebackFormatter
+
+    formatter = _NoTracebackFormatter("%(message)s")
+    try:
+        raise RuntimeError("postgresql://user:secret@ep-host.neon.tech/db")
+    except RuntimeError:
+        record = logging.LogRecord("x", logging.ERROR, __file__, 1, "run failed", None, None)
+        import sys
+
+        record.exc_info = sys.exc_info()
+    line = formatter.format(record)
+    assert line == "run failed (RuntimeError)"
+    assert "secret" not in line and "Traceback" not in line

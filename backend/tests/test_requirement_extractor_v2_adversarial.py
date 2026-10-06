@@ -360,3 +360,16 @@ def test_unicode_lookalike_and_fullwidth_do_not_crash() -> None:
     run("Must be １８ or older.")
     run("")
     run("\x00\x00 must be a U.S. citizen ")
+
+
+@pytest.mark.parametrize("space", [" ", "\t", " "])
+def test_long_whitespace_run_is_linear(space: str) -> None:
+    # A provider's plain-text description can hold a huge whitespace run; the sentence splitter
+    # used to backtrack quadratically over it (50,000 spaces took ~140 s).
+    import time
+
+    text = "Must be 18 or older." + space * 50_000 + "Applicants must be U.S. citizens."
+    started = time.perf_counter()
+    proposals = extract_requirements(ExtractionInput(title="T", description=text))
+    assert time.perf_counter() - started < 2
+    assert {p.requirement_type.value for p in proposals} >= {"minimum_age", "citizenship"}
