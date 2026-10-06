@@ -39,7 +39,7 @@ $0/month, no payment method, no automatic billing or upgrade ([ADR-009 §2](deci
 |---|---|
 | Plan / region / instances | Free / Oregon / 1 |
 | Root directory | `backend` |
-| Build | `pip install .` |
+| Build | `pip install .` (recommended, owner action pending: `pip install -r requirements.lock && pip install --no-deps .`, the same locked install CI uses; [development.md](development.md#dependency-lock)) |
 | Start | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` (one worker; don't add `--workers`) |
 | Health check | `/api/health` |
 | Auto-deploy / PR previews | Off / off |
