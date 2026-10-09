@@ -19,7 +19,7 @@ from app.services import direct_catalog
 from app.services.source_discovery import configured_keys
 
 # docs/operations.md "Operational source cap": enabled direct sources.
-MAX_ENABLED_DIRECT_SOURCES = 50
+MAX_ENABLED_DIRECT_SOURCES = 100  # operations.md#operational-source-cap (raised 2026-10-09)
 
 
 class BootstrapRefused(Exception):

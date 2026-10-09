@@ -8,7 +8,7 @@ import { ErrorMessage, SuccessMessage } from './ui'
 const MAX_ADD = 25
 // Recommended cap on enabled direct (Greenhouse/Lever/Ashby/...) sources; see
 // docs/operations.md "Operational source cap". Re-measure a scheduled run before raising it.
-const DIRECT_SOURCE_CAP = 50
+const DIRECT_SOURCE_CAP = 100
 
 function countDirectSources(sources: Source[]): number {
   return sources.filter(
