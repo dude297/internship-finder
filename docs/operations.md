@@ -103,6 +103,27 @@ At 45 direct sources the enabled count is 5 below the cap of 50; re-measure the 
 
 **Failing catalog entries (response too large), Milestone 12 (unreleased):** a provider response must stay under the 20 MiB `MAX_BYTES` cap, which is unchanged. `greenhouse:andurilindustries` (2,457 jobs) failed with "The source response is too large" in production and is disabled (Sources toggle); `spacex` (2,665) failed the same way in the disposable-database test, because `?content=true` is ~30 MB. The Greenhouse adapter now reads such boards (more than 500 stored jobs, or a content list over the cap) from the ~2.5 MB content-free list plus one `/jobs/<id>` request per internship-titled job, with fixed bounds ([ADR-022](decisions/ADR-022-large-board-greenhouse.md), [sources.md](sources.md#greenhouse-boards)). Read-only live check, 2026-10-06 (no database, `collect` only, scope Internships only): Anduril 26 requests, 3.1 MB, 11.6 s, 2,457 items, 25 internship-titled with 25 descriptions; SpaceX 16 requests, 2.7 MB, 7.8 s, 2,665 items, 15 internship-titled with 15 descriptions. Until this ships in a release the production behaviour is unchanged: keep both disabled/unactivated. After release, activate them like any catalog batch (below) and expect the first sync to create the missing postings; a board over 500 jobs imports descriptions for at most 100 internship titles per run, the rest on following runs.
 
+## Activation of 2026-10-09 (cap 100)
+
+Owner-approved after the Milestones 12–19 release and the cap raise ([PR #66](https://github.com/dude297/internship-finder/pull/66)). All through the app's service layer (`update_source`, `add_from_catalog`, `add_from_discovery`: same validation as the Sources page; internships only), each new source synced once by `sync-source`.
+
+| Step | Sources | Result |
+|---|---|---|
+| Anduril (re-enabled) and SpaceX (catalog) | 45 → 47 | fetched 2,470 / 2,673 (list-then-detail); created 23 + 15; 2 deduplicated; 0 closed; 41.6 s / 24.9 s |
+| Batch 1: top 25 feed-linked boards by feed-only count (`greenhouse:testnisc` excluded as a test board) | 47 → 72 | 25 success; 216 created; 73 feed postings deduplicated onto boards; 0 closed |
+| Full sync | 74 run | success, 168.2 s ([37990269861](https://github.com/dude297/internship-finder/actions/runs/37990269861)) |
+| Batch 2: next 25 | 72 → 97 | 25 success; 194 created; 46 deduplicated; 0 closed |
+| Full sync | 99 run | 1 transient failure (`smartrecruiters:eurofins`, "posting count changed mid-walk", nothing closed; retry succeeded) — 202.0 s ([37991689511](https://github.com/dude297/internship-finder/actions/runs/37991689511)); next run success, 0 failed, 289.1 s ([37992191947](https://github.com/dude297/internship-finder/actions/runs/37992191947)) |
+
+| Metric | Before (2026-10-06 release) | After |
+|---|---|---|
+| Open opportunities | 2,383 | 2,858 |
+| Independent discovery | 55.7% | **66.1%** (1,890) |
+| Description coverage | 55.8% | 66.2% (1,892) |
+| Feed-only | 1,056 | 968 (Workday 652, Oracle 157, Greenhouse 71, Ashby 26, SmartRecruiters 18, amazon.jobs 12, Rippling 10, Lever 9, Workable 9) |
+
+The batches were ranked by feed-only count alone, so a few low-relevance boards came in (e.g. `lever:global:dynamiccatholic`, `lever:global:foth`, `smartrecruiters:winsupply1`, `smartrecruiters:veoliaenvironnementsa`, `lever:global:shopback-2`); fit ranks their postings low. Disable any from the Sources page if they add noise. The remaining top-20 feed-only employers are all Workday (YELLOW), Oracle (RED), or amazon.jobs (YELLOW) ([provider gate](research/m13-workday-oracle-provider-gate.md)); about 119 feed-only listings remain on supported providers across ~100 unconfigured boards, with 3 slots left under the cap.
+
 ## Source Activation Procedure
 
 Adding production sources after a release (new boards, a catalog batch, a new provider) is an owner-approved step, done in bounded batches:

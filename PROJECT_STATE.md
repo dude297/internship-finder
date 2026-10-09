@@ -91,14 +91,14 @@ None. Everything through `8ea9fea` is released. Deferred: Target Company Intelli
 
 Owner actions still open (not code):
 
-1. Activate sources on the Sources page: enable `greenhouse:andurilindustries`; add `spacex` from Verified Direct Sources (enabled direct sources stay ≤ 50). Then `python -m app.cli sync-source <key>` and `source-coverage`.
-2. Encrypted backup: set the `BACKUP_AGE_RECIPIENT` repository variable ([operations.md](docs/operations.md)).
-3. Least-privilege sync role: [runbook](docs/operations.md#least-privilege-sync-role-owner-action-not-activated) (each sync currently logs the full-privilege fallback warning).
-4. Render build command: `pip install -r requirements.lock && pip install --no-deps .`
-5. Production environment reviewers: not recommended (the scheduled sync and backup use that environment; every run would wait for approval).
+1. Encrypted backup: set the `BACKUP_AGE_RECIPIENT` repository variable ([operations.md](docs/operations.md)).
+2. Least-privilege sync role: [runbook](docs/operations.md#least-privilege-sync-role-owner-action-not-activated) (each sync currently logs the full-privilege fallback warning).
+3. Render build command: `pip install -r requirements.lock && pip install --no-deps .`
+4. Production environment reviewers: not recommended (the scheduled sync and backup use that environment; every run would wait for approval).
 
 ## Known Operational Issues
 
+- Direct sources: **97 enabled** (cap 100 since 2026-10-09) after the [2026-10-09 activation](docs/operations.md#activation-of-2026-10-09-cap-100): 2,858 open, independent discovery 66.1%, description coverage 66.2%, feed-only 968 (Workday 652, Oracle 157). Scheduled run 99 sources in 202–289 s. `smartrecruiters:eurofins` occasionally fails safely with "posting count changed mid-walk" and recovers next run.
 - Direct sources: 45 enabled (cap 50). `greenhouse:andurilindustries` fails ("The source response is too large": 2,457 jobs exceed the 20 MiB `MAX_BYTES` cap) and is disabled; SpaceX fails the same way in a disposable-database test. A size-tolerant Greenhouse adapter is implemented on the Milestone 12 branch ([ADR-022](docs/decisions/ADR-022-large-board-greenhouse.md)) but not released; both stay failing/unactivated in production until it ships.
 - 558 requirement suggestions are pending (all `requirements-rules` v3 after the 2026-10-06 rescan), none accepted. The deemed-export false positives (21) are gone; review the rest one by one.
 - Backup is not active: no backup beyond Neon Free's short restore window until the owner installs `age`, generates a key pair into private storage, sets `BACKUP_AGE_RECIPIENT`, dispatches once, and runs a restore drill.
