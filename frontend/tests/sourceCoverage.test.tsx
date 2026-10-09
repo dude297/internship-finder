@@ -215,7 +215,7 @@ describe('source coverage', () => {
     expect(screen.getByText('Feed-only postings').closest('div')).toHaveTextContent('90')
     // The built-in feed and the disabled board don't count.
     expect(screen.getByText('Direct sources enabled').closest('div')).toHaveTextContent(
-      '2 / 50',
+      '2 / 100',
     )
   })
 

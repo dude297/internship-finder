@@ -55,6 +55,8 @@ At every size: ATS sources ran before the feed, the canonical owner didn't chang
 
 Real network fetches add roughly 1–3 s per board, so a scheduled run with 50 boards is about 1–3 minutes plus the feed sync.
 
+**Raised to 100 on 2026-10-09** from production measurements: the scheduled run with 47 direct sources (including the two large Greenhouse boards, 25–42 s each) took 152.9 s ([run 37542349782](https://github.com/dude297/internship-finder/actions/runs/37542349782)); a typical board takes 1–4 s. 100 sources project to roughly 5–7 minutes, under both the 15-minute abandoned-run threshold and the 20-minute workflow timeout. Activate in batches of at most 25 and record each scheduled run's elapsed time; lower the cap again (`MAX_ENABLED_DIRECT_SOURCES`, `DIRECT_SOURCE_CAP`) if a run passes 10 minutes.
+
 Recommended cap on enabled Greenhouse/Lever/Ashby sources, to keep the twice-daily scheduled sync inside its 20-minute GitHub Actions limit: **50** (the largest size measured). The extrapolated ceiling is around 200. Before going past 50, re-measure the elapsed time of a real scheduled run ([source activation](#source-activation-procedure), step 6). Real measurement, 2026-10-04: 20 ATS boards + the feed, a scheduled-style run of 24.6 s ([run 37234279820](https://github.com/dude297/internship-finder/actions/runs/37234279820)); first syncs of new boards took 7.6–53.6 s each (one-time creation and evaluation).
 
 ### Scale audit (2026-10-06)
@@ -126,7 +128,7 @@ Disabling a source alone leaves its records active (its postings stay open as `s
 
 **Rollback:** re-enable the source (Sources page) and sync it. Validators were cleared, so the sync is a full snapshot and reopens the records. Nothing was deleted.
 
-**New installation without the feed:** after `alembic upgrade head` and `create-owner`, run `python -m app.cli bootstrap-sources --tags <tag> --disable-feed --dry-run`, then without `--dry-run`, then `sync-sources` (or pass `--sync`). It adds catalog boards through the same path as the catalog add API, refuses beyond 50 enabled direct sources, and never syncs unless `--sync`. It does not re-enable a configured but disabled entry. Curated opportunities keep their content; one closes if no active source remains. On an installation whose feed already has open postings, use `retire-source` instead of `--disable-feed`.
+**New installation without the feed:** after `alembic upgrade head` and `create-owner`, run `python -m app.cli bootstrap-sources --tags <tag> --disable-feed --dry-run`, then without `--dry-run`, then `sync-sources` (or pass `--sync`). It adds catalog boards through the same path as the catalog add API, refuses beyond the cap (100) of enabled direct sources, and never syncs unless `--sync`. It does not re-enable a configured but disabled entry. Curated opportunities keep their content; one closes if no active source remains. On an installation whose feed already has open postings, use `retire-source` instead of `--disable-feed`.
 
 ## Source Health (implemented, Milestone 6)
 

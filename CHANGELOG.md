@@ -4,7 +4,9 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
-Nothing yet.
+### Changed
+
+- Operational cap on enabled direct sources raised 50 → 100 (`MAX_ENABLED_DIRECT_SOURCES`, Sources page `DIRECT_SOURCE_CAP`) from production measurements: 47 sources synced in 152.9 s; 100 project to 5–7 minutes, under the 15-minute abandoned-run threshold ([operations.md](docs/operations.md#operational-source-cap)).
 
 ## Milestones 12–19 (released 2026-10-06)
 

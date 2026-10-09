@@ -463,7 +463,7 @@ def test_bootstrap_adds_by_tag_is_idempotent_and_never_syncs(
 def test_bootstrap_refuses_beyond_the_cap_and_unknown_tags(
     db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _catalog(monkeypatch, 51, ["ai"])
+    _catalog(monkeypatch, source_bootstrap.MAX_ENABLED_DIRECT_SOURCES + 1, ["ai"])
     with pytest.raises(source_bootstrap.BootstrapRefused, match="cap"):
         source_bootstrap.bootstrap_sources(db)
     with pytest.raises(source_bootstrap.BootstrapRefused, match="unknown tag"):
