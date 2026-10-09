@@ -6,6 +6,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- CI pulls the PostgreSQL 18 service image from the ECR Public mirror of the Docker official image; Docker Hub's anonymous rate limit was failing the backend and e2e jobs.
 - Operational cap on enabled direct sources raised 50 → 100 (`MAX_ENABLED_DIRECT_SOURCES`, Sources page `DIRECT_SOURCE_CAP`) from production measurements: 47 sources synced in 152.9 s; 100 project to 5–7 minutes, under the 15-minute abandoned-run threshold ([operations.md](docs/operations.md#operational-source-cap)).
 
 ## Milestones 12–19 (released 2026-10-06)

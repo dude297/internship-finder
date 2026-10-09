@@ -68,7 +68,7 @@ jobs:
     # Disposable database that exists only for this job. Test-only credentials, not secrets.
     services:
       postgres:
-        image: postgres:18
+        image: public.ecr.aws/docker/library/postgres:18 # Docker Hub official image via the ECR Public mirror (no anonymous pull limit)
         env:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci-test-only
@@ -112,7 +112,7 @@ jobs:
     # Disposable database that exists only for this job. Test-only credentials, not secrets.
     services:
       postgres:
-        image: postgres:18
+        image: public.ecr.aws/docker/library/postgres:18 # Docker Hub official image via the ECR Public mirror (no anonymous pull limit)
         env:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci-test-only
