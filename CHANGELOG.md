@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Documentation
+
+- Session handoff snapshot [docs/handoffs/2026-10-12.md](docs/handoffs/2026-10-12.md): production state, PR ledger #48–#68, coverage, owner actions, gotchas.
+
 ### Changed
 
 - Production activation 2026-10-09 (data, no code): Anduril and SpaceX plus 50 feed-linked boards (45 → 97 direct sources); independent discovery 55.7% → 66.1%, description coverage 55.8% → 66.2%, feed-only 1,056 → 968 ([operations.md](docs/operations.md#activation-of-2026-10-09-cap-100)).
