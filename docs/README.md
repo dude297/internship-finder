@@ -21,6 +21,7 @@ Every document has one job. When two documents could say the same thing, only th
 | [decisions/](decisions/) | Architectural decision history (ADRs) | |
 | [research/](research/) | Dated, **non-normative** research | Anything treated as current behavior |
 | [releases/](releases/) | **Immutable** production release records | |
+| [handoffs/](handoffs/) | Dated, **non-normative** session handoff snapshots | Current state (use PROJECT_STATE.md) |
 | [status.json](status.json) | The machine-readable current production/development status | Secrets, URLs, volatile metrics |
 
 **When documents disagree:** code plus accepted ADRs define implemented behavior; `docs/status.json` (and the status blocks generated from it) plus PROJECT_STATE.md define current production state. Any disagreement is drift and is fixed immediately, in the change that finds it.
