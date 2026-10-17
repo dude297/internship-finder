@@ -761,7 +761,7 @@ def test_endless_empty_pages_stop_immediately() -> None:
 
 def test_one_item_pages_cannot_force_thousands_of_requests() -> None:
     """A hostile or broken provider that honours offsets but returns one posting per page, with
-    totalFound at the 5000 cap, must not drive an unbounded number of sequential requests."""
+    totalFound at the posting cap, must not drive an unbounded number of sequential requests."""
 
     def handler(request: httpx2.Request, n: int) -> httpx2.Response:
         offset = _offset(request)

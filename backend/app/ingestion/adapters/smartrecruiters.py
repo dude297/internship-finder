@@ -39,7 +39,7 @@ COMPANY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}\Z")
 POSTING_ID = re.compile(r"^[0-9]{1,30}\Z")
 
 PAGE_SIZE = 100  # the documented maximum
-MAX_PAGES = 50
+MAX_PAGES = 100  # 10,000 postings, Greenhouse's MAX_JOBS; Bosch passed 5,000 (ADR-014 amendment)
 MAX_DETAIL_FETCHES = 100
 # The list has no "updated" field, so an edited description behind an unchanged list entry would
 # never be seen. Each reused detail is refetched once every this many days (a fixed rotation by

@@ -105,3 +105,9 @@ Not implemented and not allowed by this ADR: Workday, Oracle Cloud HCM internal 
 - **Fetch every SmartRecruiters detail on every run:** rejected; unbounded N+1. Reusing stored detail for unchanged list items keeps steady-state runs to the list pages.
 - **Treat SmartRecruiters detail failures as "no description":** rejected; an ATS owner would erase the feed's or its own earlier text and look like a material change.
 - **Oracle Cloud HCM adapter:** rejected for M8; no documented anonymous public API was established (see research).
+
+## Amendment (2026-10-17): SmartRecruiters list cap 10,000 postings
+
+Amends §2's list walk. The cap goes from 50 pages (5,000 postings) to 100 pages (10,000 postings), the same bound as Greenhouse's `MAX_JOBS` ([ADR-022](ADR-022-large-board-greenhouse.md)). Everything else in the walk is unchanged: it must still be complete and consistent, a `totalFound` over the cap still fails the snapshot before any more pages are requested, the request budget is still the page cap (a provider serving short pages can't force more than 100 requests), and a failed walk still closes nothing.
+
+Why: `smartrecruiters:boschgroup` grew past 5,000 postings (5,074 on 2026-10-17), so every scheduled sync from 2026-10-14 18:01 UTC failed with "boschgroup has more than 5000 postings" and the workflow went red. Disabling the source would lose Bosch's internships; the 5,000 figure was a safety bound, not a measured limit. Cost: one list request per extra 100 postings (Bosch: 51 pages instead of 49). A company over 10,000 postings still fails every run and should be disabled.
