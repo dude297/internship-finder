@@ -10,6 +10,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- SmartRecruiters list walk cap raised from 50 pages (5,000 postings) to 100 pages (10,000), the same as Greenhouse's `MAX_JOBS` ([ADR-014 amendment](docs/decisions/ADR-014-structured-source-expansion-and-program-registry.md#amendment-2026-10-17-smartrecruiters-list-cap-10000-postings)). `smartrecruiters:boschgroup` grew to 5,074 postings and failed every scheduled sync from 2026-10-14 with "more than 5000 postings" (it closed nothing).
 - Production activation 2026-10-09 (data, no code): Anduril and SpaceX plus 50 feed-linked boards (45 → 97 direct sources); independent discovery 55.7% → 66.1%, description coverage 55.8% → 66.2%, feed-only 1,056 → 968 ([operations.md](docs/operations.md#activation-of-2026-10-09-cap-100)).
 
 - CI pulls the PostgreSQL 18 service image from the ECR Public mirror of the Docker official image; Docker Hub's anonymous rate limit was failing the backend and e2e jobs.
